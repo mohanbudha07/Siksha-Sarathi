@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Siksha Sarathi Notes</title>
+</head>
+
+<body>
+
+<h1>📚 Notes</h1>
+
+{% if notes %}
+
+{% for note in notes %}
+
+<hr>
+
+<h2>{{ note.title }}</h2>
+
+<p>
+<b>Subject:</b> {{ note.subject }}
+</p>
+
+<p>
+<b>Chapter:</b> {{ note.chapter }}
+</p>
+
+<p>
+{{ note.content }}
+</p>
+
+<small>
+Uploaded: {{ note.created_at }}
+</small>
+
+<hr>
+
+{% endfor %}
+
+{% else %}
+
+<p>No notes available.</p>
+
+{% endif %}
+
+<br>
+
+<a href="/student_dashboard">
+Back to Dashboard
+</a>
+
+</body>
+</html>

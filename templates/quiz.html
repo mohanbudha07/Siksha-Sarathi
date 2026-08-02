@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Quiz - Siksha Sarathi</title>
+
+<style>
+body{
+    font-family: Arial;
+    background:#f4f7fb;
+}
+
+.container{
+    width:70%;
+    margin:auto;
+    background:white;
+    padding:30px;
+    margin-top:40px;
+    border-radius:10px;
+}
+
+button{
+    background:#2563eb;
+    color:white;
+    padding:10px 20px;
+    border:none;
+    border-radius:5px;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>📝 Science Quiz</h1>
+
+<form method="POST">
+
+<h3>1. What is force?</h3>
+
+<input type="radio" name="q1" value="correct">
+A push or pull<br>
+
+<input type="radio" name="q1" value="wrong">
+A type of energy<br>
+
+
+<h3>2. SI unit of force is?</h3>
+
+<input type="radio" name="q2" value="correct">
+Newton<br>
+
+<input type="radio" name="q2" value="wrong">
+Joule<br>
+
+
+<br>
+
+<button type="submit">
+Submit Quiz
+</button>
+
+</form>
+{% if score %}
+<h2>Your Score: {{score}} / 10</h2>
+{% endif %}
+
+
+</div>
+
+</body>
+</html>

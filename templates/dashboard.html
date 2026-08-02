@@ -1,71 +1,101 @@
-{% extends "layout.html" %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Siksha Sarathi Dashboard</title>
 
-{% block content %}
-<div class="row">
-    <div class="col-12">
-        <h2 class="mb-4">Welcome, {{ name }}! 👋</h2>
-    </div>
+    <style>
+        body {
+            font-family: Arial;
+            background: #f4f7fb;
+            margin: 0;
+        }
+
+        .header {
+            background: #2563eb;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            padding: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .card {
+            background: white;
+            width: 250px;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 0 10px #ccc;
+        }
+
+        .card a {
+            text-decoration: none;
+            color: white;
+            background: #2563eb;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: inline-block;
+            margin-top: 15px;
+        }
+
+        .logout {
+            text-align: center;
+            margin-top: 20px;
+        }
+    </style>
+
+</head>
+
+<body>
+
+<div class="header">
+    <h1>Siksha Sarathi</h1>
+    <h3>Welcome {{ name }}</h3>
 </div>
 
-<div class="row g-4">
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <h5 class="card-title">📚 Learning Materials</h5>
-                <p class="card-text">Access subject-wise notes uploaded by your teachers.</p>
-                <a href="/materials" class="btn btn-primary">View Materials</a>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <h5 class="card-title">📝 Homework & Quizzes</h5>
-                <p class="card-text">Check pending homework and take online quizzes.</p>
-                <a href="/homework" class="btn btn-warning">Go to Homework</a>
-            </div>
-        </div>
+
+<div class="container">
+
+    <div class="card">
+        <h2>📚 Notes Zone</h2>
+        <p>Access subject notes and learning materials.</p>
+        <a href="/notes">Open</a>
     </div>
 
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <h5 class="card-title">🤖 AI Learning Assistant</h5>
-                <p class="card-text">Ask any Science question to our AI Tutor!</p>
-                <a href="/ai_assistant" class="btn btn-info text-white">Chat with AI</a>
-            </div>
-        </div>
+
+    <div class="card">
+        <h2>🤖 AI Assistant</h2>
+        <p>Ask science related questions.</p>
+        <a href="/ai_assistant">Chat</a>
     </div>
 
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <h5 class="card-title">📊 Performance Prediction</h5>
-                <p class="card-text">See your ML-based performance analysis.</p>
-                <a href="/performance" class="btn btn-secondary">View Progress</a>
-            </div>
-        </div>
+
+    <div class="card">
+        <h2>📝 Online Quiz</h2>
+        <p>Practice quizzes and check scores.</p>
+        <a href="/quiz">Start</a>
     </div>
 
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <h5 class="card-title">💬 Chat with Peers</h5>
-                <p class="card-text">Collaborate and discuss with classmates.</p>
-                <a href="/chat" class="btn btn-dark">Open Chat</a>
-            </div>
-        </div>
+
+    <div class="card">
+        <h2>📊 Performance</h2>
+        <p>View ML-based prediction results.</p>
+        <a href="/performance">View</a>
     </div>
 
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <h5 class="card-title">📢 Notices</h5>
-                <p class="card-text">Check school announcements and exam schedules.</p>
-                <a href="/notices" class="btn btn-danger">View Notices</a>
-            </div>
-        </div>
-    </div>
 </div>
-{% endblock %}
+
+
+<div class="logout">
+    <a href="/logout">Logout</a>
+</div>
+
+
+</body>
+</html>
