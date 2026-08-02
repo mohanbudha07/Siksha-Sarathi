@@ -1,0 +1,71 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">Welcome, {{ name }}! 👋</h2>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title">📚 Learning Materials</h5>
+                <p class="card-text">Access subject-wise notes uploaded by your teachers.</p>
+                <a href="/materials" class="btn btn-primary">View Materials</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title">📝 Homework & Quizzes</h5>
+                <p class="card-text">Check pending homework and take online quizzes.</p>
+                <a href="/homework" class="btn btn-warning">Go to Homework</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title">🤖 AI Learning Assistant</h5>
+                <p class="card-text">Ask any Science question to our AI Tutor!</p>
+                <a href="/ai_assistant" class="btn btn-info text-white">Chat with AI</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title">📊 Performance Prediction</h5>
+                <p class="card-text">See your ML-based performance analysis.</p>
+                <a href="/performance" class="btn btn-secondary">View Progress</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title">💬 Chat with Peers</h5>
+                <p class="card-text">Collaborate and discuss with classmates.</p>
+                <a href="/chat" class="btn btn-dark">Open Chat</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title">📢 Notices</h5>
+                <p class="card-text">Check school announcements and exam schedules.</p>
+                <a href="/notices" class="btn btn-danger">View Notices</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
