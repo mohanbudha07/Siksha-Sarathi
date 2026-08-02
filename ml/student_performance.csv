@@ -1,0 +1,17 @@
+quiz_score,attendance,study_hours,result
+95,98,5,Excellent
+90,95,4,Excellent
+88,90,4,Good
+84,88,3,Good
+78,82,3,Good
+72,80,2,Average
+68,75,2,Average
+60,70,1,Average
+55,65,1,Needs Improvement
+45,55,1,Needs Improvement
+35,50,0,Needs Improvement
+98,99,6,Excellent
+92,97,5,Excellent
+80,85,3,Good
+70,72,2,Average
+50,60,1,Needs Improvement
