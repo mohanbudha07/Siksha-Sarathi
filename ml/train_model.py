@@ -12,7 +12,12 @@ csv_path = os.path.join(BASE_DIR, "student_performance.csv")
 data = pd.read_csv(csv_path)
 
 # Features and target
-X = data[["quiz_score", "attendance", "study_hours"]]
+X = data[[
+    "attendance",
+    "assignment_score",
+    "quiz_score",
+    "study_hours"
+]]
 y = data["result"]
 
 # Encode labels

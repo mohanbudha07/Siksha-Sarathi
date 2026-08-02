@@ -1,9 +1,14 @@
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 from flask_mysqldb import MySQL
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 
 
+
+import os
+import joblib
+import numpy as np
 # ------------------------------
 # APP CONFIGURATION
 # ------------------------------
@@ -19,6 +24,23 @@ app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
 app.secret_key = 'your_super_secret_key_123'
 
 mysql = MySQL(app)
+
+# ------------------------------
+# LOAD MACHINE LEARNING MODEL
+# ------------------------------
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+model = joblib.load(
+    os.path.join(BASE_DIR, "ml", "performance_model.pkl")
+)
+
+label_encoder = joblib.load(
+    os.path.join(BASE_DIR, "ml", "label_encoder.pkl")
+)
+
 
 
 # ------------------------------
@@ -333,55 +355,6 @@ def upload_notes():
 # OTHER PAGES
 # ------------------------------
 
-@app.route('/ai_assistant')
-@login_required
-@role_required(STUDENT)
-def ai_assistant():
-    return render_template('ai_assistant.html')
-
-
-@app.route('/quiz', methods=['GET','POST'])
-@login_required
-@role_required(STUDENT)
-def quiz():
-
-    score = None
-
-    if request.method == "POST":
-
-        score = 0
-
-        if request.form.get('q1') == "correct":
-            score += 5
-
-        if request.form.get('q2') == "correct":
-            score += 5
-
-
-        cur = mysql.connection.cursor()
-
-        cur.execute("""
-        INSERT INTO quiz_results
-        (student_id, quiz_id, score)
-        VALUES(%s,%s,%s)
-        """,
-        (
-            session['user_id'],
-            1,
-            score
-        ))
-
-        mysql.connection.commit()
-
-        cur.close()
-
-
-    return render_template(
-        'quiz.html',
-        score=score
-    )
-
-
 
 @app.route('/performance')
 @login_required
@@ -389,7 +362,98 @@ def quiz():
 def performance():
     return render_template('performance.html')
 
+@app.route('/ai_assistant')
+@login_required
+@role_required(STUDENT)
+def ai_assistant():
+    return render_template('ai_assistant.html')
 
+
+@app.route('/ask_ai', methods=['POST'])
+@login_required
+@role_required(STUDENT)
+def ask_ai():
+
+    question = request.form.get("question")
+
+    from assistant import generate_answer
+
+    subject, answer = generate_answer(question)
+
+    cur = mysql.connection.cursor()
+
+    cur.execute("""
+        INSERT INTO chat_history
+        (student_id, subject, question, answer)
+        VALUES(%s,%s,%s,%s)
+    """,
+    (
+        session['user_id'],
+        subject,
+        question,
+        answer
+    ))
+
+    mysql.connection.commit()
+    cur.close()
+
+    return render_template(
+        "ai_assistant.html",
+        subject=subject,
+        question=question,
+        answer=answer
+    )
+
+@app.route('/predict', methods=['GET', 'POST'])
+@login_required
+@role_required(STUDENT)
+def predict():
+
+    prediction = None
+
+    if request.method == "POST":
+
+        attendance = float(request.form["attendance"])
+        assignment = float(request.form["assignment"])
+        quiz = float(request.form["quiz"])
+        study_hours = float(request.form["study_hours"])
+
+        prediction_result = model.predict([
+            [attendance, assignment, quiz, study_hours]
+        ])
+
+        prediction = label_encoder.inverse_transform(prediction_result)[0]
+
+        cur = mysql.connection.cursor()
+
+        cur.execute("""
+        INSERT INTO predictions
+        (
+            student_id,
+            attendance,
+            assignment_score,
+            quiz_score,
+            study_hours,
+            prediction
+        )
+        VALUES(%s,%s,%s,%s,%s,%s)
+        """,
+        (
+            session['user_id'],
+            attendance,
+            assignment,
+            quiz,
+            study_hours,
+            prediction
+        ))
+
+        mysql.connection.commit()
+        cur.close()
+
+    return render_template(
+        "predict.html",
+        prediction=prediction
+    )
 
 @app.route('/admin_dashboard')
 @login_required

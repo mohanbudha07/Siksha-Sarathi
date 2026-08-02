@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Siksha Sarathi AI Assistant</title>
+</head>
+
+<body>
+
+<h2>Siksha Sarathi AI Assistant 🤖</h2>
+
+<form method="POST" action="/ask_ai">
+
+    <input 
+        type="text" 
+        name="question"
+        placeholder="Ask any subject question..."
+        required
+    >
+
+    <button type="submit">
+        Ask
+    </button>
+
+</form>
+
+
+{% if answer %}
+
+<hr>
+
+<h3>Subject: {{ subject }}</h3>
+
+<p>
+<b>You:</b> {{ question }}
+</p>
+
+<p>
+<b>AI:</b> {{ answer }}
+</p>
+
+{% endif %}
+
+
+</body>
+</html>

@@ -1,17 +1,17 @@
-quiz_score,attendance,study_hours,result
-95,98,5,Excellent
-90,95,4,Excellent
-88,90,4,Good
-84,88,3,Good
-78,82,3,Good
-72,80,2,Average
-68,75,2,Average
-60,70,1,Average
-55,65,1,Needs Improvement
-45,55,1,Needs Improvement
-35,50,0,Needs Improvement
-98,99,6,Excellent
-92,97,5,Excellent
-80,85,3,Good
-70,72,2,Average
-50,60,1,Needs Improvement
+attendance,assignment_score,quiz_score,study_hours,result
+98,95,95,5,Excellent
+95,92,90,4,Excellent
+90,88,88,4,Good
+88,85,84,3,Good
+82,80,78,3,Good
+80,72,72,2,Average
+75,70,68,2,Average
+70,65,60,1,Average
+65,55,55,1,Needs Improvement
+55,50,45,1,Needs Improvement
+50,40,35,0,Needs Improvement
+99,98,98,6,Excellent
+97,94,92,5,Excellent
+85,82,80,3,Good
+72,68,70,2,Average
+60,55,50,1,Needs Improvement
