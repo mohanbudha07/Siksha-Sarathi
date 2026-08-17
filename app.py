@@ -593,6 +593,119 @@ def predict():
         prediction=prediction
     )
 
+
+# ------------------------------
+# REACT QUIZ API
+# ------------------------------
+
+@app.route('/api/student/quiz')
+@login_required
+@role_required(STUDENT)
+def student_quiz_api():
+
+    cur = mysql.connection.cursor()
+
+    cur.execute("""
+        SELECT id, title, subject, questions
+        FROM quizzes
+        WHERE id = 1
+    """)
+
+    quiz_data = cur.fetchone()
+    cur.close()
+
+    if not quiz_data:
+        return {
+            "error": "Quiz not found"
+        }, 404
+
+    questions = json.loads(quiz_data['questions'])
+
+    return {
+        "quiz": {
+            "id": quiz_data['id'],
+            "title": quiz_data['title'],
+            "subject": quiz_data['subject'],
+            "questions": questions
+        }
+    }
+@app.route('/api/student/quiz/submit', methods=['POST'])
+@login_required
+@role_required(STUDENT)
+def submit_student_quiz():
+
+    data = request.get_json()
+
+    if not data:
+        return {"error": "No quiz data provided"}, 400
+
+    quiz_id = data.get('quiz_id')
+    answers = data.get('answers', {})
+
+    if not quiz_id:
+        return {"error": "Quiz ID is required"}, 400
+
+    cur = mysql.connection.cursor()
+
+    # Get quiz
+    cur.execute("""
+        SELECT id, questions
+        FROM quizzes
+        WHERE id = %s
+    """, (quiz_id,))
+
+    quiz_data = cur.fetchone()
+
+    if not quiz_data:
+        cur.close()
+        return {"error": "Quiz not found"}, 404
+
+    questions = json.loads(quiz_data['questions'])
+
+    # Calculate score
+    score = 0
+
+    for i, question in enumerate(questions):
+        answer = answers.get(str(i))
+
+        if answer == question["answer"]:
+            score += 1
+
+    # Get actual student ID
+    cur.execute("""
+        SELECT id
+        FROM students
+        WHERE user_id = %s
+    """, (session['user_id'],))
+
+    student = cur.fetchone()
+
+    if not student:
+        cur.close()
+        return {"error": "Student profile not found"}, 404
+
+    student_id = student['id']
+
+    # Save quiz result
+    cur.execute("""
+        INSERT INTO quiz_results
+        (student_id, quiz_id, score)
+        VALUES (%s, %s, %s)
+    """, (
+        student_id,
+        quiz_id,
+        score
+    ))
+
+    mysql.connection.commit()
+    cur.close()
+
+    return {
+        "message": "Quiz submitted successfully",
+        "quiz_id": quiz_id,
+        "score": score,
+        "total": len(questions)
+    }, 200
 # ------------------------------
 # QUIZ
 # ------------------------------
