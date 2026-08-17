@@ -1,0 +1,106 @@
+.dashboard {
+  min-height: 100vh;
+  background: #f1f5f9;
+  font-family: Arial, sans-serif;
+}
+
+.dashboard-header {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: white;
+  padding: 20px 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+}
+
+.dashboard-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.dashboard-header p {
+  margin: 5px 0 0;
+  color: #dbeafe;
+}
+
+.student-info {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+}
+
+.student-info span {
+  color: #dbeafe;
+  margin-top: 4px;
+}
+
+.dashboard-content {
+  padding: 40px;
+  max-width: 1200px;
+  margin: auto;
+}
+
+.welcome-section {
+  margin-bottom: 30px;
+}
+
+.welcome-section h2 {
+  margin-bottom: 8px;
+  color: #1e293b;
+}
+
+.welcome-section p {
+  color: #64748b;
+}
+
+.dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.dashboard-card {
+  background: white;
+  padding: 25px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-card h3 {
+  margin-top: 0;
+  color: #2563eb;
+}
+
+.dashboard-card p {
+  color: #64748b;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .dashboard-header {
+    padding: 20px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .student-info {
+    text-align: left;
+  }
+
+  .dashboard-content {
+    padding: 20px;
+  }
+
+  .dashboard-cards {
+    grid-template-columns: 1fr;
+  }
+}
