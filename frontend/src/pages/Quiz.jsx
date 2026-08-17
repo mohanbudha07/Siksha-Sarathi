@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
+import './Quiz.css'
 
 function Quiz() {
   const [quiz, setQuiz] = useState(null)
@@ -63,18 +64,26 @@ function Quiz() {
   }
 
   return (
-    <div>
-      <h1>{quiz.title}</h1>
+    <div className="quiz-page">
+  <header className="quiz-header">
+    <h1>Siksha Sarathi</h1>
+    <p>Student Quiz</p>
+  </header>
+
+  <main className="quiz-content">
+    <div className="quiz-info">
+      <h2>{quiz.title}</h2>
       <p>Subject: {quiz.subject}</p>
+    </div>
 
       {quiz.questions.map((question, index) => (
-        <div key={index}>
+        <div className="question-card" key={index}>
           <h3>
             {index + 1}. {question.question}
           </h3>
 
           {question.options.map((option) => (
-            <label key={option}>
+            <label className="option" key={option}>
               <input
                 type="radio"
                 name={`question-${index}`}
@@ -93,9 +102,10 @@ function Quiz() {
         </div>
       ))}
 
-      <button onClick={handleSubmit}>
-        Submit Quiz
-      </button>
+      <button className="submit-button" onClick={handleSubmit}>
+  Submit Quiz
+</button>
+</main>
     </div>
   )
 }
