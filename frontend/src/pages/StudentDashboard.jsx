@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
+import { useNavigate } from 'react-router-dom'
 import './StudentDashboard.css'
 
 function StudentDashboard() {
   const [student, setStudent] = useState(null)
   const [error, setError] = useState('')
+
+  const navigate = useNavigate()
 
   useEffect(() => {
     axios
@@ -16,12 +19,15 @@ function StudentDashboard() {
       })
       .catch((error) => {
         console.error(error)
-        setError(`API error: ${error.response?.status || error.message}`)
+        setError(
+          `API error: ${error.response?.status || error.message}`
+        )
       })
   }, [])
 
   return (
     <div className="dashboard">
+
       <header className="dashboard-header">
         <div>
           <h1>Siksha Sarathi</h1>
@@ -41,6 +47,7 @@ function StudentDashboard() {
       </header>
 
       <main className="dashboard-content">
+
         <section className="welcome-section">
           <h2>
             {student
@@ -56,26 +63,53 @@ function StudentDashboard() {
         </section>
 
         <section className="dashboard-cards">
-          <div className="dashboard-card">
+
+          {/* PERFORMANCE */}
+          <div
+            className="dashboard-card"
+            onClick={() => navigate('/student/performance')}
+          >
             <h3>Performance</h3>
-            <p>View your predicted academic performance.</p>
+            <p>
+              View your predicted academic performance.
+            </p>
           </div>
 
-          <div className="dashboard-card">
+          {/* QUIZZES */}
+          <div
+            className="dashboard-card"
+            onClick={() => navigate('/student/quiz')}
+          >
             <h3>Quizzes</h3>
-            <p>Take quizzes and check your results.</p>
+            <p>
+              Take quizzes and check your results.
+            </p>
           </div>
 
-          <div className="dashboard-card">
+          {/* AI ASSISTANT */}
+          <div
+            className="dashboard-card"
+            onClick={() => navigate('/student/ai')}
+          >
             <h3>AI Assistant</h3>
-            <p>Get help with your learning questions.</p>
+            <p>
+              Get help with your learning questions.
+            </p>
           </div>
 
-          <div className="dashboard-card">
+          {/* LEARNING NOTES */}
+          <div
+            className="dashboard-card"
+            onClick={() => navigate('/student/notes')}
+          >
             <h3>Learning Notes</h3>
-            <p>Access notes uploaded by your teacher.</p>
+            <p>
+              Access notes uploaded by your teacher.
+            </p>
           </div>
+
         </section>
+
       </main>
     </div>
   )

@@ -267,6 +267,50 @@ def login():
             )
 
     return render_template('login.html')
+@app.route('/api/login', methods=['POST'])
+def api_login():
+
+    data = request.get_json()
+
+    if not data:
+        return {"error": "Login data is required"}, 400
+
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return {"error": "Email and password are required"}, 400
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        "SELECT * FROM users WHERE email=%s",
+        (email,)
+    )
+
+    user = cur.fetchone()
+    cur.close()
+
+    if not user or not check_password_hash(
+        user['password'],
+        password
+    ):
+        return {"error": "Invalid email or password"}, 401
+
+    session.clear()
+
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+    session['role'] = user['role']
+
+    return {
+        "message": "Login successful",
+        "user": {
+            "id": user['id'],
+            "username": user['username'],
+            "role": user['role']
+        }
+    }
 
 
 # ------------------------------
@@ -282,6 +326,44 @@ def student_dashboard():
         'dashboard.html',
         name=session.get('username')
     )
+
+@app.route('/api/student/prediction', methods=['GET'])
+@login_required
+@role_required(STUDENT)
+def get_student_prediction_api():
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        SELECT
+            p.id,
+            p.attendance,
+            p.assignment_score,
+            p.quiz_score,
+            p.study_hours,
+            p.prediction
+        FROM predictions p
+        JOIN students s
+            ON p.student_id = s.id
+        WHERE s.user_id = %s
+        ORDER BY p.id DESC
+        LIMIT 1
+        """,
+        (session['user_id'],)
+    )
+
+    prediction = cur.fetchone()
+    cur.close()
+
+    if not prediction:
+        return {
+            "prediction": None
+        }, 200
+
+    return {
+        "prediction": prediction
+    }, 200
 @app.route('/api/student/dashboard')
 @login_required
 @role_required(STUDENT)
@@ -313,6 +395,119 @@ def student_dashboard_api():
         "student": student
     }
 
+@app.route('/api/student/prediction', methods=['POST'])
+@login_required
+@role_required(STUDENT)
+def student_prediction_api():
+
+    data = request.get_json()
+
+    if not data:
+        return {"error": "Prediction data is required"}, 400
+
+    attendance = data.get('attendance')
+    assignment = data.get('assignment_score')
+    quiz = data.get('quiz_score')
+    study_hours = data.get('study_hours')
+
+    if None in (attendance, assignment, quiz, study_hours):
+        return {"error": "All prediction fields are required"}, 400
+
+    prediction_result = model.predict([
+        [
+            float(attendance),
+            float(assignment),
+            float(quiz),
+            float(study_hours)
+        ]
+    ])
+
+    prediction = label_encoder.inverse_transform(
+        prediction_result
+    )[0]
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        SELECT id
+        FROM students
+        WHERE user_id = %s
+        """,
+        (session['user_id'],)
+    )
+
+    student = cur.fetchone()
+
+    if not student:
+        cur.close()
+        return {"error": "Student profile not found"}, 404
+
+    student_id = student['id']
+
+    cur.execute(
+        """
+        INSERT INTO predictions
+        (
+            student_id,
+            attendance,
+            assignment_score,
+            quiz_score,
+            study_hours,
+            prediction
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (
+            student_id,
+            float(attendance),
+            float(assignment),
+            float(quiz),
+            float(study_hours),
+            prediction
+        )
+    )
+
+    mysql.connection.commit()
+    cur.close()
+
+    return {
+        "message": "Prediction generated successfully",
+        "prediction": prediction
+    }, 200
+
+# ------------------------------
+# REACT STUDENT NOTES API
+# ------------------------------
+
+@app.route('/api/student/notes')
+@login_required
+@role_required(STUDENT)
+def student_notes_api():
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        SELECT
+            id,
+            title,
+            subject,
+            chapter,
+            content,
+            created_at
+        FROM notes
+        ORDER BY created_at DESC
+        """
+    )
+
+    notes = cur.fetchall()
+
+    cur.close()
+
+    return {
+        "notes": notes
+    }
 # ------------------------------
 # STUDENT NOTES VIEW
 # ------------------------------
@@ -479,7 +674,57 @@ def ask_ai():
         answer=answer
     )
 
+# ------------------------------
+# REACT AI ASSISTANT API
+# -----------------------------
 
+@app.route('/api/student/ai', methods=['POST'])
+@login_required
+@role_required(STUDENT)
+def student_ai_api():
+
+    data = request.get_json()
+
+    if not data:
+        return {
+            "error": "Question is required"
+        }, 400
+
+    question = data.get("question")
+
+    if not question or not question.strip():
+        return {
+            "error": "Question is required"
+        }, 400
+
+    from assistant import generate_answer
+
+    subject, answer = generate_answer(question)
+
+    cur = mysql.connection.cursor()
+
+    # Save AI conversation using the existing user_id column
+    cur.execute(
+        """
+        INSERT INTO chat_history
+        (user_id, question, answer)
+        VALUES (%s, %s, %s)
+        """,
+        (
+            session['user_id'],
+            question,
+            answer
+        )
+    )
+
+    mysql.connection.commit()
+    cur.close()
+
+    return {
+        "subject": subject,
+        "question": question,
+        "answer": answer
+    }, 200 
 # ------------------------------
 # ML PERFORMANCE PREDICTION
 # ------------------------------

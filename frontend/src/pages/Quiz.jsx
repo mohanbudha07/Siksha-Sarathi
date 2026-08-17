@@ -23,7 +23,14 @@ function Quiz() {
   }, [])
 
   const handleSubmit = () => {
-    axios
+  if (Object.keys(answers).length !== quiz.questions.length) {
+    setError('Please answer all questions before submitting the quiz.')
+    return
+  }
+
+  setError('')
+
+  axios
       .post(
         '/api/student/quiz/submit',
         {
