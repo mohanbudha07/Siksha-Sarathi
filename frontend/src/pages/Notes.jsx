@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import api from '../api'
 
 function Notes() {
   const [notes, setNotes] = useState([])
@@ -7,10 +7,8 @@ function Notes() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    axios
-      .get('/api/student/notes', {
-        withCredentials: true,
-      })
+    api
+      .get('/student/notes')
       .then((response) => {
         setNotes(response.data.notes)
       })

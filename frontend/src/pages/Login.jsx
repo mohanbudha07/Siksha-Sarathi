@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import api from '../api'
 
 function Login() {
   const [email, setEmail] = useState('')
@@ -13,22 +13,18 @@ function Login() {
     setError('')
 
     try {
-      await axios.post(
-        '/api/login',
-        {
-          email,
-          password,
-        },
-        {
-          withCredentials: true,
-        }
-      )
+      await api.post('/login', {
+        email,
+        password,
+      })
 
       navigate('/student/dashboard')
     } catch (error) {
       console.error(error)
+
       setError(
-        error.response?.data?.error || 'Login failed. Please try again.'
+        error.response?.data?.error ||
+          'Login failed. Please try again.'
       )
     }
   }

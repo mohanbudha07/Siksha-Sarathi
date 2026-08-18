@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import axios from 'axios'
+import api from '../api'
 
 function AIAssistant() {
   const [question, setQuestion] = useState('')
@@ -21,15 +21,9 @@ function AIAssistant() {
     setSubject('')
 
     try {
-      const response = await axios.post(
-        '/api/student/ai',
-        {
-          question: question.trim(),
-        },
-        {
-          withCredentials: true,
-        }
-      )
+      const response = await api.post('/student/ai', {
+        question: question.trim(),
+      })
 
       setAnswer(response.data.answer)
       setSubject(response.data.subject)
@@ -51,7 +45,10 @@ function AIAssistant() {
       <div style={styles.container}>
         <div style={styles.header}>
           <h1>Siksha Sarathi AI Assistant</h1>
-          <p>Ask questions and get help with your secondary-level subjects.</p>
+          <p>
+            Ask questions and get help with your secondary-level
+            subjects.
+          </p>
         </div>
 
         <form onSubmit={askAI} style={styles.form}>
@@ -193,4 +190,3 @@ const styles = {
 }
 
 export default AIAssistant
-

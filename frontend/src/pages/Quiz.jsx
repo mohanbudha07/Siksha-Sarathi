@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import api from '../api'
 import './Quiz.css'
 
 function Quiz() {
@@ -9,44 +9,42 @@ function Quiz() {
   const [result, setResult] = useState(null)
 
   useEffect(() => {
-    axios
-      .get('/api/student/quiz', {
-        withCredentials: true,
-      })
+    api
+      .get('/student/quiz')
       .then((response) => {
         setQuiz(response.data.quiz)
       })
       .catch((error) => {
         console.error(error)
-        setError(`API error: ${error.response?.status || error.message}`)
+        setError(
+          `API error: ${error.response?.status || error.message}`
+        )
       })
   }, [])
 
   const handleSubmit = () => {
-  if (Object.keys(answers).length !== quiz.questions.length) {
-    setError('Please answer all questions before submitting the quiz.')
-    return
-  }
+    if (Object.keys(answers).length !== quiz.questions.length) {
+      setError('Please answer all questions before submitting the quiz.')
+      return
+    }
 
-  setError('')
+    setError('')
 
-  axios
-      .post(
-        '/api/student/quiz/submit',
-        {
-          quiz_id: quiz.id,
-          answers: answers,
-        },
-        {
-          withCredentials: true,
-        }
-      )
+    api
+      .post('/student/quiz/submit', {
+        quiz_id: quiz.id,
+        answers: answers,
+      })
       .then((response) => {
         setResult(response.data)
       })
       .catch((error) => {
         console.error(error)
-        setError(`Submission error: ${error.response?.status || error.message}`)
+        setError(
+          `Submission error: ${
+            error.response?.status || error.message
+          }`
+        )
       })
   }
 
@@ -72,47 +70,50 @@ function Quiz() {
 
   return (
     <div className="quiz-page">
-  <header className="quiz-header">
-    <h1>Siksha Sarathi</h1>
-    <p>Student Quiz</p>
-  </header>
+      <header className="quiz-header">
+        <h1>Siksha Sarathi</h1>
+        <p>Student Quiz</p>
+      </header>
 
-  <main className="quiz-content">
-    <div className="quiz-info">
-      <h2>{quiz.title}</h2>
-      <p>Subject: {quiz.subject}</p>
-    </div>
-
-      {quiz.questions.map((question, index) => (
-        <div className="question-card" key={index}>
-          <h3>
-            {index + 1}. {question.question}
-          </h3>
-
-          {question.options.map((option) => (
-            <label className="option" key={option}>
-              <input
-                type="radio"
-                name={`question-${index}`}
-                value={option}
-                checked={answers[index] === option}
-                onChange={() =>
-                  setAnswers({
-                    ...answers,
-                    [index]: option,
-                  })
-                }
-              />
-              {option}
-            </label>
-          ))}
+      <main className="quiz-content">
+        <div className="quiz-info">
+          <h2>{quiz.title}</h2>
+          <p>Subject: {quiz.subject}</p>
         </div>
-      ))}
 
-      <button className="submit-button" onClick={handleSubmit}>
-  Submit Quiz
-</button>
-</main>
+        {quiz.questions.map((question, index) => (
+          <div className="question-card" key={index}>
+            <h3>
+              {index + 1}. {question.question}
+            </h3>
+
+            {question.options.map((option) => (
+              <label className="option" key={option}>
+                <input
+                  type="radio"
+                  name={`question-${index}`}
+                  value={option}
+                  checked={answers[index] === option}
+                  onChange={() =>
+                    setAnswers({
+                      ...answers,
+                      [index]: option,
+                    })
+                  }
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+        ))}
+
+        <button
+          className="submit-button"
+          onClick={handleSubmit}
+        >
+          Submit Quiz
+        </button>
+      </main>
     </div>
   )
 }

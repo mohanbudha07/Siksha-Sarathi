@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
 import { useNavigate } from 'react-router-dom'
+import api from '../api'
 import './StudentDashboard.css'
 
 function StudentDashboard() {
@@ -10,10 +10,8 @@ function StudentDashboard() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    axios
-      .get('/api/student/dashboard', {
-        withCredentials: true,
-      })
+    api
+      .get('/student/dashboard')
       .then((response) => {
         setStudent(response.data.student)
       })
@@ -64,7 +62,6 @@ function StudentDashboard() {
 
         <section className="dashboard-cards">
 
-          {/* PERFORMANCE */}
           <div
             className="dashboard-card"
             onClick={() => navigate('/student/performance')}
@@ -75,7 +72,6 @@ function StudentDashboard() {
             </p>
           </div>
 
-          {/* QUIZZES */}
           <div
             className="dashboard-card"
             onClick={() => navigate('/student/quiz')}
@@ -86,7 +82,6 @@ function StudentDashboard() {
             </p>
           </div>
 
-          {/* AI ASSISTANT */}
           <div
             className="dashboard-card"
             onClick={() => navigate('/student/ai')}
@@ -97,7 +92,6 @@ function StudentDashboard() {
             </p>
           </div>
 
-          {/* LEARNING NOTES */}
           <div
             className="dashboard-card"
             onClick={() => navigate('/student/notes')}

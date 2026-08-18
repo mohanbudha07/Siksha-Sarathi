@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import api from '../api'
 
 function Performance() {
   const [prediction, setPrediction] = useState(null)
@@ -7,10 +7,8 @@ function Performance() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    axios
-      .get('/api/student/prediction', {
-        withCredentials: true,
-      })
+    api
+      .get('/student/prediction')
       .then((response) => {
         setPrediction(response.data.prediction)
       })

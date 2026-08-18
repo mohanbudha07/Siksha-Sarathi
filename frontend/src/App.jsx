@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import Login from './pages/Login'
 import StudentDashboard from './pages/StudentDashboard'
 import Quiz from './pages/Quiz'
 import Notes from './pages/Notes'
@@ -9,6 +10,16 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+
+        <Route
+          path="/"
+          element={<Navigate to="/login" replace />}
+        />
+
+        <Route
+          path="/login"
+          element={<Login />}
+        />
 
         <Route
           path="/student/dashboard"
@@ -37,12 +48,7 @@ function App() {
 
         <Route
           path="*"
-          element={
-            <Navigate
-              to="/student/dashboard"
-              replace
-            />
-          }
+          element={<Navigate to="/login" replace />}
         />
 
       </Routes>
