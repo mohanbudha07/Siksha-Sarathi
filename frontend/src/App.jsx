@@ -1,10 +1,19 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login'
+import StudentLayout from './components/StudentLayout'
 import StudentDashboard from './pages/StudentDashboard'
 import Quiz from './pages/Quiz'
 import Notes from './pages/Notes'
 import Performance from './pages/Performance'
 import AIAssistant from './pages/AIAssistant'
+
+function StudentPage({ children }) {
+  return (
+    <StudentLayout>
+      {children}
+    </StudentLayout>
+  )
+}
 
 function App() {
   return (
@@ -23,27 +32,47 @@ function App() {
 
         <Route
           path="/student/dashboard"
-          element={<StudentDashboard />}
+          element={
+            <StudentPage>
+              <StudentDashboard />
+            </StudentPage>
+          }
         />
 
         <Route
           path="/student/quiz"
-          element={<Quiz />}
+          element={
+            <StudentPage>
+              <Quiz />
+            </StudentPage>
+          }
         />
 
         <Route
           path="/student/notes"
-          element={<Notes />}
+          element={
+            <StudentPage>
+              <Notes />
+            </StudentPage>
+          }
         />
 
         <Route
           path="/student/performance"
-          element={<Performance />}
+          element={
+            <StudentPage>
+              <Performance />
+            </StudentPage>
+          }
         />
 
         <Route
           path="/student/ai"
-          element={<AIAssistant />}
+          element={
+            <StudentPage>
+              <AIAssistant />
+            </StudentPage>
+          }
         />
 
         <Route
