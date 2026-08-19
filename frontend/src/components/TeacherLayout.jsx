@@ -1,14 +1,12 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import api from '../api'
 
-function StudentLayout({ children }) {
+function TeacherLayout({ children }) {
   const navigate = useNavigate()
 
   const handleLogout = async () => {
     try {
-      await axios.get('/logout', {
-        withCredentials: true,
-      })
+      await api.get('/logout')
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
@@ -17,14 +15,14 @@ function StudentLayout({ children }) {
   }
 
   return (
-    <div>
+    <div className="teacher-layout">
       <nav
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '15px 30px',
-          background: '#2563eb',
+          background: 'linear-gradient(135deg, #4f00ff, #6d00e8)',
           color: 'white',
         }}
       >
@@ -37,24 +35,16 @@ function StudentLayout({ children }) {
             alignItems: 'center',
           }}
         >
-          <NavLink to="/student/dashboard" style={linkStyle}>
+          <NavLink to="/teacher/dashboard" style={linkStyle}>
             Dashboard
           </NavLink>
 
-          <NavLink to="/student/performance" style={linkStyle}>
-            Performance
+          <NavLink to="/teacher/notes" style={linkStyle}>
+            My Notes
           </NavLink>
 
-          <NavLink to="/student/quiz" style={linkStyle}>
-            Quizzes
-          </NavLink>
-
-          <NavLink to="/student/notes" style={linkStyle}>
-            Notes
-          </NavLink>
-
-          <NavLink to="/student/ai" style={linkStyle}>
-            AI Assistant
+          <NavLink to="/teacher/upload" style={linkStyle}>
+            Upload Notes
           </NavLink>
 
           <button
@@ -85,4 +75,4 @@ const linkStyle = ({ isActive }) => ({
   borderRadius: '6px',
 })
 
-export default StudentLayout
+export default TeacherLayout

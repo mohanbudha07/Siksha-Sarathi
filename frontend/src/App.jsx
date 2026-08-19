@@ -1,4 +1,11 @@
+import StudentRegister from './pages/StudentRegister'
+import Home from './pages/Home'
+import TeacherRegister from './pages/TeacherRegister'
+import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+
+import api from './api'
+
 import Login from './pages/Login'
 import StudentLayout from './components/StudentLayout'
 import StudentDashboard from './pages/StudentDashboard'
@@ -6,12 +13,58 @@ import Quiz from './pages/Quiz'
 import Notes from './pages/Notes'
 import Performance from './pages/Performance'
 import AIAssistant from './pages/AIAssistant'
+import TeacherLayout from './components/TeacherLayout'
+import TeacherDashboard from './pages/TeacherDashboard'
+
+function ProtectedRoute({ children }) {
+  const [checking, setChecking] = useState(true)
+  const [authenticated, setAuthenticated] = useState(false)
+
+  useEffect(() => {
+    api
+      .get('/student/dashboard')
+      .then((response) => {
+        if (response.data?.student) {
+          setAuthenticated(true)
+        } else {
+          setAuthenticated(false)
+        }
+      })
+      .catch((error) => {
+        console.error('Authentication check failed:', error)
+        setAuthenticated(false)
+      })
+      .finally(() => {
+        setChecking(false)
+      })
+  }, [])
+
+  if (checking) {
+    return <p>Checking authentication...</p>
+  }
+
+  if (!authenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  return children
+}
+
 
 function StudentPage({ children }) {
   return (
-    <StudentLayout>
+    <ProtectedRoute>
+      <StudentLayout>
+        {children}
+      </StudentLayout>
+    </ProtectedRoute>
+  )
+}
+function TeacherPage({ children }) {
+  return (
+    <TeacherLayout>
       {children}
-    </StudentLayout>
+    </TeacherLayout>
   )
 }
 
@@ -21,14 +74,23 @@ function App() {
       <Routes>
 
         <Route
-          path="/"
-          element={<Navigate to="/login" replace />}
-        />
+  path="/"
+  element={<Home />}
+/>
 
         <Route
           path="/login"
           element={<Login />}
         />
+<Route
+  path="/student/register"
+  element={<StudentRegister />}
+/>
+
+<Route
+  path="/teacher/register"
+  element={<TeacherRegister />}
+/>
 
         <Route
           path="/student/dashboard"
@@ -74,6 +136,14 @@ function App() {
             </StudentPage>
           }
         />
+<Route
+  path="/teacher/dashboard"
+  element={
+    <TeacherPage>
+      <TeacherDashboard />
+    </TeacherPage>
+  }
+/>
 
         <Route
           path="*"

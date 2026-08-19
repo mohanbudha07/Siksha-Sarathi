@@ -311,6 +311,106 @@ def api_login():
             "role": user['role']
         }
     }
+@app.route('/api/register', methods=['POST'])
+def api_register():
+
+    data = request.get_json()
+
+    if not data:
+        return {"error": "Registration data is required"}, 400
+
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+    full_name = data.get('full_name')
+    grade = data.get('grade')
+    role = data.get('role')
+
+    if not username or not email or not password or not role:
+        return {
+            "error": "Username, email, password, and role are required"
+        }, 400
+
+    if role not in ['student', 'teacher']:
+        return {"error": "Invalid role"}, 400
+
+    if role == 'student' and (not full_name or not grade):
+        return {
+            "error": "Full name and grade are required for students"
+        }, 400
+
+    try:
+
+        cur = mysql.connection.cursor()
+
+        # Check whether email already exists
+        cur.execute(
+            "SELECT id FROM users WHERE email=%s",
+            (email,)
+        )
+
+        if cur.fetchone():
+            cur.close()
+            return {"error": "Email already registered"}, 409
+
+        # Hash password
+        hashed_password = generate_password_hash(password)
+
+        # Create user
+        cur.execute(
+            """
+            INSERT INTO users
+            (username, email, password, role)
+            VALUES(%s, %s, %s, %s)
+            """,
+            (
+                username,
+                email,
+                hashed_password,
+                role
+            )
+        )
+
+        user_id = cur.lastrowid
+
+        # Create student profile
+        if role == 'student':
+
+            cur.execute(
+                """
+                INSERT INTO students
+                (user_id, full_name, grade)
+                VALUES(%s, %s, %s)
+                """,
+                (
+                    user_id,
+                    full_name,
+                    grade
+                )
+            )
+
+        mysql.connection.commit()
+        cur.close()
+
+        return {
+            "message": "Registration successful",
+            "user": {
+                "id": user_id,
+                "username": username,
+                "email": email,
+                "role": role
+            }
+        }, 201
+
+    except Exception as e:
+
+        mysql.connection.rollback()
+
+        print("Registration error:", e)
+
+        return {
+            "error": "Registration failed. Please try again."
+        }, 500
 
 
 # ------------------------------
@@ -371,6 +471,7 @@ def student_dashboard_api():
 
     cur = mysql.connection.cursor()
 
+    # Get student profile
     cur.execute(
         """
         SELECT
@@ -384,95 +485,71 @@ def student_dashboard_api():
     )
 
     student = cur.fetchone()
-    cur.close()
 
     if not student:
+        cur.close()
         return {
             "error": "Student profile not found"
         }, 404
 
-    return {
-        "student": student
-    }
+    student_id = student["student_id"]
 
-@app.route('/api/student/prediction', methods=['POST'])
-@login_required
-@role_required(STUDENT)
-def student_prediction_api():
-
-    data = request.get_json()
-
-    if not data:
-        return {"error": "Prediction data is required"}, 400
-
-    attendance = data.get('attendance')
-    assignment = data.get('assignment_score')
-    quiz = data.get('quiz_score')
-    study_hours = data.get('study_hours')
-
-    if None in (attendance, assignment, quiz, study_hours):
-        return {"error": "All prediction fields are required"}, 400
-
-    prediction_result = model.predict([
-        [
-            float(attendance),
-            float(assignment),
-            float(quiz),
-            float(study_hours)
-        ]
-    ])
-
-    prediction = label_encoder.inverse_transform(
-        prediction_result
-    )[0]
-
-    cur = mysql.connection.cursor()
-
+    # Count available notes
     cur.execute(
         """
-        SELECT id
-        FROM students
-        WHERE user_id = %s
-        """,
-        (session['user_id'],)
+        SELECT COUNT(*) AS total_notes
+        FROM notes
+        """
     )
 
-    student = cur.fetchone()
+    notes_data = cur.fetchone()
+    total_notes = notes_data["total_notes"]
 
-    if not student:
-        cur.close()
-        return {"error": "Student profile not found"}, 404
-
-    student_id = student['id']
-
+    # Quiz statistics
     cur.execute(
         """
-        INSERT INTO predictions
-        (
-            student_id,
+        SELECT
+            COUNT(*) AS completed_quizzes,
+            COALESCE(AVG(score), 0) AS average_score
+        FROM quiz_results
+        WHERE student_id = %s
+        """,
+        (student_id,)
+    )
+
+    quiz_stats = cur.fetchone()
+
+    completed_quizzes = quiz_stats["completed_quizzes"]
+    average_score = round(float(quiz_stats["average_score"]), 2)
+
+    # Latest prediction
+    cur.execute(
+        """
+        SELECT
+            prediction,
             attendance,
             assignment_score,
             quiz_score,
-            study_hours,
-            prediction
-        )
-        VALUES (%s, %s, %s, %s, %s, %s)
+            study_hours
+        FROM predictions
+        WHERE student_id = %s
+        ORDER BY id DESC
+        LIMIT 1
         """,
-        (
-            student_id,
-            float(attendance),
-            float(assignment),
-            float(quiz),
-            float(study_hours),
-            prediction
-        )
+        (student_id,)
     )
 
-    mysql.connection.commit()
+    prediction = cur.fetchone()
+
     cur.close()
 
     return {
-        "message": "Prediction generated successfully",
+        "student": student,
+        "stats": {
+            "total_notes": total_notes,
+            "completed_quizzes": completed_quizzes,
+            "average_quiz_score": average_score
+        },
         "prediction": prediction
     }, 200
 
@@ -541,7 +618,105 @@ def notes():
         notes=notes
     )
 
+# ------------------------------
+# TEACHER REACT APIs
+# ------------------------------
 
+@app.route('/api/teacher/dashboard')
+@login_required
+@role_required(TEACHER)
+def teacher_dashboard_api():
+
+    cur = mysql.connection.cursor()
+
+    # Count notes uploaded by this teacher
+    cur.execute(
+        """
+        SELECT COUNT(*) AS total_notes
+        FROM notes
+        WHERE uploaded_by = %s
+        """,
+        (session['user_id'],)
+    )
+
+    notes_data = cur.fetchone()
+    total_notes = notes_data["total_notes"]
+
+    # Get latest notes uploaded by this teacher
+    cur.execute(
+        """
+        SELECT
+            id,
+            title,
+            subject,
+            chapter,
+            created_at
+        FROM notes
+        WHERE uploaded_by = %s
+        ORDER BY created_at DESC
+        LIMIT 5
+        """,
+        (session['user_id'],)
+    )
+
+    recent_notes = cur.fetchall()
+
+    cur.close()
+
+    return {
+        "teacher": {
+            "name": session.get('username')
+        },
+        "statistics": {
+            "total_notes": total_notes
+        },
+        "recent_notes": recent_notes
+    }, 200
+
+@app.route('/api/teacher/notes', methods=['POST'])
+@login_required
+@role_required(TEACHER)
+def teacher_upload_note_api():
+
+    data = request.get_json()
+
+    if not data:
+        return {"error": "Note data is required"}, 400
+
+    title = data.get('title')
+    subject = data.get('subject')
+    chapter = data.get('chapter')
+    content = data.get('content')
+
+    if not all([title, subject, chapter, content]):
+        return {
+            "error": "All note fields are required"
+        }, 400
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        INSERT INTO notes
+        (title, subject, chapter, content, uploaded_by)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (
+            title,
+            subject,
+            chapter,
+            content,
+            session['user_id']
+        )
+    )
+
+    mysql.connection.commit()
+
+    cur.close()
+
+    return {
+        "message": "Note uploaded successfully"
+    }, 201
 # ------------------------------
 # TEACHER DASHBOARD
 # ------------------------------

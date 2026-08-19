@@ -1,23 +1,48 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import api from '../api'
+import './AIAssistant.css'
 
 function AIAssistant() {
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
+  const [fullAnswer, setFullAnswer] = useState('')
   const [subject, setSubject] = useState('')
   const [loading, setLoading] = useState(false)
+  const [typing, setTyping] = useState(false)
   const [error, setError] = useState('')
+
+  // Typing animation
+  useEffect(() => {
+    if (!fullAnswer) return
+
+    setAnswer('')
+    setTyping(true)
+
+    let index = 0
+
+    const interval = setInterval(() => {
+      index += 1
+      setAnswer(fullAnswer.slice(0, index))
+
+      if (index >= fullAnswer.length) {
+        clearInterval(interval)
+        setTyping(false)
+      }
+    }, 18)
+
+    return () => clearInterval(interval)
+  }, [fullAnswer])
 
   const askAI = async (e) => {
     e.preventDefault()
 
-    if (!question.trim()) {
-      return
-    }
+    if (!question.trim() || loading) return
 
     setLoading(true)
+    setTyping(false)
     setError('')
     setAnswer('')
+    setFullAnswer('')
     setSubject('')
 
     try {
@@ -25,8 +50,8 @@ function AIAssistant() {
         question: question.trim(),
       })
 
-      setAnswer(response.data.answer)
-      setSubject(response.data.subject)
+      setSubject(response.data.subject || '')
+      setFullAnswer(response.data.answer || '')
     } catch (err) {
       console.error(err)
 
@@ -41,152 +66,169 @@ function AIAssistant() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.container}>
-        <div style={styles.header}>
-          <h1>Siksha Sarathi AI Assistant</h1>
-          <p>
-            Ask questions and get help with your secondary-level
-            subjects.
-          </p>
-        </div>
+    <div className="ai-page">
+      <div className="ai-container">
 
-        <form onSubmit={askAI} style={styles.form}>
+        {/* Header */}
+        <section className="ai-header">
+          <div className="ai-avatar">
+            🤖
+          </div>
+
+          <div>
+            <h1>Siksha Sarathi AI</h1>
+            <p>Your personal learning assistant</p>
+          </div>
+
+          <div className="online-status">
+            <span></span>
+            Online
+          </div>
+        </section>
+
+        {/* Introduction */}
+        {!answer && !loading && !error && (
+          <section className="ai-welcome">
+            <div className="welcome-icon">✨</div>
+
+            <h2>How can I help you today?</h2>
+
+            <p>
+              Ask me anything about Mathematics, Science, English,
+              Nepali or Social Studies.
+            </p>
+
+            <div className="suggestions">
+              <button
+                onClick={() =>
+                  setQuestion('Explain Newton’s first law of motion.')
+                }
+              >
+                🔬 Explain a science concept
+              </button>
+
+              <button
+                onClick={() =>
+                  setQuestion('How do I solve a quadratic equation?')
+                }
+              >
+                📐 Help with mathematics
+              </button>
+
+              <button
+                onClick={() =>
+                  setQuestion('Explain this English grammar topic.')
+                }
+              >
+                📖 Help with English
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Thinking */}
+        {loading && (
+          <div className="ai-message">
+            <div className="message-avatar">🤖</div>
+
+            <div className="thinking-box">
+              <span>Thinking</span>
+              <div className="thinking-dots">
+                <i></i>
+                <i></i>
+                <i></i>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Answer */}
+        {answer && (
+          <section className="answer-section">
+
+            <div className="ai-message">
+
+              <div className="message-avatar">
+                🤖
+              </div>
+
+              <div className="answer-content">
+
+                <div className="answer-top">
+                  <strong>Siksha Sarathi AI</strong>
+
+                  {subject && (
+                    <span className="subject-badge">
+                      {subject}
+                    </span>
+                  )}
+                </div>
+
+                <div className="answer-text">
+                  {answer}
+                  {typing && (
+                    <span className="typing-cursor">▋</span>
+                  )}
+                </div>
+
+              </div>
+
+            </div>
+
+          </section>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div className="ai-error">
+            ⚠️ {error}
+          </div>
+        )}
+
+        {/* Input */}
+        <form
+          onSubmit={askAI}
+          className="ai-input-area"
+        >
           <textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="Ask your question..."
-            rows="5"
-            style={styles.textarea}
+            rows="3"
+            disabled={loading}
           />
 
-          <button
-            type="submit"
-            disabled={loading || !question.trim()}
-            style={styles.button}
-          >
-            {loading ? 'Thinking...' : 'Ask AI'}
-          </button>
+          <div className="input-footer">
+
+            <span>
+              {loading
+                ? 'AI is preparing your answer...'
+                : 'Press Ask AI to get help'}
+            </span>
+
+            <button
+              type="submit"
+              disabled={loading || !question.trim()}
+            >
+              {loading ? (
+                <>
+                  <span className="button-spinner"></span>
+                  Thinking...
+                </>
+              ) : (
+                <>
+                  Ask AI
+                  <span>→</span>
+                </>
+              )}
+            </button>
+
+          </div>
         </form>
 
-        {error && (
-          <div style={styles.error}>
-            {error}
-          </div>
-        )}
-
-        {answer && (
-          <div style={styles.answerBox}>
-            {subject && (
-              <div style={styles.subject}>
-                Subject: {subject}
-              </div>
-            )}
-
-            <h2>AI Assistant</h2>
-
-            <p style={styles.answer}>
-              {answer}
-            </p>
-          </div>
-        )}
-
-        <button
-          onClick={() => {
-            window.location.href = '/student/dashboard'
-          }}
-          style={styles.backButton}
-        >
-          ← Back to Dashboard
-        </button>
       </div>
     </div>
   )
 }
 
-const styles = {
-  page: {
-    minHeight: '100vh',
-    background: '#f4f7fb',
-    padding: '40px 20px',
-    boxSizing: 'border-box',
-  },
-
-  container: {
-    maxWidth: '850px',
-    margin: '0 auto',
-  },
-
-  header: {
-    background: 'white',
-    padding: '30px',
-    borderRadius: '12px',
-    marginBottom: '20px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
-  },
-
-  form: {
-    background: 'white',
-    padding: '25px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
-  },
-
-  textarea: {
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '15px',
-    borderRadius: '8px',
-    border: '1px solid #ccc',
-    fontSize: '16px',
-    resize: 'vertical',
-    marginBottom: '15px',
-  },
-
-  button: {
-    padding: '12px 24px',
-    border: 'none',
-    borderRadius: '8px',
-    background: '#2563eb',
-    color: 'white',
-    fontSize: '16px',
-    cursor: 'pointer',
-  },
-
-  error: {
-    marginTop: '20px',
-    padding: '15px',
-    background: '#fee2e2',
-    color: '#991b1b',
-    borderRadius: '8px',
-  },
-
-  answerBox: {
-    marginTop: '20px',
-    background: 'white',
-    padding: '25px',
-    borderRadius: '12px',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
-  },
-
-  subject: {
-    fontWeight: 'bold',
-    marginBottom: '15px',
-  },
-
-  answer: {
-    fontSize: '17px',
-    lineHeight: '1.7',
-  },
-
-  backButton: {
-    marginTop: '20px',
-    padding: '10px 18px',
-    border: '1px solid #ccc',
-    borderRadius: '8px',
-    background: 'white',
-    cursor: 'pointer',
-  },
-}
-
-export default AIAssistant
+export default AIAssistant  

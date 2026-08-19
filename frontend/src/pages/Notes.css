@@ -1,0 +1,274 @@
+.notes-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  padding: 35px 30px;
+  box-sizing: border-box;
+}
+
+.notes-page > * {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Hero */
+
+.notes-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: white;
+  padding: 35px 40px;
+  border-radius: 20px;
+  box-shadow: 0 8px 25px rgba(37, 99, 235, 0.18);
+}
+
+.notes-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #dbeafe;
+}
+
+.notes-hero h1 {
+  margin: 0;
+  font-size: 32px;
+}
+
+.notes-hero p:last-child {
+  margin: 10px 0 0;
+  color: #dbeafe;
+  font-size: 16px;
+}
+
+.notes-hero-icon {
+  font-size: 64px;
+  padding: 15px;
+}
+
+/* Toolbar */
+
+.notes-toolbar {
+  margin-top: 22px;
+  background: white;
+  padding: 18px 22px;
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.04);
+}
+
+.notes-count {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.notes-count strong {
+  font-size: 25px;
+  color: #2563eb;
+}
+
+.notes-count span {
+  color: #64748b;
+}
+
+.search-box {
+  width: 320px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.search-box input {
+  border: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  font-size: 15px;
+}
+
+/* Notes grid */
+
+.notes-grid {
+  margin-top: 25px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.note-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 17px;
+  padding: 23px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  overflow: hidden;
+}
+
+.note-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 25px rgba(0, 0, 0, 0.09);
+}
+
+.note-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.note-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eff6ff;
+  border-radius: 12px;
+  font-size: 25px;
+}
+
+.subject-badge {
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 6px 11px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.note-card h2 {
+  margin: 0 0 12px;
+  color: #1e293b;
+  font-size: 20px;
+}
+
+.chapter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #64748b;
+  font-size: 14px;
+  margin-bottom: 15px;
+}
+
+.note-content {
+  color: #64748b;
+  line-height: 1.65;
+  font-size: 14px;
+
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+
+  min-height: 112px;
+}
+
+.note-footer {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Loading / empty */
+
+.notes-state {
+  margin-top: 30px;
+  background: white;
+  border-radius: 16px;
+  padding: 55px 20px;
+  text-align: center;
+  border: 1px solid #e2e8f0;
+}
+
+.notes-state h2 {
+  color: #1e293b;
+}
+
+.notes-state p {
+  color: #64748b;
+}
+
+.empty-notes-icon {
+  font-size: 50px;
+}
+
+.notes-spinner {
+  width: 35px;
+  height: 35px;
+  margin: auto;
+  border: 4px solid #dbeafe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: notes-spin 0.8s linear infinite;
+}
+
+@keyframes notes-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.notes-error {
+  margin-top: 20px;
+  padding: 15px;
+  background: #fee2e2;
+  color: #991b1b;
+  border-radius: 10px;
+}
+
+/* Responsive */
+
+@media (max-width: 950px) {
+  .notes-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 650px) {
+  .notes-page {
+    padding: 20px 12px;
+  }
+
+  .notes-hero {
+    padding: 25px;
+  }
+
+  .notes-hero h1 {
+    font-size: 25px;
+  }
+
+  .notes-hero-icon {
+    font-size: 45px;
+  }
+
+  .notes-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-box {
+    width: auto;
+  }
+
+  .notes-grid {
+    grid-template-columns: 1fr;
+  }
+}

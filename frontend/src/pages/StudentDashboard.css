@@ -1,58 +1,233 @@
 .dashboard {
   min-height: 100vh;
-  background: #f1f5f9;
+  background: #f8fafc;
   font-family: Arial, sans-serif;
+  color: #1e293b;
 }
 
+/* Header */
+
 .dashboard-header {
-  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  background: linear-gradient(135deg, #4f00ff 0%, #7200e8 100%);
   color: white;
-  padding: 20px 40px;
+  padding: 26px 45px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 6px 20px rgba(79, 0, 255, 0.18);
 }
 
 .dashboard-header h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 30px;
+  letter-spacing: -0.5px;
 }
 
 .dashboard-header p {
-  margin: 5px 0 0;
-  color: #dbeafe;
+  margin: 7px 0 0;
+  color: #eadfff;
+  font-size: 14px;
 }
 
 .student-info {
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   text-align: right;
 }
 
-.student-info span {
-  color: #dbeafe;
-  margin-top: 4px;
+.student-info strong {
+  font-size: 17px;
 }
 
+.student-info span {
+  color: #e9ddff;
+  margin-top: 5px;
+  font-size: 14px;
+}
+
+/* Main */
+
 .dashboard-content {
-  padding: 40px;
+  padding: 42px;
   max-width: 1200px;
   margin: auto;
 }
 
+/* Welcome */
+
 .welcome-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 30px;
 }
 
 .welcome-section h2 {
-  margin-bottom: 8px;
-  color: #1e293b;
+  margin: 0 0 8px;
+  font-size: 30px;
+  color: #111827;
 }
 
 .welcome-section p {
+  margin: 0;
+  color: #64748b;
+  font-size: 15px;
+}
+
+.welcome-badge {
+  background: white;
+  padding: 13px 19px;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  color: #4f00ff;
+  font-weight: bold;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.05);
+}
+
+/* Error */
+
+.dashboard-error {
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 14px 18px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  border: 1px solid #fecaca;
+}
+
+/* Statistics */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-bottom: 30px;
+}
+
+.stat-card {
+  background: white;
+  padding: 22px;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.045);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+}
+
+.stat-icon {
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1eaff;
+  border-radius: 13px;
+  font-size: 24px;
+}
+
+.stat-card span {
+  display: block;
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.stat-card strong {
+  display: block;
+  font-size: 22px;
+  color: #4f00ff;
+}
+
+.stat-card .prediction-text {
+  font-size: 16px;
+}
+
+/* Performance */
+
+.performance-summary {
+  background: white;
+  border-radius: 18px;
+  padding: 28px;
+  margin-bottom: 38px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.045);
+  display: flex;
+  justify-content: space-between;
+  gap: 35px;
+}
+
+.section-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.performance-summary h2 {
+  margin: 9px 0;
+  color: #4f00ff;
+  font-size: 25px;
+}
+
+.performance-summary p {
+  margin: 0;
   color: #64748b;
 }
+
+.performance-details {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 25px;
+  align-items: center;
+  flex: 1;
+}
+
+.performance-details div {
+  text-align: center;
+  padding: 10px;
+  border-left: 1px solid #e5e7eb;
+}
+
+.performance-details span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+
+.performance-details strong {
+  font-size: 18px;
+  color: #1e293b;
+}
+
+/* Learning section */
+
+.section-heading {
+  margin-bottom: 20px;
+}
+
+.section-heading h2 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  color: #111827;
+}
+
+.section-heading p {
+  margin: 0;
+  color: #64748b;
+}
+
+/* Learning cards */
 
 .dashboard-cards {
   display: grid;
@@ -62,26 +237,96 @@
 
 .dashboard-card {
   background: white;
-  padding: 25px;
-  border-radius: 14px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-  transition: transform 0.2s, box-shadow 0.2s;
+  padding: 27px;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.045);
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  background: #4f00ff;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 .dashboard-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  transform: translateY(-5px);
+  box-shadow: 0 12px 28px rgba(79, 0, 255, 0.10);
+  border-color: #d8caff;
+}
+
+.dashboard-card:hover::before {
+  opacity: 1;
+}
+
+.card-icon {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1eaff;
+  border-radius: 14px;
+  font-size: 27px;
+  margin-bottom: 15px;
 }
 
 .dashboard-card h3 {
-  margin-top: 0;
-  color: #2563eb;
+  margin: 0 0 9px;
+  color: #4f00ff;
+  font-size: 20px;
 }
 
 .dashboard-card p {
   color: #64748b;
-  line-height: 1.5;
+  line-height: 1.6;
+  min-height: 48px;
+  margin-bottom: 0;
+}
+
+.dashboard-card button {
+  margin-top: 15px;
+  padding: 10px 17px;
+  border: none;
+  border-radius: 8px;
+  background: #4f00ff;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s ease;
+}
+
+.dashboard-card button:hover {
+  background: #3d00c7;
+}
+
+/* Responsive */
+
+@media (max-width: 1000px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .performance-summary {
+    flex-direction: column;
+  }
+
+  .performance-details {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 @media (max-width: 700px) {
@@ -93,14 +338,47 @@
   }
 
   .student-info {
+    align-items: flex-start;
     text-align: left;
   }
 
   .dashboard-content {
-    padding: 20px;
+    padding: 22px 16px;
   }
 
+  .welcome-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .welcome-section h2 {
+    font-size: 25px;
+  }
+
+  .stats-grid,
   .dashboard-cards {
     grid-template-columns: 1fr;
+  }
+
+  .performance-details {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .performance-details div {
+    border-left: none;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 15px;
+  }
+}
+
+@media (max-width: 420px) {
+  .dashboard-header h1 {
+    font-size: 25px;
+  }
+
+  .performance-details {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
 }
