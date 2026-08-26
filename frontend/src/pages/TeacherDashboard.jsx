@@ -8,9 +8,15 @@ function TeacherDashboard() {
 
   const [teacher, setTeacher] = useState(null)
   const [statistics, setStatistics] = useState({
-    total_notes: 0,
-  })
+  total_notes: 0,
+  total_students: 0,
+  total_quiz_attempts: 0,
+  average_quiz_score: 0,
+  students_needing_improvement: 0,
+  total_predictions: 0,
+})
   const [recentNotes, setRecentNotes] = useState([])
+  const [studentPerformance, setStudentPerformance] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -22,6 +28,11 @@ function TeacherDashboard() {
         setTeacher(response.data.teacher)
         setStatistics(response.data.statistics)
         setRecentNotes(response.data.recent_notes || [])
+        setStudentPerformance(response.data.student_performance || [])
+        console.log(
+          'Student Performance:',
+          response.data.student_performance
+       )
       } catch (err) {
         console.error('Teacher dashboard error:', err)
 
@@ -89,57 +100,74 @@ function TeacherDashboard() {
 
         {/* STATISTICS */}
 
-        <section className="teacher-stats">
+      
+<section className="teacher-stats">
 
-          <div className="teacher-stat-card">
+  <div className="teacher-stat-card">
 
-            <div className="stat-icon">
-              📚
-            </div>
+    <div className="stat-icon">
+      👨‍🎓
+    </div>
 
-            <div>
-              <p>Total Notes</p>
+    <div>
+      <p>Total Students</p>
 
-              <h2>
-                {statistics.total_notes}
-              </h2>
-            </div>
+      <h2>
+        {statistics.total_students}
+      </h2>
+    </div>
 
-          </div>
+  </div>
 
-          <div className="teacher-stat-card">
+  <div className="teacher-stat-card">
 
-            <div className="stat-icon">
-              📤
-            </div>
+    <div className="stat-icon">
+      📝
+    </div>
 
-            <div>
-              <p>Resources</p>
+    <div>
+      <p>Quiz Attempts</p>
 
-              <h2>
-                {statistics.total_notes}
-              </h2>
-            </div>
+      <h2>
+        {statistics.total_quiz_attempts}
+      </h2>
+    </div>
 
-          </div>
+  </div>
 
-          <div className="teacher-stat-card">
+  <div className="teacher-stat-card">
 
-            <div className="stat-icon">
-              👨‍🎓
-            </div>
+    <div className="stat-icon">
+      📊
+    </div>
 
-            <div>
-              <p>Students</p>
+    <div>
+      <p>Average Quiz Score</p>
 
-              <h2>—</h2>
-            </div>
+      <h2>
+        {statistics.average_quiz_score}
+      </h2>
+    </div>
 
-          </div>
+  </div>
+  <div className="teacher-stat-card">
 
-        </section>
+  <div className="stat-icon">
+    ⚠️
+  </div>
 
-        {/* QUICK ACTIONS */}
+  <div>
+    <p>Needs Improvement</p>
+
+    <h2>
+      {statistics.students_needing_improvement}
+    </h2>
+  </div>
+
+</div>
+
+</section>
+       {/* QUICK ACTIONS */}
 
         <section className="teacher-section">
 
@@ -197,6 +225,125 @@ function TeacherDashboard() {
           </section>
 
         </section>
+                {/* STUDENT PERFORMANCE */}
+
+        <section className="student-performance-section">
+
+          <div className="student-performance-heading">
+            <div>
+              <h2>Student Performance</h2>
+              <p>
+                Monitor your students' learning progress and performance.
+              </p>
+            </div>
+          </div>
+
+          {studentPerformance.length === 0 ? (
+
+            <div className="empty-performance">
+
+              <div>📊</div>
+
+              <h3>No student performance data yet</h3>
+
+              <p>
+                Student performance will appear here after students
+                complete quizzes and receive predictions.
+              </p>
+
+            </div>
+
+          ) : (
+
+            <div className="student-performance-table">
+
+              <table>
+
+                <thead>
+
+                  <tr>
+                    <th>Student</th>
+                    <th>Grade</th>
+                    <th>Quiz Attempts</th>
+                    <th>Average Score</th>
+                    <th>Attendance</th>
+                    <th>Assignment</th>
+                    <th>Prediction</th>
+                    <th>Action</th>
+                  </tr>
+
+                </thead>
+
+                <tbody>
+
+                  {studentPerformance.map((student) => (
+
+                    <tr key={student.student_id}>
+
+                      <td>
+                        <strong>
+                          {student.full_name}
+                        </strong>
+                      </td>
+
+                      <td>
+                        {student.grade}
+                      </td>
+
+                      <td>
+                        {student.quiz_attempts}
+                      </td>
+
+                      <td>
+                        {(
+                          Number(student.average_quiz_score) * 100
+                        ).toFixed(1)}%
+                      </td>
+
+                      <td>
+                        {student.attendance ?? '—'}%
+                      </td>
+
+                      <td>
+                        {student.assignment_score ?? '—'}%
+                      </td>
+
+                      <td>
+  <span
+    className={
+      student.prediction === 'Needs Improvement'
+        ? 'prediction-warning'
+        : 'prediction-good'
+    }
+  >
+    {student.prediction || 'Not Predicted'}
+  </span>
+</td>
+
+<td>
+  <button
+    className="view-student-btn"
+    onClick={() => setSelectedStudent(student)}
+  >
+    View Details
+  </button>
+</td>
+
+                    </tr>
+
+                  ))}
+
+                </tbody>
+
+              </table>
+
+            </div>
+
+          )}
+
+        </section>
+
+        
 
         {/* RECENT NOTES */}
 
@@ -304,6 +451,91 @@ function TeacherDashboard() {
           </div>
 
         </section>
+
+        {selectedStudent && (
+  <div
+    className="student-modal-overlay"
+    onClick={() => setSelectedStudent(null)}
+  >
+    <div
+      className="student-modal"
+      onClick={(e) => e.stopPropagation()}
+    >
+
+      <div className="student-modal-header">
+        <div>
+          <h2>{selectedStudent.full_name}</h2>
+          <p>Grade {selectedStudent.grade}</p>
+        </div>
+
+        <button
+          className="student-modal-close"
+          onClick={() => setSelectedStudent(null)}
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="student-modal-grid">
+
+        <div className="student-detail-card">
+          <span>📝</span>
+          <p>Quiz Attempts</p>
+          <strong>{selectedStudent.quiz_attempts}</strong>
+        </div>
+
+        <div className="student-detail-card">
+          <span>📊</span>
+          <p>Average Quiz Score</p>
+          <strong>
+            {selectedStudent.average_quiz_score}
+          </strong>
+        </div>
+
+        <div className="student-detail-card">
+          <span>📅</span>
+          <p>Attendance</p>
+          <strong>
+            {selectedStudent.attendance ?? '—'}%
+          </strong>
+        </div>
+
+        <div className="student-detail-card">
+          <span>📚</span>
+          <p>Assignment Score</p>
+          <strong>
+            {selectedStudent.assignment_score ?? '—'}%
+          </strong>
+        </div>
+
+        <div className="student-detail-card">
+          <span>⏱️</span>
+          <p>Study Hours</p>
+          <strong>
+            {selectedStudent.study_hours ?? '—'}
+          </strong>
+        </div>
+
+        <div className="student-detail-card">
+          <span>🤖</span>
+          <p>ML Prediction</p>
+
+          <strong
+            className={
+              selectedStudent.prediction === 'Needs Improvement'
+                ? 'prediction-warning'
+                : 'prediction-good'
+            }
+          >
+            {selectedStudent.prediction || 'Not Predicted'}
+          </strong>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+)}
 
       </main>
 

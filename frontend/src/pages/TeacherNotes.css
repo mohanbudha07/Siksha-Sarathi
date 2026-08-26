@@ -1,0 +1,198 @@
+.teacher-notes-page {
+  min-height: 100vh;
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+.teacher-notes-hero {
+  max-width: 1200px;
+  margin: 35px auto 0;
+  padding: 40px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #4f00ff, #6d00e8);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 10px 30px rgba(79, 0, 255, 0.18);
+}
+
+.teacher-notes-hero h1 {
+  margin: 0;
+  font-size: 34px;
+}
+
+.teacher-notes-hero p:last-child {
+  margin: 12px 0 0;
+  color: #ede9fe;
+  font-size: 16px;
+  max-width: 650px;
+  line-height: 1.6;
+}
+
+.teacher-notes-hero-icon {
+  font-size: 70px;
+  padding: 15px;
+}
+
+.teacher-notes-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 35px 0 50px;
+}
+
+.teacher-notes-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.teacher-notes-heading h2 {
+  margin: 0 0 5px;
+  font-size: 25px;
+}
+
+.teacher-notes-heading p {
+  margin: 0;
+  color: #64748b;
+}
+
+.teacher-notes-heading button,
+.teacher-notes-empty button {
+  padding: 11px 18px;
+  border: none;
+  border-radius: 9px;
+  background: #4f00ff;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.teacher-notes-heading button:hover,
+.teacher-notes-empty button:hover {
+  background: #3d00c7;
+}
+
+.teacher-notes-table-wrapper {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  overflow-x: auto;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.04);
+}
+
+.teacher-notes-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+}
+
+.teacher-notes-table th {
+  padding: 17px 20px;
+  text-align: left;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.teacher-notes-table td {
+  padding: 18px 20px;
+  border-bottom: 1px solid #eef2f7;
+  color: #475569;
+  font-size: 14px;
+}
+
+.teacher-notes-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.teacher-notes-table tbody tr:hover {
+  background: #fafaff;
+}
+
+.note-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #1e293b;
+}
+
+.note-title span {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #f1eaff;
+  font-size: 19px;
+}
+
+.teacher-notes-empty {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 60px 25px;
+  text-align: center;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.04);
+}
+
+.empty-icon {
+  font-size: 55px;
+}
+
+.teacher-notes-empty h2 {
+  margin: 15px 0 8px;
+}
+
+.teacher-notes-empty p {
+  max-width: 500px;
+  margin: 0 auto 22px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+@media (max-width: 1250px) {
+  .teacher-notes-hero,
+  .teacher-notes-content {
+    margin-left: 20px;
+    margin-right: 20px;
+  }
+}
+
+@media (max-width: 700px) {
+  .teacher-notes-hero {
+    margin-top: 20px;
+    padding: 28px;
+  }
+
+  .teacher-notes-hero h1 {
+    font-size: 27px;
+  }
+
+  .teacher-notes-hero-icon {
+    font-size: 48px;
+  }
+
+  .teacher-notes-content {
+    padding-top: 25px;
+  }
+
+  .teacher-notes-heading {
+    align-items: flex-start;
+    gap: 15px;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 500px) {
+  .teacher-notes-hero {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 15px;
+  }
+}

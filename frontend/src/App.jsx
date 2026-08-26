@@ -1,3 +1,4 @@
+import TeacherNotes from './pages/TeacherNotes'
 import StudentRegister from './pages/StudentRegister'
 import Home from './pages/Home'
 import TeacherRegister from './pages/TeacherRegister'
@@ -141,6 +142,15 @@ function App() {
   element={
     <TeacherPage>
       <TeacherDashboard />
+    </TeacherPage>
+  }
+/>
+
+<Route
+  path="/teacher/notes"
+  element={
+    <TeacherPage>
+      <TeacherNotes />
     </TeacherPage>
   }
 />
