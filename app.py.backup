@@ -1,0 +1,1081 @@
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask_mysqldb import MySQL
+from werkzeug.security import generate_password_hash, check_password_hash
+from functools import wraps
+from flask_cors import CORS
+
+import os
+import json
+import joblib
+import numpy as np
+
+
+# ------------------------------
+# APP CONFIGURATION
+# ------------------------------
+
+app = Flask(__name__)
+CORS(
+    app,
+    origins=["http://localhost:5173"],
+    supports_credentials=True
+)
+app.config['MYSQL_HOST'] = 'localhost'
+app.config['MYSQL_USER'] = 'siksha_user'
+app.config['MYSQL_PASSWORD'] = 'Siksha123!'
+app.config['MYSQL_DB'] = 'siksha_sarathi'
+app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
+
+app.secret_key = 'your_super_secret_key_123'
+
+mysql = MySQL(app)
+
+
+# ------------------------------
+# LOAD MACHINE LEARNING MODEL
+# ------------------------------
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+model = joblib.load(
+    os.path.join(BASE_DIR, "ml", "performance_model.pkl")
+)
+
+label_encoder = joblib.load(
+    os.path.join(BASE_DIR, "ml", "label_encoder.pkl")
+)
+
+
+# ------------------------------
+# ROLES
+# ------------------------------
+
+STUDENT = "student"
+TEACHER = "teacher"
+ADMIN = "admin"
+
+
+# ------------------------------
+# SECURITY DECORATORS
+# ------------------------------
+
+def login_required(f):
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+
+        if 'user_id' not in session:
+            flash("Please login first.", "warning")
+            return redirect(url_for('login'))
+
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+def role_required(role):
+
+    def decorator(f):
+
+        @wraps(f)
+        def decorated(*args, **kwargs):
+
+            if 'user_id' not in session:
+                return redirect(url_for('login'))
+
+            if session.get('role') != role:
+                flash("Access Denied.", "danger")
+                return redirect(url_for('login'))
+
+            return f(*args, **kwargs)
+
+        return decorated
+
+    return decorator
+
+
+# ------------------------------
+# HOME
+# ------------------------------
+
+@app.route('/')
+def home():
+
+    return render_template('home.html')
+
+
+# ------------------------------
+# REGISTER
+# ------------------------------
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+
+    if request.method == 'POST':
+
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        full_name = request.form.get('full_name')
+        grade = request.form.get('grade')
+        role = request.form.get('role')
+
+        if not role:
+            role = "student"
+
+        try:
+
+            cur = mysql.connection.cursor()
+
+            # Check whether email already exists
+            cur.execute(
+                "SELECT id FROM users WHERE email=%s",
+                (email,)
+            )
+
+            if cur.fetchone():
+
+                flash("Email already registered.", "warning")
+                cur.close()
+
+                return redirect(url_for('register'))
+
+            # Hash password
+            hashed_password = generate_password_hash(password)
+
+            # Create user account
+            cur.execute(
+                """
+                INSERT INTO users
+                (username, email, password, role)
+                VALUES(%s, %s, %s, %s)
+                """,
+                (
+                    username,
+                    email,
+                    hashed_password,
+                    role
+                )
+            )
+
+            # Get the newly-created users.id
+            user_id = cur.lastrowid
+
+            # Create student profile
+            if role == STUDENT:
+
+                cur.execute(
+                    """
+                    INSERT INTO students
+                    (user_id, full_name, grade)
+                    VALUES(%s, %s, %s)
+                    """,
+                    (
+                        user_id,
+                        full_name,
+                        grade
+                    )
+                )
+
+            # Commit both operations
+            mysql.connection.commit()
+            print("DEBUG SCORE:", score)
+
+            cur.close()
+
+            flash(
+                "Registration successful.",
+                "success"
+            )
+
+            return redirect(url_for('login'))
+
+        except Exception as e:
+
+            mysql.connection.rollback()
+
+            flash(
+                f"Database Error: {e}",
+                "danger"
+            )
+
+    return render_template('register.html')
+
+
+# ------------------------------
+# LOGIN
+# ------------------------------
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+
+    if request.method == 'POST':
+
+        email = request.form.get('email')
+        password = request.form.get('password')
+
+        cur = mysql.connection.cursor()
+
+        cur.execute(
+            "SELECT * FROM users WHERE email=%s",
+            (email,)
+        )
+
+        user = cur.fetchone()
+
+        cur.close()
+
+        if user and check_password_hash(
+            user['password'],
+            password
+        ):
+
+            session.clear()
+
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
+
+            flash(
+                f"Welcome {user['username']}",
+                "success"
+            )
+
+            if user['role'] == STUDENT:
+
+                return redirect(
+                    url_for('student_dashboard')
+                )
+
+            elif user['role'] == TEACHER:
+
+                return redirect(
+                    url_for('teacher_dashboard')
+                )
+
+            elif user['role'] == ADMIN:
+
+                return redirect(
+                    url_for('admin_dashboard')
+                )
+
+        else:
+
+            flash(
+                "Invalid email or password",
+                "danger"
+            )
+
+    return render_template('login.html')
+@app.route('/api/login', methods=['POST'])
+def api_login():
+
+    data = request.get_json()
+
+    if not data:
+        return {"error": "Login data is required"}, 400
+
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return {"error": "Email and password are required"}, 400
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        "SELECT * FROM users WHERE email=%s",
+        (email,)
+    )
+
+    user = cur.fetchone()
+    cur.close()
+
+    if not user or not check_password_hash(
+        user['password'],
+        password
+    ):
+        return {"error": "Invalid email or password"}, 401
+
+    session.clear()
+
+    session['user_id'] = user['id']
+    session['username'] = user['username']
+    session['role'] = user['role']
+
+    return {
+        "message": "Login successful",
+        "user": {
+            "id": user['id'],
+            "username": user['username'],
+            "role": user['role']
+        }
+    }
+
+
+# ------------------------------
+# STUDENT DASHBOARD
+# ------------------------------
+
+@app.route('/student_dashboard')
+@login_required
+@role_required(STUDENT)
+def student_dashboard():
+
+    return render_template(
+        'dashboard.html',
+        name=session.get('username')
+    )
+
+@app.route('/api/student/prediction', methods=['GET'])
+@login_required
+@role_required(STUDENT)
+def get_student_prediction_api():
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        SELECT
+            p.id,
+            p.attendance,
+            p.assignment_score,
+            p.quiz_score,
+            p.study_hours,
+            p.prediction
+        FROM predictions p
+        JOIN students s
+            ON p.student_id = s.id
+        WHERE s.user_id = %s
+        ORDER BY p.id DESC
+        LIMIT 1
+        """,
+        (session['user_id'],)
+    )
+
+    prediction = cur.fetchone()
+    cur.close()
+
+    if not prediction:
+        return {
+            "prediction": None
+        }, 200
+
+    return {
+        "prediction": prediction
+    }, 200
+@app.route('/api/student/dashboard')
+@login_required
+@role_required(STUDENT)
+def student_dashboard_api():
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        SELECT
+            s.id AS student_id,
+            s.full_name,
+            s.grade
+        FROM students s
+        WHERE s.user_id = %s
+        """,
+        (session['user_id'],)
+    )
+
+    student = cur.fetchone()
+    cur.close()
+
+    if not student:
+        return {
+            "error": "Student profile not found"
+        }, 404
+
+    return {
+        "student": student
+    }
+
+@app.route('/api/student/prediction', methods=['POST'])
+@login_required
+@role_required(STUDENT)
+def student_prediction_api():
+
+    data = request.get_json()
+
+    if not data:
+        return {"error": "Prediction data is required"}, 400
+
+    attendance = data.get('attendance')
+    assignment = data.get('assignment_score')
+    quiz = data.get('quiz_score')
+    study_hours = data.get('study_hours')
+
+    if None in (attendance, assignment, quiz, study_hours):
+        return {"error": "All prediction fields are required"}, 400
+
+    prediction_result = model.predict([
+        [
+            float(attendance),
+            float(assignment),
+            float(quiz),
+            float(study_hours)
+        ]
+    ])
+
+    prediction = label_encoder.inverse_transform(
+        prediction_result
+    )[0]
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        SELECT id
+        FROM students
+        WHERE user_id = %s
+        """,
+        (session['user_id'],)
+    )
+
+    student = cur.fetchone()
+
+    if not student:
+        cur.close()
+        return {"error": "Student profile not found"}, 404
+
+    student_id = student['id']
+
+    cur.execute(
+        """
+        INSERT INTO predictions
+        (
+            student_id,
+            attendance,
+            assignment_score,
+            quiz_score,
+            study_hours,
+            prediction
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        """,
+        (
+            student_id,
+            float(attendance),
+            float(assignment),
+            float(quiz),
+            float(study_hours),
+            prediction
+        )
+    )
+
+    mysql.connection.commit()
+    cur.close()
+
+    return {
+        "message": "Prediction generated successfully",
+        "prediction": prediction
+    }, 200
+
+# ------------------------------
+# REACT STUDENT NOTES API
+# ------------------------------
+
+@app.route('/api/student/notes')
+@login_required
+@role_required(STUDENT)
+def student_notes_api():
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        SELECT
+            id,
+            title,
+            subject,
+            chapter,
+            content,
+            created_at
+        FROM notes
+        ORDER BY created_at DESC
+        """
+    )
+
+    notes = cur.fetchall()
+
+    cur.close()
+
+    return {
+        "notes": notes
+    }
+# ------------------------------
+# STUDENT NOTES VIEW
+# ------------------------------
+
+@app.route('/notes')
+@login_required
+@role_required(STUDENT)
+def notes():
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        SELECT
+            title,
+            subject,
+            chapter,
+            content,
+            created_at
+        FROM notes
+        ORDER BY created_at DESC
+        """
+    )
+
+    notes = cur.fetchall()
+
+    cur.close()
+
+    return render_template(
+        'notes.html',
+        notes=notes
+    )
+
+
+# ------------------------------
+# TEACHER DASHBOARD
+# ------------------------------
+
+@app.route('/teacher_dashboard')
+@login_required
+@role_required(TEACHER)
+def teacher_dashboard():
+
+    return render_template(
+        'teacher_dashboard.html',
+        name=session.get('username')
+    )
+
+
+# ------------------------------
+# TEACHER UPLOAD NOTES
+# ------------------------------
+
+@app.route('/upload_notes', methods=['GET', 'POST'])
+@login_required
+@role_required(TEACHER)
+def upload_notes():
+
+    if request.method == "POST":
+
+        title = request.form.get('title')
+        subject = request.form.get('subject')
+        chapter = request.form.get('chapter')
+        content = request.form.get('content')
+
+        cur = mysql.connection.cursor()
+
+        cur.execute(
+            """
+            INSERT INTO notes
+            (title, subject, chapter, content, uploaded_by)
+            VALUES(%s, %s, %s, %s, %s)
+            """,
+            (
+                title,
+                subject,
+                chapter,
+                content,
+                session['user_id']
+            )
+        )
+
+        mysql.connection.commit()
+
+        cur.close()
+
+        flash(
+            "Note uploaded successfully",
+            "success"
+        )
+
+        return redirect(
+            url_for('upload_notes')
+        )
+
+    return render_template(
+        'upload_notes.html'
+    )
+
+
+# ------------------------------
+# PERFORMANCE
+# ------------------------------
+
+@app.route('/performance')
+@login_required
+@role_required(STUDENT)
+def performance():
+
+    return render_template(
+        'performance.html'
+    )
+
+
+# ------------------------------
+# AI ASSISTANT
+# ------------------------------
+
+@app.route('/ai_assistant')
+@login_required
+@role_required(STUDENT)
+def ai_assistant():
+
+    return render_template(
+        'ai_assistant.html'
+    )
+
+
+@app.route('/ask_ai', methods=['POST'])
+@login_required
+@role_required(STUDENT)
+def ask_ai():
+
+    question = request.form.get("question")
+
+    from assistant import generate_answer
+
+    subject, answer = generate_answer(question)
+
+    cur = mysql.connection.cursor()
+
+    cur.execute(
+        """
+        INSERT INTO chat_history
+        (student_id, subject, question, answer)
+        VALUES(%s, %s, %s, %s)
+        """,
+        (
+            session['user_id'],
+            subject,
+            question,
+            answer
+        )
+    )
+
+    mysql.connection.commit()
+
+    cur.close()
+
+    return render_template(
+        "ai_assistant.html",
+        subject=subject,
+        question=question,
+        answer=answer
+    )
+
+# ------------------------------
+# REACT AI ASSISTANT API
+# -----------------------------
+
+@app.route('/api/student/ai', methods=['POST'])
+@login_required
+@role_required(STUDENT)
+def student_ai_api():
+
+    data = request.get_json()
+
+    if not data:
+        return {
+            "error": "Question is required"
+        }, 400
+
+    question = data.get("question")
+
+    if not question or not question.strip():
+        return {
+            "error": "Question is required"
+        }, 400
+
+    from assistant import generate_answer
+
+    subject, answer = generate_answer(question)
+
+    cur = mysql.connection.cursor()
+
+    # Save AI conversation using the existing user_id column
+    cur.execute(
+        """
+        INSERT INTO chat_history
+        (user_id, question, answer)
+        VALUES (%s, %s, %s)
+        """,
+        (
+            session['user_id'],
+            question,
+            answer
+        )
+    )
+
+    mysql.connection.commit()
+    cur.close()
+
+    return {
+        "subject": subject,
+        "question": question,
+        "answer": answer
+    }, 200 
+# ------------------------------
+# ML PERFORMANCE PREDICTION
+# ------------------------------
+
+@app.route('/predict', methods=['GET', 'POST'])
+@login_required
+@role_required(STUDENT)
+def predict():
+
+    prediction = None
+
+    if request.method == "POST":
+
+        attendance = float(
+            request.form["attendance"]
+        )
+
+        assignment = float(
+            request.form["assignment"]
+        )
+
+        quiz = float(
+            request.form["quiz"]
+        )
+
+        study_hours = float(
+            request.form["study_hours"]
+        )
+
+        # ------------------------------
+        # ML PREDICTION
+        # ------------------------------
+
+        prediction_result = model.predict(
+            [
+                [
+                    attendance,
+                    assignment,
+                    quiz,
+                    study_hours
+                ]
+            ]
+        )
+
+        prediction = label_encoder.inverse_transform(
+            prediction_result
+        )[0]
+
+        # ------------------------------
+        # GET ACTUAL STUDENT ID
+        # ------------------------------
+
+        cur = mysql.connection.cursor()
+
+        cur.execute(
+            """
+            SELECT id
+            FROM students
+            WHERE user_id = %s
+            """,
+            (session['user_id'],)
+        )
+
+        student = cur.fetchone()
+
+        if not student:
+            cur.close()
+
+            flash(
+                "Student profile not found.",
+                "danger"
+            )
+
+            return redirect(url_for('student_dashboard'))
+
+        student_id = student['id']
+
+        # ------------------------------
+        # SAVE PREDICTION
+        # ------------------------------
+
+        cur.execute(
+            """
+            INSERT INTO predictions
+            (
+                student_id,
+                attendance,
+                assignment_score,
+                quiz_score,
+                study_hours,
+                prediction
+            )
+            VALUES(%s, %s, %s, %s, %s, %s)
+            """,
+            (
+                student_id,
+                attendance,
+                assignment,
+                quiz,
+                study_hours,
+                prediction
+            )
+        )
+
+        mysql.connection.commit()
+
+        cur.close()
+
+    return render_template(
+        "predict.html",
+        prediction=prediction
+    )
+
+
+# ------------------------------
+# REACT QUIZ API
+# ------------------------------
+
+@app.route('/api/student/quiz')
+@login_required
+@role_required(STUDENT)
+def student_quiz_api():
+
+    cur = mysql.connection.cursor()
+
+    cur.execute("""
+        SELECT id, title, subject, questions
+        FROM quizzes
+        WHERE id = 1
+    """)
+
+    quiz_data = cur.fetchone()
+    cur.close()
+
+    if not quiz_data:
+        return {
+            "error": "Quiz not found"
+        }, 404
+
+    questions = json.loads(quiz_data['questions'])
+
+    return {
+        "quiz": {
+            "id": quiz_data['id'],
+            "title": quiz_data['title'],
+            "subject": quiz_data['subject'],
+            "questions": questions
+        }
+    }
+@app.route('/api/student/quiz/submit', methods=['POST'])
+@login_required
+@role_required(STUDENT)
+def submit_student_quiz():
+
+    data = request.get_json()
+
+    if not data:
+        return {"error": "No quiz data provided"}, 400
+
+    quiz_id = data.get('quiz_id')
+    answers = data.get('answers', {})
+
+    if not quiz_id:
+        return {"error": "Quiz ID is required"}, 400
+
+    cur = mysql.connection.cursor()
+
+    # Get quiz
+    cur.execute("""
+        SELECT id, questions
+        FROM quizzes
+        WHERE id = %s
+    """, (quiz_id,))
+
+    quiz_data = cur.fetchone()
+
+    if not quiz_data:
+        cur.close()
+        return {"error": "Quiz not found"}, 404
+
+    questions = json.loads(quiz_data['questions'])
+
+    # Calculate score
+    score = 0
+
+    for i, question in enumerate(questions):
+        answer = answers.get(str(i))
+
+        if answer == question["answer"]:
+            score += 1
+
+    # Get actual student ID
+    cur.execute("""
+        SELECT id
+        FROM students
+        WHERE user_id = %s
+    """, (session['user_id'],))
+
+    student = cur.fetchone()
+
+    if not student:
+        cur.close()
+        return {"error": "Student profile not found"}, 404
+
+    student_id = student['id']
+
+    # Save quiz result
+    cur.execute("""
+        INSERT INTO quiz_results
+        (student_id, quiz_id, score)
+        VALUES (%s, %s, %s)
+    """, (
+        student_id,
+        quiz_id,
+        score
+    ))
+
+    mysql.connection.commit()
+    cur.close()
+
+    return {
+        "message": "Quiz submitted successfully",
+        "quiz_id": quiz_id,
+        "score": score,
+        "total": len(questions)
+    }, 200
+# ------------------------------
+# QUIZ
+# ------------------------------
+
+# ------------------------------
+# QUIZ
+# ------------------------------
+
+@app.route('/quiz', methods=['GET', 'POST'])
+@login_required
+@role_required(STUDENT)
+def quiz():
+
+    cur = mysql.connection.cursor()
+
+    # Get the first available quiz
+    cur.execute("""
+        SELECT id, title, subject, questions
+        FROM quizzes
+        ORDER BY id
+        LIMIT 1
+    """)
+
+    quiz_data = cur.fetchone()
+
+    if not quiz_data:
+        cur.close()
+        return "No quiz available."
+
+    quiz_id = quiz_data['id']
+    title = quiz_data['title']
+    subject = quiz_data['subject']
+
+    questions = json.loads(quiz_data['questions'])
+
+    score = None
+
+    if request.method == "POST":
+
+        score = 0
+
+        # Calculate score
+        for i, question in enumerate(questions):
+
+            answer = request.form.get(f"q{i}")
+
+            if answer == question["answer"]:
+                score += 1
+
+        # Get actual student ID
+        cur.execute("""
+            SELECT id
+            FROM students
+            WHERE user_id = %s
+        """, (session['user_id'],))
+
+        student = cur.fetchone()
+
+        if not student:
+            cur.close()
+            return "Student profile not found."
+
+        student_id = student['id']
+
+        # Save quiz result
+        cur.execute("""
+            INSERT INTO quiz_results
+            (student_id, quiz_id, score)
+            VALUES (%s, %s, %s)
+        """, (
+            student_id,
+            quiz_id,
+            score
+        ))
+
+        mysql.connection.commit()
+
+        print("DEBUG USER ID:", session.get('user_id'))
+        print("DEBUG SCORE:", score)
+
+    cur.close()
+
+    return render_template(
+        "quiz.html",
+        title=title,
+        subject=subject,
+        questions=questions,
+        score=score
+    )
+
+# ------------------------------
+# ADMIN DASHBOARD
+# ------------------------------
+
+@app.route('/admin_dashboard')
+@login_required
+@role_required(ADMIN)
+def admin_dashboard():
+
+    return render_template(
+        'admin_dashboard.html'
+    )
+
+
+# ------------------------------
+# LOGOUT
+# ------------------------------
+
+@app.route('/logout')
+@login_required
+def logout():
+
+    session.clear()
+
+    return redirect(
+        url_for('login')
+    )
+
+
+# ------------------------------
+# RUN
+# ------------------------------
+
+if __name__ == "__main__":
+
+    app.run(
+        debug=True
+    )

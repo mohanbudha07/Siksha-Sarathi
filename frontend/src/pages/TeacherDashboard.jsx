@@ -1,546 +1,386 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import api from '../api'
-import './TeacherDashboard.css'
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import { useNavigate } from "react-router-dom";
+import "./TeacherDashboard.css";
+
+const API_URL = "http://localhost:5000";
 
 function TeacherDashboard() {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
-  const [teacher, setTeacher] = useState(null)
-  const [statistics, setStatistics] = useState({
-  total_notes: 0,
-  total_students: 0,
-  total_quiz_attempts: 0,
-  average_quiz_score: 0,
-  students_needing_improvement: 0,
-  total_predictions: 0,
-})
-  const [recentNotes, setRecentNotes] = useState([])
-  const [studentPerformance, setStudentPerformance] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        const response = await api.get('/teacher/dashboard')
+    fetchDashboard();
+  }, []);
 
-        setTeacher(response.data.teacher)
-        setStatistics(response.data.statistics)
-        setRecentNotes(response.data.recent_notes || [])
-        setStudentPerformance(response.data.student_performance || [])
-        console.log(
-          'Student Performance:',
-          response.data.student_performance
-       )
-      } catch (err) {
-        console.error('Teacher dashboard error:', err)
+  const fetchDashboard = async () => {
+    try {
+      setLoading(true);
+      setError("");
 
+      const response = await axios.get(
+        `${API_URL}/api/teacher/dashboard`,
+        {
+          withCredentials: true,
+        }
+      );
+
+      console.log("Teacher dashboard API:", response.data);
+
+      setData(response.data);
+    } catch (err) {
+      console.error("Teacher dashboard error:", err);
+
+      if (err.response) {
         setError(
-          err.response?.data?.error ||
-            'Unable to load teacher dashboard.'
-        )
-      } finally {
-        setLoading(false)
+          err.response.data?.error ||
+            `Server error: ${err.response.status}`
+        );
+      } else {
+        setError(
+          "Unable to connect to the server. Make sure Flask is running."
+        );
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await axios.get(`${API_URL}/logout`, {
+        withCredentials: true,
+      });
+    } catch (err) {
+      console.error("Logout error:", err);
     }
 
-    loadDashboard()
-  }, [])
+    navigate("/login");
+  };
 
   if (loading) {
     return (
-      <div className="teacher-loading">
-        <div className="teacher-spinner"></div>
-        <p>Loading your dashboard...</p>
+      <div className="teacher-dashboard-page">
+        <div className="teacher-loading">
+          <div className="loading-spinner"></div>
+          <p>Loading teacher dashboard...</p>
+        </div>
       </div>
-    )
+    );
   }
 
   if (error) {
     return (
-      <div className="teacher-error">
-        <div>⚠️</div>
-        <h2>Something went wrong</h2>
-        <p>{error}</p>
-        <button onClick={() => window.location.reload()}>
-          Try Again
-        </button>
+      <div className="teacher-dashboard-page">
+        <div className="teacher-error">
+          <h2>Unable to load dashboard</h2>
+          <p>{error}</p>
+
+          <button onClick={fetchDashboard}>
+            Try Again
+          </button>
+        </div>
       </div>
-    )
+    );
   }
 
+  const teacher = data?.teacher || {};
+  const statistics = data?.statistics || {};
+  const recentNotes = data?.recent_notes || [];
+  const studentPerformance = data?.student_performance || [];
+
   return (
-    <div className="teacher-dashboard">
+    <div className="teacher-dashboard-page">
 
-      <section className="teacher-hero">
-
+      {/* HEADER */}
+      <header className="teacher-header">
         <div>
-          <p className="teacher-label">
-            TEACHER PANEL
-          </p>
-
-          <h1>
-            Welcome, {teacher?.name || 'Teacher'} 👋
-          </h1>
-
-          <p>
-            Manage your learning resources and support your
-            students from one place.
-          </p>
+          <h1>Siksha Sarathi</h1>
+          <p>Teacher Dashboard</p>
         </div>
 
-        <div className="teacher-hero-icon">
-          👨‍🏫
-        </div>
+        <div className="teacher-header-right">
+          <div className="teacher-profile">
+            <div className="teacher-avatar">
+              {(teacher.name || "T").charAt(0).toUpperCase()}
+            </div>
 
-      </section>
-
-      <main className="teacher-content">
-
-        {/* STATISTICS */}
-
-      
-<section className="teacher-stats">
-
-  <div className="teacher-stat-card">
-
-    <div className="stat-icon">
-      👨‍🎓
-    </div>
-
-    <div>
-      <p>Total Students</p>
-
-      <h2>
-        {statistics.total_students}
-      </h2>
-    </div>
-
-  </div>
-
-  <div className="teacher-stat-card">
-
-    <div className="stat-icon">
-      📝
-    </div>
-
-    <div>
-      <p>Quiz Attempts</p>
-
-      <h2>
-        {statistics.total_quiz_attempts}
-      </h2>
-    </div>
-
-  </div>
-
-  <div className="teacher-stat-card">
-
-    <div className="stat-icon">
-      📊
-    </div>
-
-    <div>
-      <p>Average Quiz Score</p>
-
-      <h2>
-        {statistics.average_quiz_score}
-      </h2>
-    </div>
-
-  </div>
-  <div className="teacher-stat-card">
-
-  <div className="stat-icon">
-    ⚠️
-  </div>
-
-  <div>
-    <p>Needs Improvement</p>
-
-    <h2>
-      {statistics.students_needing_improvement}
-    </h2>
-  </div>
-
-</div>
-
-</section>
-       {/* QUICK ACTIONS */}
-
-        <section className="teacher-section">
-
-          <div className="teacher-section-heading">
             <div>
-              <h2>Quick Actions</h2>
-              <p>
-                Manage your teaching resources.
-              </p>
+              <strong>{teacher.name || "Teacher"}</strong>
+              <span>Teacher</span>
             </div>
           </div>
 
-          <section className="teacher-cards">
+          <button
+            className="logout-button"
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
+        </div>
+      </header>
 
-            <div
-              className="teacher-card"
-              onClick={() => navigate('/teacher/upload')}
-            >
-              <div className="teacher-card-icon">
-                📤
-              </div>
+      {/* MAIN CONTENT */}
+      <main className="teacher-main">
 
-              <h3>Upload Notes</h3>
+        {/* WELCOME */}
+        <section className="teacher-welcome">
+          <div>
+            <h2>
+              Welcome, {teacher.name || "Teacher"} 👋
+            </h2>
 
-              <p>
-                Upload new study materials, chapters and
-                subject notes for your students.
-              </p>
+            <p>
+              Monitor student learning progress and performance.
+            </p>
+          </div>
 
-              <button>
-                Upload Notes →
-              </button>
+          <button
+            className="notes-button"
+            onClick={() => navigate("/teacher/notes")}
+          >
+            Manage Notes
+          </button>
+        </section>
+
+        {/* STATISTICS */}
+        <section className="statistics-grid">
+
+          <div className="stat-card">
+            <div className="stat-icon">👨‍🎓</div>
+            <div>
+              <span>Total Students</span>
+              <h3>{statistics.total_students ?? 0}</h3>
             </div>
+          </div>
 
-            <div
-              className="teacher-card"
-              onClick={() => navigate('/teacher/notes')}
-            >
-              <div className="teacher-card-icon">
-                📚
-              </div>
-
-              <h3>My Notes</h3>
-
-              <p>
-                View and manage the learning resources you
-                have uploaded for students.
-              </p>
-
-              <button>
-                View Notes →
-              </button>
+          <div className="stat-card">
+            <div className="stat-icon">📝</div>
+            <div>
+              <span>Quiz Attempts</span>
+              <h3>{statistics.total_quiz_attempts ?? 0}</h3>
             </div>
+          </div>
 
-          </section>
+          <div className="stat-card">
+            <div className="stat-icon">📊</div>
+            <div>
+              <span>Average Quiz Score</span>
+              <h3>
+                {statistics.average_quiz_score ?? 0}
+              </h3>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon">📚</div>
+            <div>
+              <span>My Notes</span>
+              <h3>{statistics.total_notes ?? 0}</h3>
+            </div>
+          </div>
+
+          <div className="stat-card warning-card">
+            <div className="stat-icon">⚠️</div>
+            <div>
+              <span>Needs Improvement</span>
+              <h3>
+                {statistics.students_needing_improvement ?? 0}
+              </h3>
+            </div>
+          </div>
+
+          <div className="stat-card">
+            <div className="stat-icon">🤖</div>
+            <div>
+              <span>ML Predictions</span>
+              <h3>{statistics.total_predictions ?? 0}</h3>
+            </div>
+          </div>
 
         </section>
-                {/* STUDENT PERFORMANCE */}
 
-        <section className="student-performance-section">
+        {/* STUDENT PERFORMANCE */}
+        <section className="dashboard-section">
 
-          <div className="student-performance-heading">
+          <div className="section-header">
             <div>
               <h2>Student Performance</h2>
               <p>
-                Monitor your students' learning progress and performance.
+                Overview of individual student learning performance
               </p>
             </div>
           </div>
 
           {studentPerformance.length === 0 ? (
-
-            <div className="empty-performance">
-
-              <div>📊</div>
-
-              <h3>No student performance data yet</h3>
-
+            <div className="empty-state">
+              <div>👨‍🎓</div>
+              <h3>No student performance data</h3>
               <p>
-                Student performance will appear here after students
-                complete quizzes and receive predictions.
+                Student performance data will appear here
+                once students complete learning activities.
               </p>
-
             </div>
-
           ) : (
-
-            <div className="student-performance-table">
-
-              <table>
-
+            <div className="performance-table-wrapper">
+              <table className="performance-table">
                 <thead>
-
                   <tr>
                     <th>Student</th>
                     <th>Grade</th>
                     <th>Quiz Attempts</th>
-                    <th>Average Score</th>
+                    <th>Avg. Quiz Score</th>
                     <th>Attendance</th>
                     <th>Assignment</th>
-                    <th>Prediction</th>
-                    <th>Action</th>
+                    <th>Study Hours</th>
+                    <th>ML Prediction</th>
                   </tr>
-
                 </thead>
 
                 <tbody>
-
                   {studentPerformance.map((student) => (
-
                     <tr key={student.student_id}>
 
                       <td>
-                        <strong>
-                          {student.full_name}
-                        </strong>
+                        <div className="student-name">
+                          <div className="student-avatar">
+                            {student.full_name
+                              ?.charAt(0)
+                              .toUpperCase()}
+                          </div>
+
+                          <strong>
+                            {student.full_name}
+                          </strong>
+                        </div>
                       </td>
 
                       <td>
-                        {student.grade}
+                        <span className="grade-badge">
+                          Grade {student.grade}
+                        </span>
                       </td>
 
                       <td>
-                        {student.quiz_attempts}
+                        {student.quiz_attempts ?? 0}
                       </td>
 
                       <td>
-                        {(
-                          Number(student.average_quiz_score) * 100
-                        ).toFixed(1)}%
+                        {student.average_quiz_score ?? 0}
                       </td>
 
                       <td>
-                        {student.attendance ?? '—'}%
+                        {student.attendance ?? 0}%
                       </td>
 
                       <td>
-                        {student.assignment_score ?? '—'}%
+                        {student.assignment_score ?? 0}%
                       </td>
 
                       <td>
-  <span
-    className={
-      student.prediction === 'Needs Improvement'
-        ? 'prediction-warning'
-        : 'prediction-good'
-    }
-  >
-    {student.prediction || 'Not Predicted'}
-  </span>
-</td>
+                        {student.study_hours ?? 0} hrs
+                      </td>
 
-<td>
-  <button
-    className="view-student-btn"
-    onClick={() => setSelectedStudent(student)}
-  >
-    View Details
-  </button>
-</td>
+                      <td>
+                        <span
+                          className={`prediction-badge ${
+                            student.prediction ===
+                            "Needs Improvement"
+                              ? "prediction-warning"
+                              : student.prediction === "Good"
+                              ? "prediction-good"
+                              : "prediction-normal"
+                          }`}
+                        >
+                          {student.prediction ||
+                            "Not Available"}
+                        </span>
+                      </td>
 
                     </tr>
-
                   ))}
-
                 </tbody>
-
               </table>
-
             </div>
-
           )}
 
         </section>
 
-        
-
         {/* RECENT NOTES */}
+        <section className="dashboard-section">
 
-        <section className="recent-notes-section">
-
-          <div className="recent-heading">
-
+          <div className="section-header">
             <div>
               <h2>Recent Notes</h2>
-
               <p>
-                Your latest uploaded learning materials.
+                Notes uploaded by you
               </p>
             </div>
 
             <button
-              onClick={() => navigate('/teacher/notes')}
+              className="section-button"
+              onClick={() => navigate("/teacher/notes")}
             >
-              View All
+              View All Notes
             </button>
-
           </div>
 
           {recentNotes.length === 0 ? (
-
-            <div className="empty-notes">
-
+            <div className="empty-state compact">
               <div>📚</div>
-
               <h3>No notes uploaded yet</h3>
-
               <p>
-                Start by uploading your first learning resource.
+                Upload your first learning note to get started.
               </p>
 
               <button
-                onClick={() => navigate('/teacher/upload')}
+                onClick={() => navigate("/teacher/notes")}
               >
-                Upload Your First Note
+                Upload Note
               </button>
-
             </div>
-
           ) : (
-
-            <div className="recent-notes-list">
+            <div className="notes-grid">
 
               {recentNotes.map((note) => (
-
                 <div
-                  className="recent-note"
+                  className="note-card"
                   key={note.id}
                 >
-
-                  <div className="recent-note-icon">
+                  <div className="note-card-icon">
                     📖
                   </div>
 
-                  <div className="recent-note-info">
-
-                    <h3>
-                      {note.title}
-                    </h3>
+                  <div>
+                    <h3>{note.title}</h3>
 
                     <p>
-                      {note.subject} • {note.chapter}
+                      {note.subject} • Chapter{" "}
+                      {note.chapter}
                     </p>
 
-                  </div>
-
-                  <div className="recent-note-date">
-                    {note.created_at
-                      ? new Date(
+                    {note.created_at && (
+                      <small>
+                        {new Date(
                           note.created_at
-                        ).toLocaleDateString()
-                      : ''}
+                        ).toLocaleDateString()}
+                      </small>
+                    )}
                   </div>
-
                 </div>
-
               ))}
 
             </div>
-
           )}
 
         </section>
 
-        {/* TEACHER TIP */}
-
-        <section className="teacher-info-panel">
-
-          <div className="info-icon">
-            💡
-          </div>
-
-          <div>
-            <h3>Teacher Tip</h3>
-
-            <p>
-              Keep your learning materials organized by
-              subject and chapter so students can find them
-              easily.
-            </p>
-          </div>
-
-        </section>
-
-        {selectedStudent && (
-  <div
-    className="student-modal-overlay"
-    onClick={() => setSelectedStudent(null)}
-  >
-    <div
-      className="student-modal"
-      onClick={(e) => e.stopPropagation()}
-    >
-
-      <div className="student-modal-header">
-        <div>
-          <h2>{selectedStudent.full_name}</h2>
-          <p>Grade {selectedStudent.grade}</p>
-        </div>
-
-        <button
-          className="student-modal-close"
-          onClick={() => setSelectedStudent(null)}
-        >
-          ×
-        </button>
-      </div>
-
-      <div className="student-modal-grid">
-
-        <div className="student-detail-card">
-          <span>📝</span>
-          <p>Quiz Attempts</p>
-          <strong>{selectedStudent.quiz_attempts}</strong>
-        </div>
-
-        <div className="student-detail-card">
-          <span>📊</span>
-          <p>Average Quiz Score</p>
-          <strong>
-            {selectedStudent.average_quiz_score}
-          </strong>
-        </div>
-
-        <div className="student-detail-card">
-          <span>📅</span>
-          <p>Attendance</p>
-          <strong>
-            {selectedStudent.attendance ?? '—'}%
-          </strong>
-        </div>
-
-        <div className="student-detail-card">
-          <span>📚</span>
-          <p>Assignment Score</p>
-          <strong>
-            {selectedStudent.assignment_score ?? '—'}%
-          </strong>
-        </div>
-
-        <div className="student-detail-card">
-          <span>⏱️</span>
-          <p>Study Hours</p>
-          <strong>
-            {selectedStudent.study_hours ?? '—'}
-          </strong>
-        </div>
-
-        <div className="student-detail-card">
-          <span>🤖</span>
-          <p>ML Prediction</p>
-
-          <strong
-            className={
-              selectedStudent.prediction === 'Needs Improvement'
-                ? 'prediction-warning'
-                : 'prediction-good'
-            }
-          >
-            {selectedStudent.prediction || 'Not Predicted'}
-          </strong>
-        </div>
-
-      </div>
-
-    </div>
-  </div>
-)}
-
       </main>
-
     </div>
-  )
+  );
 }
 
-export default TeacherDashboard
+export default TeacherDashboard;

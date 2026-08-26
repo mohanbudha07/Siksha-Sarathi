@@ -6,8 +6,8 @@ class Config:
 
     # MySQL Configuration
     MYSQL_HOST = "localhost"
-    MYSQL_USER = "siksha_user"
-    MYSQL_PASSWORD = "siksha123"
+    MYSQL_USER = "root"
+    MYSQL_PASSWORD = ""  # Empty if using auth_socket
     MYSQL_DB = "siksha_sarathi"
     MYSQL_CURSORCLASS = "DictCursor"
 
