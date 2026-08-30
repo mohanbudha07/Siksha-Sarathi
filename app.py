@@ -1343,6 +1343,121 @@ def submit_student_quiz():
         cur.close()
 
 
+        # ============================================================
+# ADMIN DASHBOARD
+# ============================================================
+
+@app.route("/api/admin/dashboard", methods=["GET"])
+@login_required
+@role_required(ADMIN)
+def admin_dashboard_api():
+
+    cur = mysql.connection.cursor()
+
+    try:
+        # ----------------------------------------------------
+        # User statistics
+        # ----------------------------------------------------
+        cur.execute("""
+            SELECT
+                COUNT(*) AS total_users,
+                SUM(role = 'student') AS total_students,
+                SUM(role = 'teacher') AS total_teachers,
+                SUM(role = 'admin') AS total_admins
+            FROM users
+        """)
+
+        user_stats = cur.fetchone()
+
+        # ----------------------------------------------------
+        # Notes
+        # ----------------------------------------------------
+        cur.execute("""
+            SELECT COUNT(*) AS total_notes
+            FROM notes
+        """)
+
+        total_notes = cur.fetchone()["total_notes"]
+
+        # ----------------------------------------------------
+        # Quizzes
+        # ----------------------------------------------------
+        cur.execute("""
+            SELECT COUNT(*) AS total_quizzes
+            FROM quizzes
+        """)
+
+        total_quizzes = cur.fetchone()["total_quizzes"]
+
+        # ----------------------------------------------------
+        # Quiz attempts
+        # ----------------------------------------------------
+        cur.execute("""
+            SELECT COUNT(*) AS total_quiz_attempts
+            FROM quiz_results
+        """)
+
+        total_quiz_attempts = cur.fetchone()["total_quiz_attempts"]
+
+        # ----------------------------------------------------
+        # ML predictions
+        # ----------------------------------------------------
+        cur.execute("""
+            SELECT COUNT(*) AS total_predictions
+            FROM predictions
+        """)
+
+        total_predictions = cur.fetchone()["total_predictions"]
+
+        # ----------------------------------------------------
+        # Students needing improvement
+        # ----------------------------------------------------
+        cur.execute("""
+            SELECT COUNT(DISTINCT student_id)
+            AS students_needing_improvement
+            FROM predictions
+            WHERE prediction = 'Needs Improvement'
+        """)
+
+        improvement = cur.fetchone()
+
+        # ----------------------------------------------------
+        # Recent users
+        # ----------------------------------------------------
+        cur.execute("""
+            SELECT
+                id,
+                username,
+                email,
+                role,
+                created_at
+            FROM users
+            ORDER BY created_at DESC
+            LIMIT 10
+        """)
+
+        recent_users = cur.fetchall()
+
+        return {
+            "statistics": {
+                "total_users": int(user_stats["total_users"] or 0),
+                "total_students": int(user_stats["total_students"] or 0),
+                "total_teachers": int(user_stats["total_teachers"] or 0),
+                "total_admins": int(user_stats["total_admins"] or 0),
+                "total_notes": int(total_notes or 0),
+                "total_quizzes": int(total_quizzes or 0),
+                "total_quiz_attempts": int(total_quiz_attempts or 0),
+                "total_predictions": int(total_predictions or 0),
+                "students_needing_improvement": int(
+                    improvement["students_needing_improvement"] or 0
+                )
+            },
+            "recent_users": recent_users
+        }, 200
+
+    finally:
+        cur.close()
+        
 # ============================================================
 # RUN APPLICATION
 # ============================================================

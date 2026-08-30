@@ -1,3 +1,4 @@
+import AdminDashboard from './pages/AdminDashboard'
 import TeacherNotes from './pages/TeacherNotes'
 import StudentRegister from './pages/StudentRegister'
 import Home from './pages/Home'
@@ -153,6 +154,11 @@ function App() {
       <TeacherNotes />
     </TeacherPage>
   }
+/>
+
+<Route
+  path="/admin/dashboard"
+  element={<AdminDashboard />}
 />
 
         <Route

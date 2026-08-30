@@ -1,0 +1,133 @@
+.admin-dashboard {
+  padding: 30px;
+  min-height: 100vh;
+}
+
+.admin-header {
+  margin-bottom: 30px;
+}
+
+.admin-header h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+}
+
+.admin-header p {
+  margin: 0;
+  opacity: 0.7;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 35px;
+}
+
+.admin-card {
+  padding: 22px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.admin-card span {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 10px;
+  opacity: 0.7;
+}
+
+.admin-card strong {
+  font-size: 30px;
+}
+
+.admin-card.warning {
+  border-left: 5px solid #f59e0b;
+}
+
+.admin-section {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 25px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.section-header {
+  margin-bottom: 20px;
+}
+
+.section-header h2 {
+  margin: 0;
+}
+
+.admin-table-wrapper {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 14px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.admin-table th {
+  font-weight: 600;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.role-badge.student {
+  background: #e8f5e9;
+}
+
+.role-badge.teacher {
+  background: #e3f2fd;
+}
+
+.role-badge.admin {
+  background: #f3e5f5;
+}
+
+.admin-loading,
+.admin-error {
+  padding: 40px;
+  text-align: center;
+}
+
+.admin-error {
+  color: #c62828;
+}
+
+.empty-state {
+  opacity: 0.7;
+}
+
+@media (max-width: 1000px) {
+  .admin-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-dashboard {
+    padding: 20px;
+  }
+
+  .admin-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
