@@ -7,7 +7,10 @@ from flask_cors import CORS
 import os
 import json
 import joblib
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 
 # ============================================================
 # APPLICATION CONFIGURATION
@@ -24,13 +27,21 @@ CORS(
     supports_credentials=True
 )
 
-app.config["MYSQL_HOST"] = "localhost"
-app.config["MYSQL_USER"] = "siksha_user"
-app.config["MYSQL_PASSWORD"] = "Siksha123!"
-app.config["MYSQL_DB"] = "siksha_sarathi"
-app.config["MYSQL_CURSORCLASS"] = "DictCursor"
+# Secret key (prefer environment variable)
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-this-in-production-2026")
+app.secret_key = app.config["SECRET_KEY"]   # keep this for compatibility
 
-app.secret_key = "your_super_secret_key_123"
+# Session cookie settings (important for React + credentials)
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+# app.config["SESSION_COOKIE_SECURE"] = True   # enable later when using HTTPS
+
+# MySQL Configuration (prefer environment variables)
+app.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST", "localhost")
+app.config["MYSQL_USER"] = os.getenv("MYSQL_USER", "siksha_user")
+app.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "Siksha123!")
+app.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "siksha_sarathi")
+app.config["MYSQL_CURSORCLASS"] = "DictCursor"
 
 mysql = MySQL(app)
 

@@ -1,9 +1,7 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "../api";
 import "./TeacherDashboard.css";
-
-const API_URL = "http://localhost:5000";
 
 function TeacherDashboard() {
   const navigate = useNavigate();
@@ -21,15 +19,7 @@ function TeacherDashboard() {
       setLoading(true);
       setError("");
 
-      const response = await axios.get(
-        `${API_URL}/api/teacher/dashboard`,
-        {
-          withCredentials: true,
-        }
-      );
-
-      console.log("Teacher dashboard API:", response.data);
-
+      const response = await api.get("/teacher/dashboard");
       setData(response.data);
     } catch (err) {
       console.error("Teacher dashboard error:", err);
@@ -51,14 +41,12 @@ function TeacherDashboard() {
 
   const handleLogout = async () => {
     try {
-      await axios.get(`${API_URL}/logout`, {
-        withCredentials: true,
-      });
+      await api.post("/logout");
     } catch (err) {
       console.error("Logout error:", err);
+    } finally {
+      navigate("/login");
     }
-
-    navigate("/login");
   };
 
   if (loading) {
@@ -78,10 +66,7 @@ function TeacherDashboard() {
         <div className="teacher-error">
           <h2>Unable to load dashboard</h2>
           <p>{error}</p>
-
-          <button onClick={fetchDashboard}>
-            Try Again
-          </button>
+          <button onClick={fetchDashboard}>Try Again</button>
         </div>
       </div>
     );
@@ -94,7 +79,6 @@ function TeacherDashboard() {
 
   return (
     <div className="teacher-dashboard-page">
-
       {/* HEADER */}
       <header className="teacher-header">
         <div>
@@ -114,10 +98,7 @@ function TeacherDashboard() {
             </div>
           </div>
 
-          <button
-            className="logout-button"
-            onClick={handleLogout}
-          >
+          <button className="logout-button" onClick={handleLogout}>
             Logout
           </button>
         </div>
@@ -125,17 +106,11 @@ function TeacherDashboard() {
 
       {/* MAIN CONTENT */}
       <main className="teacher-main">
-
         {/* WELCOME */}
         <section className="teacher-welcome">
           <div>
-            <h2>
-              Welcome, {teacher.name || "Teacher"} 👋
-            </h2>
-
-            <p>
-              Monitor student learning progress and performance.
-            </p>
+            <h2>Welcome, {teacher.name || "Teacher"} 👋</h2>
+            <p>Monitor student learning progress and performance.</p>
           </div>
 
           <button
@@ -148,7 +123,6 @@ function TeacherDashboard() {
 
         {/* STATISTICS */}
         <section className="statistics-grid">
-
           <div className="stat-card">
             <div className="stat-icon">👨‍🎓</div>
             <div>
@@ -169,9 +143,7 @@ function TeacherDashboard() {
             <div className="stat-icon">📊</div>
             <div>
               <span>Average Quiz Score</span>
-              <h3>
-                {statistics.average_quiz_score ?? 0}
-              </h3>
+              <h3>{statistics.average_quiz_score ?? 0}</h3>
             </div>
           </div>
 
@@ -187,9 +159,7 @@ function TeacherDashboard() {
             <div className="stat-icon">⚠️</div>
             <div>
               <span>Needs Improvement</span>
-              <h3>
-                {statistics.students_needing_improvement ?? 0}
-              </h3>
+              <h3>{statistics.students_needing_improvement ?? 0}</h3>
             </div>
           </div>
 
@@ -200,18 +170,14 @@ function TeacherDashboard() {
               <h3>{statistics.total_predictions ?? 0}</h3>
             </div>
           </div>
-
         </section>
 
         {/* STUDENT PERFORMANCE */}
         <section className="dashboard-section">
-
           <div className="section-header">
             <div>
               <h2>Student Performance</h2>
-              <p>
-                Overview of individual student learning performance
-              </p>
+              <p>Overview of individual student learning performance</p>
             </div>
           </div>
 
@@ -220,8 +186,8 @@ function TeacherDashboard() {
               <div>👨‍🎓</div>
               <h3>No student performance data</h3>
               <p>
-                Student performance data will appear here
-                once students complete learning activities.
+                Student performance data will appear here once students
+                complete learning activities.
               </p>
             </div>
           ) : (
@@ -243,18 +209,12 @@ function TeacherDashboard() {
                 <tbody>
                   {studentPerformance.map((student) => (
                     <tr key={student.student_id}>
-
                       <td>
                         <div className="student-name">
                           <div className="student-avatar">
-                            {student.full_name
-                              ?.charAt(0)
-                              .toUpperCase()}
+                            {student.full_name?.charAt(0).toUpperCase()}
                           </div>
-
-                          <strong>
-                            {student.full_name}
-                          </strong>
+                          <strong>{student.full_name}</strong>
                         </div>
                       </td>
 
@@ -264,60 +224,39 @@ function TeacherDashboard() {
                         </span>
                       </td>
 
-                      <td>
-                        {student.quiz_attempts ?? 0}
-                      </td>
-
-                      <td>
-                        {student.average_quiz_score ?? 0}
-                      </td>
-
-                      <td>
-                        {student.attendance ?? 0}%
-                      </td>
-
-                      <td>
-                        {student.assignment_score ?? 0}%
-                      </td>
-
-                      <td>
-                        {student.study_hours ?? 0} hrs
-                      </td>
+                      <td>{student.quiz_attempts ?? 0}</td>
+                      <td>{student.average_quiz_score ?? 0}</td>
+                      <td>{student.attendance ?? 0}%</td>
+                      <td>{student.assignment_score ?? 0}%</td>
+                      <td>{student.study_hours ?? 0} hrs</td>
 
                       <td>
                         <span
                           className={`prediction-badge ${
-                            student.prediction ===
-                            "Needs Improvement"
+                            student.prediction === "Needs Improvement"
                               ? "prediction-warning"
                               : student.prediction === "Good"
                               ? "prediction-good"
                               : "prediction-normal"
                           }`}
                         >
-                          {student.prediction ||
-                            "Not Available"}
+                          {student.prediction || "Not Available"}
                         </span>
                       </td>
-
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-
         </section>
 
         {/* RECENT NOTES */}
         <section className="dashboard-section">
-
           <div className="section-header">
             <div>
               <h2>Recent Notes</h2>
-              <p>
-                Notes uploaded by you
-              </p>
+              <p>Notes uploaded by you</p>
             </div>
 
             <button
@@ -332,52 +271,35 @@ function TeacherDashboard() {
             <div className="empty-state compact">
               <div>📚</div>
               <h3>No notes uploaded yet</h3>
-              <p>
-                Upload your first learning note to get started.
-              </p>
+              <p>Upload your first learning note to get started.</p>
 
-              <button
-                onClick={() => navigate("/teacher/notes")}
-              >
+              <button onClick={() => navigate("/teacher/notes")}>
                 Upload Note
               </button>
             </div>
           ) : (
             <div className="notes-grid">
-
               {recentNotes.map((note) => (
-                <div
-                  className="note-card"
-                  key={note.id}
-                >
-                  <div className="note-card-icon">
-                    📖
-                  </div>
+                <div className="note-card" key={note.id}>
+                  <div className="note-card-icon">📖</div>
 
                   <div>
                     <h3>{note.title}</h3>
-
                     <p>
-                      {note.subject} • Chapter{" "}
-                      {note.chapter}
+                      {note.subject} • Chapter {note.chapter}
                     </p>
 
                     {note.created_at && (
                       <small>
-                        {new Date(
-                          note.created_at
-                        ).toLocaleDateString()}
+                        {new Date(note.created_at).toLocaleDateString()}
                       </small>
                     )}
                   </div>
                 </div>
               ))}
-
             </div>
           )}
-
         </section>
-
       </main>
     </div>
   );

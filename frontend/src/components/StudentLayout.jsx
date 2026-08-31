@@ -1,14 +1,12 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import axios from 'axios'
+import api from '../api'
 
 function StudentLayout({ children }) {
   const navigate = useNavigate()
 
   const handleLogout = async () => {
     try {
-      await axios.get('/logout', {
-        withCredentials: true,
-      })
+      await api.post('/logout')
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
@@ -65,6 +63,9 @@ function StudentLayout({ children }) {
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
+              background: 'white',
+              color: '#2563eb',
+              fontWeight: '600',
             }}
           >
             Logout

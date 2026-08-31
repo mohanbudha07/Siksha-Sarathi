@@ -6,7 +6,7 @@ function TeacherLayout({ children }) {
 
   const handleLogout = async () => {
     try {
-      await api.get('/logout')
+      await api.post('/logout')
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
@@ -43,10 +43,6 @@ function TeacherLayout({ children }) {
             My Notes
           </NavLink>
 
-          <NavLink to="/teacher/upload" style={linkStyle}>
-            Upload Notes
-          </NavLink>
-
           <button
             onClick={handleLogout}
             style={{
@@ -55,6 +51,9 @@ function TeacherLayout({ children }) {
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
+              background: 'white',
+              color: '#4f00ff',
+              fontWeight: '600',
             }}
           >
             Logout
