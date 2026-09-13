@@ -114,6 +114,115 @@
   background: #fafaff;
 }
 
+.note-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.note-actions button {
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edit-note-button {
+  border: 1px solid #4f00ff;
+  background: white;
+  color: #4f00ff;
+}
+
+.delete-note-button {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.note-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.teacher-notes-action-error {
+  margin-bottom: 18px;
+  padding: 13px 15px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.teacher-note-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 26px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.04);
+}
+
+.teacher-note-form label {
+  display: block;
+  margin-bottom: 6px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.teacher-note-form input,
+.teacher-note-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font: inherit;
+}
+
+.teacher-note-form textarea {
+  resize: vertical;
+}
+
+.teacher-note-form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.teacher-note-form-actions button {
+  padding: 11px 20px;
+  border: 0;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.teacher-note-save-button {
+  background: #4f00ff;
+  color: white;
+}
+
+.teacher-note-cancel-button {
+  background: #e5e7eb;
+  color: #334155;
+}
+
+.teacher-note-form-message {
+  padding: 12px 14px;
+  border-radius: 9px;
+}
+
+.teacher-note-form-message.error {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.teacher-note-form-message.success {
+  background: #f0fdf4;
+  color: #166534;
+}
+
 .note-title {
   display: flex;
   align-items: center;
@@ -188,7 +297,6 @@
     flex-direction: column;
   }
 }
-
 @media (max-width: 500px) {
   .teacher-notes-hero {
     flex-direction: column;

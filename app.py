@@ -990,15 +990,15 @@ def teacher_upload_note_api():
 
     data = request.get_json(silent=True)
 
-    if not data:
+    if not isinstance(data, dict) or not data:
         return {
             "error": "Note data is required"
         }, 400
 
-    title = data.get("title")
-    subject = data.get("subject")
-    chapter = data.get("chapter")
-    content = data.get("content")
+    title = str(data.get("title") or "").strip()
+    subject = str(data.get("subject") or "").strip()
+    chapter = str(data.get("chapter") or "").strip()
+    content = str(data.get("content") or "").strip()
 
     if not all([
         title,
@@ -1057,6 +1057,184 @@ def teacher_upload_note_api():
 
         return {
             "error": "Failed to upload note"
+        }, 500
+
+    finally:
+
+        cur.close()
+
+
+@app.route("/api/teacher/notes/<int:note_id>", methods=["GET"])
+@login_required
+@role_required(TEACHER)
+def teacher_note_detail_api(note_id):
+
+    cur = mysql.connection.cursor()
+
+    try:
+
+        cur.execute(
+            """
+            SELECT
+                id,
+                title,
+                subject,
+                chapter,
+                content,
+                created_at
+            FROM notes
+            WHERE id = %s
+              AND uploaded_by = %s
+            """,
+            (note_id, session["user_id"])
+        )
+
+        note = cur.fetchone()
+
+        if not note:
+            return {
+                "error": "Note not found"
+            }, 404
+
+        return {
+            "note": note
+        }, 200
+
+    finally:
+
+        cur.close()
+
+
+@app.route("/api/teacher/notes/<int:note_id>", methods=["PUT"])
+@login_required
+@role_required(TEACHER)
+def teacher_update_note_api(note_id):
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict) or not data:
+        return {
+            "error": "Note data is required"
+        }, 400
+
+    title = str(data.get("title") or "").strip()
+    subject = str(data.get("subject") or "").strip()
+    chapter = str(data.get("chapter") or "").strip()
+    content = str(data.get("content") or "").strip()
+
+    if not all([title, subject, chapter, content]):
+        return {
+            "error": "All note fields are required"
+        }, 400
+
+    cur = mysql.connection.cursor()
+
+    try:
+
+        cur.execute(
+            """
+            SELECT id
+            FROM notes
+            WHERE id = %s
+              AND uploaded_by = %s
+            """,
+            (note_id, session["user_id"])
+        )
+
+        if not cur.fetchone():
+            return {
+                "error": "Note not found"
+            }, 404
+
+        cur.execute(
+            """
+            UPDATE notes
+            SET
+                title = %s,
+                subject = %s,
+                chapter = %s,
+                content = %s
+            WHERE id = %s
+              AND uploaded_by = %s
+            """,
+            (
+                title,
+                subject,
+                chapter,
+                content,
+                note_id,
+                session["user_id"]
+            )
+        )
+
+        mysql.connection.commit()
+
+        return {
+            "message": "Note updated successfully"
+        }, 200
+
+    except Exception as e:
+
+        mysql.connection.rollback()
+
+        print("Teacher note update error:", e)
+
+        return {
+            "error": "Failed to update note"
+        }, 500
+
+    finally:
+
+        cur.close()
+
+
+@app.route("/api/teacher/notes/<int:note_id>", methods=["DELETE"])
+@login_required
+@role_required(TEACHER)
+def teacher_delete_note_api(note_id):
+
+    cur = mysql.connection.cursor()
+
+    try:
+
+        cur.execute(
+            """
+            SELECT id
+            FROM notes
+            WHERE id = %s
+              AND uploaded_by = %s
+            """,
+            (note_id, session["user_id"])
+        )
+
+        if not cur.fetchone():
+            return {
+                "error": "Note not found"
+            }, 404
+
+        cur.execute(
+            """
+            DELETE FROM notes
+            WHERE id = %s
+              AND uploaded_by = %s
+            """,
+            (note_id, session["user_id"])
+        )
+
+        mysql.connection.commit()
+
+        return {
+            "message": "Note deleted successfully"
+        }, 200
+
+    except Exception as e:
+
+        mysql.connection.rollback()
+
+        print("Teacher note deletion error:", e)
+
+        return {
+            "error": "Failed to delete note"
         }, 500
 
     finally:

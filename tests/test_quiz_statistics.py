@@ -78,6 +78,7 @@ class QuizStatisticsTests(unittest.TestCase):
             INSERT INTO users VALUES(1,'Student','s@example.test','student','2026-01-01');
             INSERT INTO users VALUES(2,'Teacher','t@example.test','teacher','2026-01-01');
             INSERT INTO users VALUES(3,'Admin','a@example.test','admin','2026-01-01');
+            INSERT INTO users VALUES(4,'Other Teacher','other@example.test','teacher','2026-01-01');
             INSERT INTO students VALUES(1,1,'Student One','10');
             INSERT INTO students VALUES(2,4,'Student Two','10');
         ''')
@@ -199,6 +200,79 @@ class QuizStatisticsTests(unittest.TestCase):
             session.clear()
         self.assertEqual(self.client.get('/api/student/quiz').status_code, 401)
         self.assertEqual(self.submit({'0': 'A', '1': 'D'}).status_code, 401)
+
+    def test_teacher_can_read_update_and_delete_own_note(self):
+        self.db.execute(
+            'INSERT INTO notes VALUES(1,?,?,?,?,?,?)',
+            ('Original', 'Science', '1', 'Original content', '2026-01-01', 2)
+        )
+        self.db.commit()
+        self.login('teacher')
+
+        response = self.client.get('/api/teacher/notes/1')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['note']['content'], 'Original content')
+
+        response = self.client.put('/api/teacher/notes/1', json={
+            'title': '  Updated title  ',
+            'subject': ' Science ',
+            'chapter': ' 2 ',
+            'content': ' Updated content ',
+        })
+        self.assertEqual(response.status_code, 200)
+        row = self.db.execute(
+            'SELECT title, subject, chapter, content FROM notes WHERE id=1'
+        ).fetchone()
+        self.assertEqual(tuple(row), ('Updated title', 'Science', '2', 'Updated content'))
+
+        response = self.client.delete('/api/teacher/notes/1')
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self.db.execute('SELECT id FROM notes WHERE id=1').fetchone())
+
+    def test_teacher_cannot_manage_another_teachers_note(self):
+        self.db.execute(
+            'INSERT INTO notes VALUES(1,?,?,?,?,?,?)',
+            ('Private', 'Science', '1', 'Other teacher content', '2026-01-01', 4)
+        )
+        self.db.commit()
+        self.login('teacher')
+
+        self.assertEqual(self.client.get('/api/teacher/notes/1').status_code, 404)
+        self.assertEqual(self.client.put('/api/teacher/notes/1', json={
+            'title': 'Changed', 'subject': 'Science',
+            'chapter': '1', 'content': 'Changed',
+        }).status_code, 404)
+        self.assertEqual(self.client.delete('/api/teacher/notes/1').status_code, 404)
+        row = self.db.execute('SELECT title, content FROM notes WHERE id=1').fetchone()
+        self.assertEqual(tuple(row), ('Private', 'Other teacher content'))
+
+    def test_note_update_rejects_invalid_data(self):
+        self.db.execute(
+            'INSERT INTO notes VALUES(1,?,?,?,?,?,?)',
+            ('Original', 'Science', '1', 'Content', '2026-01-01', 2)
+        )
+        self.db.commit()
+        self.login('teacher')
+
+        for payload in [None, [], {}, {
+            'title': ' ', 'subject': 'Science', 'chapter': '1', 'content': 'Content'
+        }]:
+            with self.subTest(payload=payload):
+                response = self.client.put('/api/teacher/notes/1', json=payload)
+                self.assertEqual(response.status_code, 400)
+
+    def test_note_management_requires_teacher_role(self):
+        for role, expected_status in [('student', 403), ('admin', 403)]:
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(
+                    self.client.get('/api/teacher/notes/1').status_code,
+                    expected_status,
+                )
+
+        with self.client.session_transaction() as session:
+            session.clear()
+        self.assertEqual(self.client.get('/api/teacher/notes/1').status_code, 401)
 
 
 if __name__ == '__main__':

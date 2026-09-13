@@ -7,6 +7,7 @@ function Notes() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [selectedNote, setSelectedNote] = useState(null)
 
   useEffect(() => {
     api
@@ -22,6 +23,17 @@ function Notes() {
         setLoading(false)
       })
   }, [])
+
+  useEffect(() => {
+    if (!selectedNote) return undefined
+
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setSelectedNote(null)
+    }
+
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [selectedNote])
 
   const filteredNotes = notes.filter((note) => {
     const text = `
@@ -96,7 +108,11 @@ function Notes() {
       {!loading && !error && filteredNotes.length > 0 && (
         <section className="notes-grid">
           {filteredNotes.map((note) => (
-            <article className="note-card" key={note.id}>
+            <article
+              className="note-card"
+              key={note.id}
+              onClick={() => setSelectedNote(note)}
+            >
 
               <div className="note-card-top">
                 <div className="note-icon">📘</div>
@@ -117,14 +133,49 @@ function Notes() {
                 {note.content}
               </p>
 
-              <div className="note-footer">
-                <span>Learning Material</span>
+              <button
+                type="button"
+                className="note-footer"
+                onClick={() => setSelectedNote(note)}
+              >
+                <span>Read Full Note</span>
                 <span>→</span>
-              </div>
+              </button>
 
             </article>
           ))}
         </section>
+      )}
+
+      {selectedNote && (
+        <div
+          className="note-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedNote(null)
+          }}
+          role="presentation"
+        >
+          <section
+            className="note-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="note-modal-title"
+          >
+            <button
+              type="button"
+              className="note-modal-close"
+              onClick={() => setSelectedNote(null)}
+              aria-label="Close full note"
+            >
+              ×
+            </button>
+
+            <span className="subject-badge">{selectedNote.subject}</span>
+            <h2 id="note-modal-title">{selectedNote.title}</h2>
+            <p className="note-modal-chapter">📑 {selectedNote.chapter}</p>
+            <div className="note-modal-content">{selectedNote.content}</div>
+          </section>
+        </div>
       )}
 
     </div>

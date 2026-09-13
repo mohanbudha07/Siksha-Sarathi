@@ -9,6 +9,8 @@ function TeacherNotes() {
   const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [deletingId, setDeletingId] = useState(null)
 
   useEffect(() => {
     const loadNotes = async () => {
@@ -29,6 +31,31 @@ function TeacherNotes() {
 
     loadNotes()
   }, [])
+
+  const handleDelete = async (note) => {
+    const confirmed = window.confirm(
+      `Delete "${note.title}"? This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    setActionError('')
+    setDeletingId(note.id)
+
+    try {
+      await api.delete(`/teacher/notes/${note.id}`)
+      setNotes((currentNotes) =>
+        currentNotes.filter((item) => item.id !== note.id)
+      )
+    } catch (err) {
+      console.error('Delete note error:', err)
+      setActionError(
+        err.response?.data?.error || 'Unable to delete this note.'
+      )
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   if (loading) {
     return (
@@ -90,6 +117,10 @@ function TeacherNotes() {
           </button>
         </div>
 
+        {actionError && (
+          <div className="teacher-notes-action-error">⚠️ {actionError}</div>
+        )}
+
         {notes.length === 0 ? (
           <section className="teacher-notes-empty">
             <div className="empty-icon">📚</div>
@@ -117,6 +148,7 @@ function TeacherNotes() {
                   <th>Subject</th>
                   <th>Chapter</th>
                   <th>Upload Date</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
 
@@ -141,6 +173,27 @@ function TeacherNotes() {
                           ).toLocaleDateString()
                         : '—'}
                     </td>
+
+                    <td>
+                      <div className="note-actions">
+                        <button
+                          type="button"
+                          className="edit-note-button"
+                          onClick={() => navigate(`/teacher/notes/${note.id}/edit`)}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          className="delete-note-button"
+                          onClick={() => handleDelete(note)}
+                          disabled={deletingId === note.id}
+                        >
+                          {deletingId === note.id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -153,5 +206,4 @@ function TeacherNotes() {
     </div>
   )
 }
-
 export default TeacherNotes

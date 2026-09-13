@@ -18,6 +18,7 @@ import TeacherDashboard from './pages/TeacherDashboard'
 import TeacherNotes from './pages/TeacherNotes'
 import AdminDashboard from './pages/AdminDashboard'
 import TeacherUploadNote from './pages/TeacherUploadNote'
+import TeacherEditNote from './pages/TeacherEditNote'
 
 // ---------- Auth Context Helper ----------
 function useAuthCheck() {
@@ -137,6 +138,10 @@ function App() {
 
         <Route path="/teacher/upload" element={
           <TeacherPage><TeacherUploadNote /></TeacherPage>
+        } />
+
+        <Route path="/teacher/notes/:noteId/edit" element={
+          <TeacherPage><TeacherEditNote /></TeacherPage>
         } />
 
         {/* Admin */}
