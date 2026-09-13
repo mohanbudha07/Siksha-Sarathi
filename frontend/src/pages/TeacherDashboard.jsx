@@ -113,12 +113,20 @@ function TeacherDashboard() {
             <p>Monitor student learning progress and performance.</p>
           </div>
 
-          <button
-            className="notes-button"
-            onClick={() => navigate("/teacher/notes")}
-          >
-            Manage Notes
-          </button>
+          <div className="welcome-actions">
+            <button
+              className="notes-button"
+              onClick={() => navigate("/teacher/quizzes")}
+            >
+              Manage Quizzes
+            </button>
+            <button
+              className="notes-button secondary-action"
+              onClick={() => navigate("/teacher/notes")}
+            >
+              Manage Notes
+            </button>
+          </div>
         </section>
 
         {/* STATISTICS */}

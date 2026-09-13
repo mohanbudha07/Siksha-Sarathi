@@ -43,6 +43,10 @@ function TeacherLayout({ children }) {
             My Notes
           </NavLink>
 
+          <NavLink to="/teacher/quizzes" style={linkStyle}>
+            Quizzes
+          </NavLink>
+
           <button
             onClick={handleLogout}
             style={{

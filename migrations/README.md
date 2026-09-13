@@ -52,3 +52,18 @@ be reconstructed reliably.
 Quiz JSON may now include `topic` and `difficulty` (`easy`, `medium`, or `hard`)
 on each question. Older quizzes remain valid: their quiz subject becomes the topic
 and their difficulty is stored as `unspecified`.
+
+## Teacher quiz ownership migration
+
+Migration `003_teacher_quiz_ownership.sql` adds quiz ownership and publishing
+status. Run it after migrations 001 and 002:
+
+```bash
+mysql -u siksha_user -p siksha_sarathi < migrations/003_teacher_quiz_ownership.sql
+```
+
+Existing quizzes remain published with no owner, so the migration never guesses
+which teacher owns historical content. Newly created quizzes belong to their
+teacher. Only that teacher can read, edit, publish, unpublish, or delete them.
+A quiz with attempts cannot be deleted because doing so would destroy learning
+history; the teacher must unpublish it instead.

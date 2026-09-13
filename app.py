@@ -1243,6 +1243,296 @@ def teacher_delete_note_api(note_id):
 
 
 # ============================================================
+# TEACHER QUIZ MANAGEMENT
+# ============================================================
+
+def validate_teacher_quiz_payload(data):
+    """Return normalized teacher quiz data or raise ValueError."""
+    if not isinstance(data, dict) or not data:
+        raise ValueError("Quiz data is required")
+
+    title = str(data.get("title") or "").strip()
+    subject = str(data.get("subject") or "").strip()
+    questions = data.get("questions")
+    is_published = data.get("is_published", False)
+
+    if not title or len(title) > 200:
+        raise ValueError("Quiz title is required and must be at most 200 characters")
+    if not subject or len(subject) > 100:
+        raise ValueError("Subject is required and must be at most 100 characters")
+    if not isinstance(is_published, bool):
+        raise ValueError("Published status must be true or false")
+    if not isinstance(questions, list) or not 1 <= len(questions) <= 100:
+        raise ValueError("A quiz must contain between 1 and 100 questions")
+
+    normalized_questions = []
+    for index, question in enumerate(questions, start=1):
+        if not isinstance(question, dict):
+            raise ValueError(f"Question {index} is invalid")
+
+        prompt = str(question.get("question") or "").strip()
+        topic = str(question.get("topic") or "").strip()
+        difficulty = str(question.get("difficulty") or "").strip().lower()
+        raw_options = question.get("options")
+        answer = str(question.get("answer") or "").strip()
+        explanation = str(question.get("explanation") or "").strip()
+
+        if not prompt:
+            raise ValueError(f"Question {index} text is required")
+        if not topic or len(topic) > 100:
+            raise ValueError(f"Question {index} topic is required")
+        if difficulty not in {"easy", "medium", "hard"}:
+            raise ValueError(
+                f"Question {index} difficulty must be easy, medium, or hard"
+            )
+        if not isinstance(raw_options, list) or not 2 <= len(raw_options) <= 6:
+            raise ValueError(f"Question {index} must have between 2 and 6 options")
+
+        options = [
+            str(option).strip() if option is not None else ""
+            for option in raw_options
+        ]
+        if any(not option for option in options) or len(set(options)) != len(options):
+            raise ValueError(f"Question {index} options must be non-empty and unique")
+        if answer not in options:
+            raise ValueError(f"Question {index} must have a valid correct answer")
+
+        normalized_question = {
+            "question": prompt,
+            "options": options,
+            "answer": answer,
+            "topic": topic,
+            "difficulty": difficulty
+        }
+        if explanation:
+            normalized_question["explanation"] = explanation
+        normalized_questions.append(normalized_question)
+
+    return {
+        "title": title,
+        "subject": subject,
+        "questions": normalized_questions,
+        "is_published": is_published
+    }
+
+
+@app.route("/api/teacher/quizzes", methods=["GET"])
+@login_required
+@role_required(TEACHER)
+def teacher_quizzes_api():
+    cur = mysql.connection.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT
+                q.id,
+                q.title,
+                q.subject,
+                q.questions,
+                q.is_published,
+                q.created_at,
+                (
+                    SELECT COUNT(*)
+                    FROM quiz_results qr
+                    WHERE qr.quiz_id = q.id
+                ) AS attempt_count
+            FROM quizzes q
+            WHERE q.created_by = %s
+            ORDER BY q.id DESC
+            """,
+            (session["user_id"],)
+        )
+
+        quizzes = cur.fetchall()
+        response_quizzes = []
+        for quiz in quizzes:
+            try:
+                question_count = len(json.loads(quiz["questions"]))
+            except (TypeError, ValueError):
+                question_count = 0
+            response_quizzes.append({
+                "id": quiz["id"],
+                "title": quiz["title"],
+                "subject": quiz["subject"],
+                "question_count": question_count,
+                "attempt_count": int(quiz["attempt_count"] or 0),
+                "is_published": bool(quiz["is_published"]),
+                "created_at": quiz["created_at"]
+            })
+
+        return {"quizzes": response_quizzes}, 200
+
+    finally:
+        cur.close()
+
+
+@app.route("/api/teacher/quizzes", methods=["POST"])
+@login_required
+@role_required(TEACHER)
+def teacher_create_quiz_api():
+    try:
+        quiz = validate_teacher_quiz_payload(request.get_json(silent=True))
+    except ValueError as error:
+        return {"error": str(error)}, 400
+
+    cur = mysql.connection.cursor()
+
+    try:
+        cur.execute(
+            """
+            INSERT INTO quizzes
+                (title, subject, questions, created_by, is_published)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                quiz["title"],
+                quiz["subject"],
+                json.dumps(quiz["questions"]),
+                session["user_id"],
+                quiz["is_published"]
+            )
+        )
+        mysql.connection.commit()
+        return {
+            "message": "Quiz created successfully",
+            "quiz_id": cur.lastrowid
+        }, 201
+
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Teacher quiz creation error:", error)
+        return {"error": "Failed to create quiz"}, 500
+
+    finally:
+        cur.close()
+
+
+@app.route("/api/teacher/quizzes/<int:quiz_id>", methods=["GET"])
+@login_required
+@role_required(TEACHER)
+def teacher_quiz_detail_api(quiz_id):
+    cur = mysql.connection.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT id, title, subject, questions, is_published, created_at
+            FROM quizzes
+            WHERE id = %s AND created_by = %s
+            """,
+            (quiz_id, session["user_id"])
+        )
+        quiz = cur.fetchone()
+        if not quiz:
+            return {"error": "Quiz not found"}, 404
+
+        try:
+            questions = json.loads(quiz["questions"])
+        except (TypeError, ValueError):
+            return {"error": "Stored quiz questions are invalid"}, 500
+
+        return {
+            "quiz": {
+                "id": quiz["id"],
+                "title": quiz["title"],
+                "subject": quiz["subject"],
+                "questions": questions,
+                "is_published": bool(quiz["is_published"]),
+                "created_at": quiz["created_at"]
+            }
+        }, 200
+
+    finally:
+        cur.close()
+
+
+@app.route("/api/teacher/quizzes/<int:quiz_id>", methods=["PUT"])
+@login_required
+@role_required(TEACHER)
+def teacher_update_quiz_api(quiz_id):
+    try:
+        quiz = validate_teacher_quiz_payload(request.get_json(silent=True))
+    except ValueError as error:
+        return {"error": str(error)}, 400
+
+    cur = mysql.connection.cursor()
+
+    try:
+        cur.execute(
+            "SELECT id FROM quizzes WHERE id = %s AND created_by = %s",
+            (quiz_id, session["user_id"])
+        )
+        if not cur.fetchone():
+            return {"error": "Quiz not found"}, 404
+
+        cur.execute(
+            """
+            UPDATE quizzes
+            SET title = %s, subject = %s, questions = %s, is_published = %s
+            WHERE id = %s AND created_by = %s
+            """,
+            (
+                quiz["title"],
+                quiz["subject"],
+                json.dumps(quiz["questions"]),
+                quiz["is_published"],
+                quiz_id,
+                session["user_id"]
+            )
+        )
+        mysql.connection.commit()
+        return {"message": "Quiz updated successfully"}, 200
+
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Teacher quiz update error:", error)
+        return {"error": "Failed to update quiz"}, 500
+
+    finally:
+        cur.close()
+
+
+@app.route("/api/teacher/quizzes/<int:quiz_id>", methods=["DELETE"])
+@login_required
+@role_required(TEACHER)
+def teacher_delete_quiz_api(quiz_id):
+    cur = mysql.connection.cursor()
+
+    try:
+        cur.execute(
+            "SELECT id FROM quizzes WHERE id = %s AND created_by = %s",
+            (quiz_id, session["user_id"])
+        )
+        if not cur.fetchone():
+            return {"error": "Quiz not found"}, 404
+
+        cur.execute(
+            "SELECT COUNT(*) AS attempt_count FROM quiz_results WHERE quiz_id = %s",
+            (quiz_id,)
+        )
+        if int(cur.fetchone()["attempt_count"] or 0) > 0:
+            return {
+                "error": "Quiz has student attempts and cannot be deleted; unpublish it instead"
+            }, 409
+
+        cur.execute(
+            "DELETE FROM quizzes WHERE id = %s AND created_by = %s",
+            (quiz_id, session["user_id"])
+        )
+        mysql.connection.commit()
+        return {"message": "Quiz deleted successfully"}, 200
+
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Teacher quiz deletion error:", error)
+        return {"error": "Failed to delete quiz"}, 500
+
+    finally:
+        cur.close()
+
+
+# ============================================================
 # STUDENT AI ASSISTANT
 # ============================================================
 
@@ -1373,28 +1663,75 @@ def parse_quiz_questions(raw_questions, fallback_topic="General"):
 
     return normalized_questions
 
+@app.route("/api/student/quizzes", methods=["GET"])
+@login_required
+@role_required(STUDENT)
+def student_quizzes_api():
+    cur = mysql.connection.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT id, title, subject, questions
+            FROM quizzes
+            WHERE is_published = TRUE
+            ORDER BY id
+            """
+        )
+        quizzes = []
+        for quiz in cur.fetchall():
+            try:
+                question_count = len(parse_quiz_questions(
+                    quiz["questions"], quiz["subject"] or "General"
+                ))
+            except (TypeError, ValueError):
+                continue
+            quizzes.append({
+                "id": quiz["id"],
+                "title": quiz["title"],
+                "subject": quiz["subject"],
+                "question_count": question_count
+            })
+
+        return {"quizzes": quizzes}, 200
+
+    finally:
+        cur.close()
+
+
 @app.route("/api/student/quiz", methods=["GET"])
 @login_required
 @role_required(STUDENT)
 def student_quiz_api():
 
+    raw_quiz_id = request.args.get("quiz_id")
+    quiz_id = request.args.get("quiz_id", type=int)
+    if raw_quiz_id is not None and quiz_id is None:
+        return {"error": "Quiz ID must be a number"}, 400
+
     cur = mysql.connection.cursor()
 
     try:
 
-        # Get the first available quiz
-        cur.execute(
-            """
-            SELECT
-                id,
-                title,
-                subject,
-                questions
-            FROM quizzes
-            ORDER BY id
-            LIMIT 1
-            """
-        )
+        if quiz_id is None:
+            cur.execute(
+                """
+                SELECT id, title, subject, questions
+                FROM quizzes
+                WHERE is_published = TRUE
+                ORDER BY id
+                LIMIT 1
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, title, subject, questions
+                FROM quizzes
+                WHERE id = %s AND is_published = TRUE
+                """,
+                (quiz_id,)
+            )
 
         quiz_data = cur.fetchone()
 
@@ -1482,7 +1819,7 @@ def submit_student_quiz():
                 subject,
                 questions
             FROM quizzes
-            WHERE id = %s
+            WHERE id = %s AND is_published = TRUE
             """,
             (quiz_id,)
         )

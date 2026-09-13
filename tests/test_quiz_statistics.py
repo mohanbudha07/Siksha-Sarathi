@@ -71,7 +71,8 @@ class QuizStatisticsTests(unittest.TestCase):
             CREATE TABLE students(id INTEGER PRIMARY KEY, user_id INTEGER,
                 full_name TEXT, grade TEXT);
             CREATE TABLE quizzes(id INTEGER PRIMARY KEY, title TEXT, subject TEXT,
-                questions TEXT);
+                questions TEXT, created_by INTEGER, is_published INTEGER,
+                created_at TEXT);
             CREATE TABLE quiz_results(id INTEGER PRIMARY KEY, student_id INTEGER,
                 quiz_id INTEGER, score INTEGER, total_questions INTEGER);
             CREATE TABLE quiz_answer_results(id INTEGER PRIMARY KEY,
@@ -96,8 +97,11 @@ class QuizStatisticsTests(unittest.TestCase):
              'difficulty': 'Easy'},
             {'question': 'Second?', 'options': ['C', 'D'], 'answer': 'D'},
         ]
-        self.db.execute('INSERT INTO quizzes VALUES(1,?,?,?)',
-                        ('Science Quiz', 'Science', json.dumps(self.questions)))
+        self.db.execute(
+            '''INSERT INTO quizzes(id,title,subject,questions,is_published,created_at)
+               VALUES(1,?,?,?,?,?)''',
+            ('Science Quiz', 'Science', json.dumps(self.questions), 1, '2026-01-01')
+        )
         self.db.commit()
         self.backend.mysql.connection = ConnectionAdapter(self.db)
         self.client = self.backend.app.test_client()
@@ -107,14 +111,35 @@ class QuizStatisticsTests(unittest.TestCase):
         self.db.close()
 
     def login(self, role):
+        user_ids = {'student': 1, 'teacher': 2, 'admin': 3, 'other_teacher': 4}
         with self.client.session_transaction() as session:
             session.clear()
-            session.update(user_id={'student': 1, 'teacher': 2, 'admin': 3}[role],
-                           username=role, role=role)
+            session.update(
+                user_id=user_ids[role],
+                username=role,
+                role='teacher' if role == 'other_teacher' else role
+            )
 
     def submit(self, answers):
         return self.client.post('/api/student/quiz/submit',
                                 json={'quiz_id': 1, 'answers': answers})
+
+    def quiz_payload(self, **overrides):
+        payload = {
+            'title': 'Force Practice',
+            'subject': 'Science',
+            'is_published': True,
+            'questions': [{
+                'question': 'What is force?',
+                'topic': 'Force',
+                'difficulty': 'Easy',
+                'options': ['A push or pull', 'Energy'],
+                'answer': 'A push or pull',
+                'explanation': 'Force is a push or pull.',
+            }],
+        }
+        payload.update(overrides)
+        return payload
 
     def test_quiz_response_contains_only_public_fields(self):
         response = self.client.get('/api/student/quiz')
@@ -253,6 +278,197 @@ class QuizStatisticsTests(unittest.TestCase):
             session.clear()
         self.assertEqual(self.client.get('/api/student/quiz').status_code, 401)
         self.assertEqual(self.submit({'0': 'A', '1': 'D'}).status_code, 401)
+
+    def test_teacher_can_create_list_read_update_and_delete_own_quiz(self):
+        self.login('teacher')
+        response = self.client.post('/api/teacher/quizzes', json=self.quiz_payload())
+        self.assertEqual(response.status_code, 201)
+        quiz_id = response.json['quiz_id']
+
+        row = self.db.execute(
+            'SELECT title, subject, questions, created_by, is_published FROM quizzes WHERE id=?',
+            (quiz_id,)
+        ).fetchone()
+        stored_questions = json.loads(row['questions'])
+        self.assertEqual((row['created_by'], row['is_published']), (2, 1))
+        self.assertEqual(stored_questions[0]['difficulty'], 'easy')
+
+        response = self.client.get('/api/teacher/quizzes')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json['quizzes']), 1)
+        self.assertEqual(response.json['quizzes'][0]['question_count'], 1)
+        self.assertEqual(response.json['quizzes'][0]['attempt_count'], 0)
+
+        response = self.client.get(f'/api/teacher/quizzes/{quiz_id}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json['quiz']['questions'][0]['answer'],
+            'A push or pull'
+        )
+
+        updated = self.quiz_payload(title='Updated Quiz', is_published=False)
+        response = self.client.put(f'/api/teacher/quizzes/{quiz_id}', json=updated)
+        self.assertEqual(response.status_code, 200)
+        row = self.db.execute(
+            'SELECT title, is_published FROM quizzes WHERE id=?', (quiz_id,)
+        ).fetchone()
+        self.assertEqual(tuple(row), ('Updated Quiz', 0))
+
+        self.assertEqual(
+            self.client.delete(f'/api/teacher/quizzes/{quiz_id}').status_code,
+            200
+        )
+        self.assertIsNone(
+            self.db.execute('SELECT id FROM quizzes WHERE id=?', (quiz_id,)).fetchone()
+        )
+
+    def test_teacher_cannot_manage_legacy_or_another_teachers_quiz(self):
+        self.db.execute(
+            '''INSERT INTO quizzes
+               (id,title,subject,questions,created_by,is_published,created_at)
+               VALUES(2,?,?,?,?,?,?)''',
+            ('Other Quiz', 'Science', json.dumps(self.questions), 4, 1, '2026-01-01')
+        )
+        self.db.commit()
+        self.login('teacher')
+
+        self.assertEqual(self.client.get('/api/teacher/quizzes').json['quizzes'], [])
+        for quiz_id in [1, 2]:
+            with self.subTest(quiz_id=quiz_id):
+                self.assertEqual(
+                    self.client.get(f'/api/teacher/quizzes/{quiz_id}').status_code,
+                    404
+                )
+                self.assertEqual(
+                    self.client.put(
+                        f'/api/teacher/quizzes/{quiz_id}', json=self.quiz_payload()
+                    ).status_code,
+                    404
+                )
+                self.assertEqual(
+                    self.client.delete(f'/api/teacher/quizzes/{quiz_id}').status_code,
+                    404
+                )
+
+    def test_teacher_quiz_validation_rejects_invalid_payloads(self):
+        self.login('teacher')
+        invalid_payloads = [
+            None,
+            [],
+            {},
+            self.quiz_payload(title=' '),
+            self.quiz_payload(is_published='yes'),
+            self.quiz_payload(questions=[]),
+            self.quiz_payload(questions=[{
+                'question': 'Q?', 'topic': '', 'difficulty': 'easy',
+                'options': ['A', 'B'], 'answer': 'A'
+            }]),
+            self.quiz_payload(questions=[{
+                'question': 'Q?', 'topic': 'Force', 'difficulty': 'unknown',
+                'options': ['A', 'B'], 'answer': 'A'
+            }]),
+            self.quiz_payload(questions=[{
+                'question': 'Q?', 'topic': 'Force', 'difficulty': 'hard',
+                'options': ['A', 'A'], 'answer': 'A'
+            }]),
+        ]
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                self.assertEqual(
+                    self.client.post('/api/teacher/quizzes', json=payload).status_code,
+                    400
+                )
+        self.assertEqual(
+            self.db.execute('SELECT COUNT(*) FROM quizzes WHERE created_by=2').fetchone()[0],
+            0
+        )
+
+    def test_quiz_with_attempts_cannot_be_deleted_but_can_be_unpublished(self):
+        self.login('teacher')
+        response = self.client.post('/api/teacher/quizzes', json=self.quiz_payload())
+        quiz_id = response.json['quiz_id']
+        self.db.execute(
+            'INSERT INTO quiz_results VALUES(?,?,?,?,?)',
+            (10, 1, quiz_id, 1, 1)
+        )
+        self.db.commit()
+
+        response = self.client.delete(f'/api/teacher/quizzes/{quiz_id}')
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('unpublish', response.json['error'].lower())
+
+        response = self.client.put(
+            f'/api/teacher/quizzes/{quiz_id}',
+            json=self.quiz_payload(is_published=False)
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.db.execute('SELECT is_published FROM quizzes WHERE id=?', (quiz_id,)).fetchone()[0],
+            0
+        )
+
+    def test_unpublished_quiz_cannot_be_served_or_submitted(self):
+        self.db.execute('UPDATE quizzes SET is_published=0 WHERE id=1')
+        self.db.commit()
+        self.assertEqual(self.client.get('/api/student/quiz').status_code, 404)
+        self.assertEqual(self.submit({'0': 'A', '1': 'D'}).status_code, 404)
+
+    def test_student_can_list_and_select_published_quizzes(self):
+        self.db.execute(
+            '''INSERT INTO quizzes
+               (id,title,subject,questions,created_by,is_published,created_at)
+               VALUES(2,?,?,?,?,?,?)''',
+            ('Teacher Quiz', 'Science', json.dumps(self.questions), 2, 1, '2026-01-02')
+        )
+        self.db.execute(
+            '''INSERT INTO quizzes
+               (id,title,subject,questions,created_by,is_published,created_at)
+               VALUES(3,?,?,?,?,?,?)''',
+            ('Draft Quiz', 'Math', json.dumps(self.questions), 2, 0, '2026-01-03')
+        )
+        self.db.commit()
+
+        response = self.client.get('/api/student/quizzes')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [(quiz['id'], quiz['title'], quiz['question_count'])
+             for quiz in response.json['quizzes']],
+            [(1, 'Science Quiz', 2), (2, 'Teacher Quiz', 2)]
+        )
+
+        response = self.client.get('/api/student/quiz?quiz_id=2')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['quiz']['title'], 'Teacher Quiz')
+        self.assertEqual(self.client.get('/api/student/quiz?quiz_id=3').status_code, 404)
+        self.assertEqual(
+            self.client.get('/api/student/quiz?quiz_id=invalid').status_code,
+            400
+        )
+
+    def test_student_quiz_list_ignores_malformed_published_quizzes(self):
+        self.db.execute(
+            '''INSERT INTO quizzes
+               (id,title,subject,questions,created_by,is_published,created_at)
+               VALUES(2,?,?,?,?,?,?)''',
+            ('Broken Quiz', 'Science', 'invalid', 2, 1, '2026-01-02')
+        )
+        self.db.commit()
+        response = self.client.get('/api/student/quizzes')
+        self.assertEqual([quiz['id'] for quiz in response.json['quizzes']], [1])
+
+    def test_teacher_quiz_management_requires_teacher_role(self):
+        for role in ['student', 'admin']:
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(self.client.get('/api/teacher/quizzes').status_code, 403)
+                self.assertEqual(
+                    self.client.post('/api/teacher/quizzes', json=self.quiz_payload()).status_code,
+                    403
+                )
+
+        with self.client.session_transaction() as session:
+            session.clear()
+        self.assertEqual(self.client.get('/api/teacher/quizzes').status_code, 401)
 
     def test_teacher_can_read_update_and_delete_own_note(self):
         self.db.execute(

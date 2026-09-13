@@ -37,7 +37,10 @@ CREATE TABLE IF NOT EXISTS quizzes (
     title VARCHAR(200) NOT NULL,
     subject VARCHAR(100),
     questions TEXT,  -- JSON string
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_by INT NULL,
+    is_published BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS quiz_results (

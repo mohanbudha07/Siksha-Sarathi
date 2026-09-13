@@ -3,7 +3,9 @@ import api from '../api'
 import './Quiz.css'
 
 function Quiz() {
+  const [quizzes, setQuizzes] = useState([])
   const [quiz, setQuiz] = useState(null)
+  const [selectedQuizId, setSelectedQuizId] = useState('')
   const [answers, setAnswers] = useState({})
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
@@ -11,15 +13,46 @@ function Quiz() {
 
   useEffect(() => {
     api
-      .get('/student/quiz')
+      .get('/student/quizzes')
       .then((response) => {
-        setQuiz(response.data.quiz)
+        const availableQuizzes = response.data.quizzes || []
+        setQuizzes(availableQuizzes)
+        if (availableQuizzes.length === 0) {
+          setError('No published quiz is available yet.')
+          return
+        }
+
+        const firstQuizId = String(availableQuizzes[0].id)
+        setSelectedQuizId(firstQuizId)
+        return api.get('/student/quiz', { params: { quiz_id: firstQuizId } })
+      })
+      .then((response) => {
+        if (response) setQuiz(response.data.quiz)
       })
       .catch((error) => {
         console.error(error)
         setError(`API error: ${error.response?.status || error.message}`)
       })
   }, [])
+
+  const handleQuizChange = async (event) => {
+    const quizId = event.target.value
+    setSelectedQuizId(quizId)
+    setQuiz(null)
+    setAnswers({})
+    setResult(null)
+    setError('')
+
+    try {
+      const response = await api.get('/student/quiz', {
+        params: { quiz_id: quizId },
+      })
+      setQuiz(response.data.quiz)
+    } catch (error) {
+      console.error(error)
+      setError(error.response?.data?.error || 'Unable to load this quiz.')
+    }
+  }
 
   const handleAnswer = (index, option) => {
     setAnswers({
@@ -128,6 +161,21 @@ function Quiz() {
 
   return (
     <div className="quiz-page">
+
+      <section className="quiz-selector-card">
+        <label htmlFor="student-quiz-select">Choose a published quiz</label>
+        <select
+          id="student-quiz-select"
+          value={selectedQuizId}
+          onChange={handleQuizChange}
+        >
+          {quizzes.map((availableQuiz) => (
+            <option value={availableQuiz.id} key={availableQuiz.id}>
+              {availableQuiz.title} — {availableQuiz.subject} ({availableQuiz.question_count} questions)
+            </option>
+          ))}
+        </select>
+      </section>
 
       <section className="quiz-hero">
         <div>
