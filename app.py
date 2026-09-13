@@ -1328,11 +1328,13 @@ def student_ai_api():
 # ============================================================
 
 
-def parse_quiz_questions(raw_questions):
+def parse_quiz_questions(raw_questions, fallback_topic="General"):
     """Validate stored questions before presenting or grading a quiz."""
     questions = json.loads(raw_questions)
     if not isinstance(questions, list) or not questions:
         raise ValueError("Quiz must contain at least one question")
+
+    normalized_questions = []
 
     for question in questions:
         if not isinstance(question, dict):
@@ -1349,7 +1351,27 @@ def parse_quiz_questions(raw_questions):
             or question.get("answer") not in options
         ):
             raise ValueError("Question must have unique options and a valid answer")
-    return questions
+
+        topic = question.get("topic")
+        difficulty = question.get("difficulty")
+        if topic is not None and (not isinstance(topic, str) or not topic.strip()):
+            raise ValueError("Question topic must be text")
+        if difficulty is not None and (
+            not isinstance(difficulty, str)
+            or difficulty.strip().lower() not in {"easy", "medium", "hard"}
+        ):
+            raise ValueError("Question difficulty must be easy, medium, or hard")
+
+        normalized_question = dict(question)
+        normalized_question["topic"] = (
+            topic.strip() if isinstance(topic, str) else fallback_topic
+        )
+        normalized_question["difficulty"] = (
+            difficulty.strip().lower() if isinstance(difficulty, str) else "unspecified"
+        )
+        normalized_questions.append(normalized_question)
+
+    return normalized_questions
 
 @app.route("/api/student/quiz", methods=["GET"])
 @login_required
@@ -1384,7 +1406,10 @@ def student_quiz_api():
 
         try:
 
-            questions = parse_quiz_questions(quiz_data["questions"])
+            questions = parse_quiz_questions(
+                quiz_data["questions"],
+                quiz_data["subject"] or "General"
+            )
 
         except (TypeError, ValueError):
 
@@ -1398,7 +1423,12 @@ def student_quiz_api():
                 "title": quiz_data["title"],
                 "subject": quiz_data["subject"],
                 "questions": [
-                    {"question": question["question"], "options": question["options"]}
+                    {
+                        "question": question["question"],
+                        "options": question["options"],
+                        "topic": question["topic"],
+                        "difficulty": question["difficulty"]
+                    }
                     for question in questions
                 ]
             }
@@ -1449,6 +1479,7 @@ def submit_student_quiz():
             """
             SELECT
                 id,
+                subject,
                 questions
             FROM quizzes
             WHERE id = %s
@@ -1466,7 +1497,10 @@ def submit_student_quiz():
 
         try:
 
-            questions = parse_quiz_questions(quiz_data["questions"])
+            questions = parse_quiz_questions(
+                quiz_data["questions"],
+                quiz_data["subject"] or "General"
+            )
 
         except (TypeError, ValueError):
 
@@ -1479,17 +1513,31 @@ def submit_student_quiz():
         # ----------------------------------------------------
 
         expected_keys = {str(index) for index in range(len(questions))}
-        if set(answers) != expected_keys:
-            return {"error": "Answer every question exactly once"}, 400
+        if not set(answers).issubset(expected_keys):
+            return {"error": "Answers contain an unknown question"}, 400
 
-        for index, question in enumerate(questions):
-            if answers[str(index)] not in question["options"]:
+        for key, selected_answer in answers.items():
+            if selected_answer not in questions[int(key)]["options"]:
                 return {"error": "Each answer must be a valid option"}, 400
 
         score = sum(
-            answers[str(index)] == question["answer"]
+            answers.get(str(index)) == question["answer"]
             for index, question in enumerate(questions)
         )
+
+        answer_details = []
+        for index, question in enumerate(questions):
+            selected_answer = answers.get(str(index))
+            answer_details.append({
+                "question_index": index,
+                "question_text": question["question"],
+                "topic": question["topic"],
+                "difficulty": question["difficulty"],
+                "selected_answer": selected_answer,
+                "correct_answer": question["answer"],
+                "is_correct": int(selected_answer == question["answer"]),
+                "is_skipped": int(selected_answer is None)
+            })
 
         # ----------------------------------------------------
         # Get student
@@ -1543,13 +1591,57 @@ def submit_student_quiz():
             )
         )
 
+        quiz_result_id = cur.lastrowid
+
+        for answer_detail in answer_details:
+            cur.execute(
+                """
+                INSERT INTO quiz_answer_results
+                (
+                    quiz_result_id,
+                    question_index,
+                    question_text,
+                    topic,
+                    difficulty,
+                    selected_answer,
+                    correct_answer,
+                    is_correct,
+                    is_skipped
+                )
+                VALUES
+                (
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s
+                )
+                """,
+                (
+                    quiz_result_id,
+                    answer_detail["question_index"],
+                    answer_detail["question_text"],
+                    answer_detail["topic"],
+                    answer_detail["difficulty"],
+                    answer_detail["selected_answer"],
+                    answer_detail["correct_answer"],
+                    answer_detail["is_correct"],
+                    answer_detail["is_skipped"]
+                )
+            )
+
         mysql.connection.commit()
 
         return {
             "message": "Quiz submitted successfully",
             "quiz_id": quiz_id,
             "score": score,
-            "total": len(questions)
+            "total": len(questions),
+            "skipped": sum(detail["is_skipped"] for detail in answer_details)
         }, 200
 
     except Exception as e:

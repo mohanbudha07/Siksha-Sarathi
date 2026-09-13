@@ -25,6 +25,10 @@ class CursorAdapter:
     def fetchall(self):
         return [dict(row) for row in self.cursor.fetchall()]
 
+    @property
+    def lastrowid(self):
+        return self.cursor.lastrowid
+
     def close(self):
         self.cursor.close()
 
@@ -70,6 +74,10 @@ class QuizStatisticsTests(unittest.TestCase):
                 questions TEXT);
             CREATE TABLE quiz_results(id INTEGER PRIMARY KEY, student_id INTEGER,
                 quiz_id INTEGER, score INTEGER, total_questions INTEGER);
+            CREATE TABLE quiz_answer_results(id INTEGER PRIMARY KEY,
+                quiz_result_id INTEGER, question_index INTEGER, question_text TEXT,
+                topic TEXT, difficulty TEXT, selected_answer TEXT, correct_answer TEXT,
+                is_correct INTEGER, is_skipped INTEGER);
             CREATE TABLE predictions(id INTEGER PRIMARY KEY, student_id INTEGER,
                 prediction TEXT, attendance REAL, assignment_score REAL,
                 quiz_score REAL, study_hours REAL);
@@ -84,7 +92,8 @@ class QuizStatisticsTests(unittest.TestCase):
         ''')
         self.questions = [
             {'question': 'First?', 'options': ['A', 'B'], 'answer': 'A',
-             'explanation': 'The correct answer is A'},
+             'explanation': 'The correct answer is A', 'topic': 'Force',
+             'difficulty': 'Easy'},
             {'question': 'Second?', 'options': ['C', 'D'], 'answer': 'D'},
         ]
         self.db.execute('INSERT INTO quizzes VALUES(1,?,?,?)',
@@ -110,8 +119,18 @@ class QuizStatisticsTests(unittest.TestCase):
     def test_quiz_response_contains_only_public_fields(self):
         response = self.client.get('/api/student/quiz')
         self.assertEqual(response.status_code, 200)
-        for question in response.json['quiz']['questions']:
-            self.assertEqual(set(question), {'question', 'options'})
+        questions = response.json['quiz']['questions']
+        for question in questions:
+            self.assertEqual(
+                set(question),
+                {'question', 'options', 'topic', 'difficulty'}
+            )
+            self.assertNotIn('answer', question)
+            self.assertNotIn('explanation', question)
+        self.assertEqual((questions[0]['topic'], questions[0]['difficulty']),
+                         ('Force', 'easy'))
+        self.assertEqual((questions[1]['topic'], questions[1]['difficulty']),
+                         ('Science', 'unspecified'))
 
     def test_submission_grades_on_server_and_snapshots_total(self):
         response = self.submit({'0': 'A', '1': 'C'})
@@ -119,13 +138,43 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual((response.json['score'], response.json['total']), (1, 2))
         row = self.db.execute('SELECT score, total_questions FROM quiz_results').fetchone()
         self.assertEqual(tuple(row), (1, 2))
+        details = self.db.execute(
+            '''SELECT question_index, topic, difficulty, selected_answer,
+                      correct_answer, is_correct, is_skipped
+               FROM quiz_answer_results ORDER BY question_index'''
+        ).fetchall()
+        self.assertEqual(tuple(details[0]), (0, 'Force', 'easy', 'A', 'A', 1, 0))
+        self.assertEqual(tuple(details[1]),
+                         (1, 'Science', 'unspecified', 'C', 'D', 0, 0))
 
-    def test_incomplete_extra_and_invalid_answers_are_rejected(self):
-        for answers in [{}, {'0': 'A'}, {'0': 'A', '1': 'D', '2': 'E'},
+    def test_incomplete_answers_are_recorded_as_skipped(self):
+        response = self.submit({'0': 'A'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            (response.json['score'], response.json['total'], response.json['skipped']),
+            (1, 2, 1)
+        )
+        detail = self.db.execute(
+            '''SELECT selected_answer, is_correct, is_skipped
+               FROM quiz_answer_results WHERE question_index=1'''
+        ).fetchone()
+        self.assertEqual(tuple(detail), (None, 0, 1))
+
+    def test_extra_and_invalid_answers_are_rejected(self):
+        for answers in [{'0': 'A', '1': 'D', '2': 'E'},
                         {'0': 'unknown', '1': 'D'}, {'0': None, '1': 'D'}, []]:
             with self.subTest(answers=answers):
                 self.assertEqual(self.submit(answers).status_code, 400)
         self.assertEqual(self.db.execute('SELECT COUNT(*) FROM quiz_results').fetchone()[0], 0)
+
+    def test_empty_answer_object_records_every_question_as_skipped(self):
+        response = self.submit({})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((response.json['score'], response.json['skipped']), (0, 2))
+        rows = self.db.execute(
+            'SELECT is_correct, is_skipped FROM quiz_answer_results'
+        ).fetchall()
+        self.assertEqual([tuple(row) for row in rows], [(0, 1), (0, 1)])
 
     def test_non_object_payload_is_rejected(self):
         response = self.client.post('/api/student/quiz/submit', json=['invalid'])
@@ -134,7 +183,11 @@ class QuizStatisticsTests(unittest.TestCase):
     def test_malformed_stored_quizzes_cannot_be_served_or_graded(self):
         for raw in ['invalid json', '[]', '{}', '[null]',
                     json.dumps([{'question': 'Q?', 'options': ['A', 'B']}]),
-                    json.dumps([{'question': 'Q?', 'options': ['A', 'A'], 'answer': 'A'}])]:
+                    json.dumps([{'question': 'Q?', 'options': ['A', 'A'], 'answer': 'A'}]),
+                    json.dumps([{'question': 'Q?', 'options': ['A', 'B'],
+                                 'answer': 'A', 'topic': ''}]),
+                    json.dumps([{'question': 'Q?', 'options': ['A', 'B'],
+                                 'answer': 'A', 'difficulty': 'impossible'}])]:
             with self.subTest(raw=raw):
                 self.db.execute('UPDATE quizzes SET questions=?', (raw,))
                 self.assertEqual(self.client.get('/api/student/quiz').status_code, 500)

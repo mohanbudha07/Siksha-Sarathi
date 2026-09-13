@@ -34,3 +34,21 @@ python -m unittest discover -s tests -v
 Tests use Flask's test client with an in-memory SQLite database adapter and model
 stubs. They do not connect to MySQL, load model pickle files, or change real data.
 The migration itself requires verification against MySQL before merging.
+
+## Per-question learning activity migration
+
+Migration `002_quiz_answer_tracking.sql` creates a detail table for future quiz
+submissions. Run it after migration 001 and before starting the updated backend:
+
+```bash
+mysql -u siksha_user -p siksha_sarathi < migrations/002_quiz_answer_tracking.sql
+```
+
+Each new attempt records a snapshot of every question, its topic and difficulty,
+the selected and correct answers, and whether it was correct or skipped. Existing
+attempt totals remain untouched because their historical selected answers cannot
+be reconstructed reliably.
+
+Quiz JSON may now include `topic` and `difficulty` (`easy`, `medium`, or `hard`)
+on each question. Older quizzes remain valid: their quiz subject becomes the topic
+and their difficulty is stored as `unspecified`.

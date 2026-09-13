@@ -31,8 +31,14 @@ function Quiz() {
   }
 
   const handleSubmit = async () => {
-    if (Object.keys(answers).length !== quiz.questions.length) {
-      setError('Please answer all questions before submitting the quiz.')
+    const unansweredCount = quiz.questions.length - Object.keys(answers).length
+
+    if (
+      unansweredCount > 0 &&
+      !window.confirm(
+        `${unansweredCount} question${unansweredCount === 1 ? ' is' : 's are'} unanswered. Submit anyway?`
+      )
+    ) {
       return
     }
 
@@ -98,6 +104,12 @@ function Quiz() {
             {result.message}
           </p>
 
+          {result.skipped > 0 && (
+            <p className="result-skipped">
+              {result.skipped} unanswered question{result.skipped === 1 ? '' : 's'} recorded
+            </p>
+          )}
+
           <button
             className="retry-button"
             onClick={() => window.location.reload()}
@@ -160,6 +172,15 @@ function Quiz() {
               Question {index + 1}
             </div>
 
+            <div className="question-metadata">
+              <span>{question.topic}</span>
+              <span className={`difficulty difficulty-${question.difficulty}`}>
+                {question.difficulty === 'unspecified'
+                  ? 'Difficulty not set'
+                  : question.difficulty}
+              </span>
+            </div>
+
             <h2>{question.question}</h2>
 
             <div className="options-list">
@@ -207,7 +228,7 @@ function Quiz() {
           </button>
 
           <p>
-            Make sure you have answered every question before submitting.
+            Unanswered questions will be recorded as skipped.
           </p>
         </div>
 
