@@ -143,7 +143,7 @@ function TeacherDashboard() {
             <div className="stat-icon">📊</div>
             <div>
               <span>Average Quiz Score</span>
-              <h3>{statistics.average_quiz_score ?? 0}</h3>
+              <h3>{statistics.average_quiz_score ?? 0}%</h3>
             </div>
           </div>
 
@@ -225,7 +225,7 @@ function TeacherDashboard() {
                       </td>
 
                       <td>{student.quiz_attempts ?? 0}</td>
-                      <td>{student.average_quiz_score ?? 0}</td>
+                      <td>{student.average_quiz_score ?? 0}%</td>
                       <td>{student.attendance ?? 0}%</td>
                       <td>{student.assignment_score ?? 0}%</td>
                       <td>{student.study_hours ?? 0} hrs</td>

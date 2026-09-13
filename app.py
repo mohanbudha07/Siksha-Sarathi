@@ -431,7 +431,7 @@ def student_dashboard_api():
             """
             SELECT
                 COUNT(*) AS completed_quizzes,
-                COALESCE(AVG(score), 0) AS average_score
+                COALESCE(AVG(100.0 * score / NULLIF(total_questions, 0)), 0) AS average_score
             FROM quiz_results
             WHERE student_id = %s
             """,
@@ -792,7 +792,7 @@ def teacher_dashboard_api():
             """
             SELECT
                 COUNT(*) AS total_quiz_attempts,
-                COALESCE(AVG(score), 0) AS average_quiz_score
+                COALESCE(AVG(100.0 * score / NULLIF(total_questions, 0)), 0) AS average_quiz_score
             FROM quiz_results
             """
         )
@@ -816,8 +816,13 @@ def teacher_dashboard_api():
             """
             SELECT COUNT(DISTINCT student_id)
             AS students_needing_improvement
-            FROM predictions
-            WHERE prediction = 'Needs Improvement'
+            FROM predictions p
+            WHERE p.prediction = 'Needs Improvement'
+              AND p.id = (
+                  SELECT MAX(latest.id)
+                  FROM predictions latest
+                  WHERE latest.student_id = p.student_id
+              )
             """
         )
 
@@ -859,7 +864,7 @@ def teacher_dashboard_api():
                 AS quiz_attempts,
 
                 COALESCE(
-                    AVG(qr.score),
+                    AVG(100.0 * qr.score / NULLIF(qr.total_questions, 0)),
                     0
                 ) AS average_quiz_score,
 
@@ -1144,6 +1149,30 @@ def student_ai_api():
 # STUDENT QUIZ
 # ============================================================
 
+
+def parse_quiz_questions(raw_questions):
+    """Validate stored questions before presenting or grading a quiz."""
+    questions = json.loads(raw_questions)
+    if not isinstance(questions, list) or not questions:
+        raise ValueError("Quiz must contain at least one question")
+
+    for question in questions:
+        if not isinstance(question, dict):
+            raise ValueError("Invalid question")
+        prompt = question.get("question")
+        options = question.get("options")
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("Question text is required")
+        if (
+            not isinstance(options, list)
+            or len(options) < 2
+            or any(not isinstance(option, str) or not option.strip() for option in options)
+            or len(set(options)) != len(options)
+            or question.get("answer") not in options
+        ):
+            raise ValueError("Question must have unique options and a valid answer")
+    return questions
+
 @app.route("/api/student/quiz", methods=["GET"])
 @login_required
 @role_required(STUDENT)
@@ -1177,11 +1206,9 @@ def student_quiz_api():
 
         try:
 
-            questions = json.loads(
-                quiz_data["questions"]
-            )
+            questions = parse_quiz_questions(quiz_data["questions"])
 
-        except (TypeError, json.JSONDecodeError):
+        except (TypeError, ValueError):
 
             return {
                 "error": "Quiz questions are invalid"
@@ -1192,7 +1219,10 @@ def student_quiz_api():
                 "id": quiz_data["id"],
                 "title": quiz_data["title"],
                 "subject": quiz_data["subject"],
-                "questions": questions
+                "questions": [
+                    {"question": question["question"], "options": question["options"]}
+                    for question in questions
+                ]
             }
         }, 200
 
@@ -1208,7 +1238,7 @@ def submit_student_quiz():
 
     data = request.get_json(silent=True)
 
-    if not data:
+    if not isinstance(data, dict) or not data:
 
         return {
             "error": "No quiz data provided"
@@ -1258,11 +1288,9 @@ def submit_student_quiz():
 
         try:
 
-            questions = json.loads(
-                quiz_data["questions"]
-            )
+            questions = parse_quiz_questions(quiz_data["questions"])
 
-        except (TypeError, json.JSONDecodeError):
+        except (TypeError, ValueError):
 
             return {
                 "error": "Quiz questions are invalid"
@@ -1272,14 +1300,18 @@ def submit_student_quiz():
         # Calculate score
         # ----------------------------------------------------
 
-        score = 0
+        expected_keys = {str(index) for index in range(len(questions))}
+        if set(answers) != expected_keys:
+            return {"error": "Answer every question exactly once"}, 400
 
         for index, question in enumerate(questions):
+            if answers[str(index)] not in question["options"]:
+                return {"error": "Each answer must be a valid option"}, 400
 
-            answer = answers.get(str(index))
-
-            if answer == question.get("answer"):
-                score += 1
+        score = sum(
+            answers[str(index)] == question["answer"]
+            for index, question in enumerate(questions)
+        )
 
         # ----------------------------------------------------
         # Get student
@@ -1314,10 +1346,12 @@ def submit_student_quiz():
             (
                 student_id,
                 quiz_id,
-                score
+                score,
+                total_questions
             )
             VALUES
             (
+                %s,
                 %s,
                 %s,
                 %s
@@ -1326,7 +1360,8 @@ def submit_student_quiz():
             (
                 student_id,
                 quiz_id,
-                score
+                score,
+                len(questions)
             )
         )
 
@@ -1426,8 +1461,13 @@ def admin_dashboard_api():
         cur.execute("""
             SELECT COUNT(DISTINCT student_id)
             AS students_needing_improvement
-            FROM predictions
-            WHERE prediction = 'Needs Improvement'
+            FROM predictions p
+            WHERE p.prediction = 'Needs Improvement'
+              AND p.id = (
+                  SELECT MAX(latest.id)
+                  FROM predictions latest
+                  WHERE latest.student_id = p.student_id
+              )
         """)
 
         improvement = cur.fetchone()
