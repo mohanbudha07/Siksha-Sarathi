@@ -70,6 +70,13 @@ class QuizStatisticsTests(unittest.TestCase):
                 role TEXT, created_at TEXT);
             CREATE TABLE students(id INTEGER PRIMARY KEY, user_id INTEGER,
                 full_name TEXT, grade TEXT);
+            CREATE TABLE classes(id INTEGER PRIMARY KEY, name TEXT, grade TEXT,
+                section TEXT, created_at TEXT);
+            CREATE TABLE student_class_enrollments(id INTEGER PRIMARY KEY,
+                student_id INTEGER, class_id INTEGER, created_at TEXT);
+            CREATE TABLE teacher_class_subjects(id INTEGER PRIMARY KEY,
+                teacher_user_id INTEGER, class_id INTEGER, subject TEXT,
+                created_at TEXT);
             CREATE TABLE quizzes(id INTEGER PRIMARY KEY, title TEXT, subject TEXT,
                 questions TEXT, created_by INTEGER, is_published INTEGER,
                 created_at TEXT);
@@ -88,8 +95,14 @@ class QuizStatisticsTests(unittest.TestCase):
             INSERT INTO users VALUES(2,'Teacher','t@example.test','teacher','2026-01-01');
             INSERT INTO users VALUES(3,'Admin','a@example.test','admin','2026-01-01');
             INSERT INTO users VALUES(4,'Other Teacher','other@example.test','teacher','2026-01-01');
+            INSERT INTO users VALUES(5,'Student Two','s2@example.test','student','2026-01-01');
             INSERT INTO students VALUES(1,1,'Student One','10');
-            INSERT INTO students VALUES(2,4,'Student Two','10');
+            INSERT INTO students VALUES(2,5,'Student Two','9');
+            INSERT INTO classes VALUES(1,'Grade 10','10','Default','2026-01-01');
+            INSERT INTO classes VALUES(2,'Grade 9','9','Default','2026-01-01');
+            INSERT INTO student_class_enrollments VALUES(1,1,1,'2026-01-01');
+            INSERT INTO student_class_enrollments VALUES(2,2,2,'2026-01-01');
+            INSERT INTO teacher_class_subjects VALUES(1,2,1,'Science','2026-01-01');
         ''')
         self.questions = [
             {'question': 'First?', 'options': ['A', 'B'], 'answer': 'A',
@@ -278,6 +291,103 @@ class QuizStatisticsTests(unittest.TestCase):
             session.clear()
         self.assertEqual(self.client.get('/api/student/quiz').status_code, 401)
         self.assertEqual(self.submit({'0': 'A', '1': 'D'}).status_code, 401)
+
+    def test_teacher_learning_overview_is_scoped_to_assigned_class_and_subject(self):
+        self.assertEqual(self.submit({'0': 'A', '1': 'C'}).status_code, 200)
+        self.login('teacher')
+
+        response = self.client.get('/api/teacher/learning-analytics')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json['assignments']), 1)
+        self.assertEqual(response.json['assignments'][0]['subject'], 'Science')
+        self.assertEqual(response.json['statistics'], {
+            'assigned_students': 1,
+            'student_subject_profiles': 1,
+            'students_with_activity': 1,
+            'profiles_needing_attention': 0,
+        })
+
+        profiles = response.json['students']
+        self.assertEqual(len(profiles), 1)
+        self.assertEqual(profiles[0]['student_id'], 1)
+        self.assertEqual(profiles[0]['class_name'], 'Grade 10')
+        self.assertEqual(profiles[0]['subject'], 'Science')
+        self.assertEqual(profiles[0]['attempts'], 1)
+        self.assertEqual(profiles[0]['accuracy_percent'], 50)
+        self.assertEqual(profiles[0]['status'], 'Developing')
+
+    def test_teacher_learning_profile_shows_topics_difficulty_trends_and_mistakes(self):
+        self.assertEqual(self.submit({'0': 'A', '1': 'C'}).status_code, 200)
+        self.assertEqual(self.submit({}).status_code, 200)
+        self.login('teacher')
+
+        response = self.client.get(
+            '/api/teacher/students/1/learning-profile?subject=science'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json
+        self.assertEqual(data['student']['full_name'], 'Student One')
+        self.assertEqual(data['summary']['attempts'], 2)
+        self.assertEqual(data['summary']['total_questions'], 4)
+        self.assertEqual(data['summary']['correct_answers'], 1)
+        self.assertEqual(data['summary']['skipped_answers'], 2)
+        self.assertEqual(data['summary']['accuracy_percent'], 25)
+        self.assertEqual(data['summary']['skip_percent'], 50)
+        self.assertEqual(data['summary']['status'], 'Needs attention')
+
+        topics = {topic['topic']: topic for topic in data['topics']}
+        self.assertEqual(topics['Force']['accuracy_percent'], 50)
+        self.assertEqual(topics['Force']['skipped_answers'], 1)
+        self.assertEqual(topics['Science']['accuracy_percent'], 0)
+        self.assertEqual(topics['Science']['skipped_answers'], 1)
+
+        difficulties = {
+            item['difficulty']: item for item in data['difficulties']
+        }
+        self.assertEqual(difficulties['easy']['total_questions'], 2)
+        self.assertEqual(difficulties['unspecified']['total_questions'], 2)
+        self.assertEqual(
+            [attempt['attempt_id'] for attempt in data['recent_attempts']],
+            [2, 1]
+        )
+        self.assertEqual(len(data['common_mistakes']), 1)
+        self.assertEqual(data['common_mistakes'][0]['question_text'], 'Second?')
+        self.assertEqual(data['common_mistakes'][0]['correct_answer'], 'D')
+
+    def test_unassigned_teacher_cannot_access_student_learning_profile(self):
+        self.login('other_teacher')
+        overview = self.client.get('/api/teacher/learning-analytics')
+        self.assertEqual(overview.status_code, 200)
+        self.assertEqual(overview.json['assignments'], [])
+        self.assertEqual(overview.json['students'], [])
+        self.assertEqual(
+            self.client.get(
+                '/api/teacher/students/1/learning-profile?subject=Science'
+            ).status_code,
+            404
+        )
+
+    def test_teacher_learning_profile_requires_subject_and_teacher_role(self):
+        self.login('teacher')
+        self.assertEqual(
+            self.client.get('/api/teacher/students/1/learning-profile').status_code,
+            400
+        )
+
+        for role in ['student', 'admin']:
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(
+                    self.client.get('/api/teacher/learning-analytics').status_code,
+                    403
+                )
+
+        with self.client.session_transaction() as session:
+            session.clear()
+        self.assertEqual(
+            self.client.get('/api/teacher/learning-analytics').status_code,
+            401
+        )
 
     def test_teacher_can_create_list_read_update_and_delete_own_quiz(self):
         self.login('teacher')

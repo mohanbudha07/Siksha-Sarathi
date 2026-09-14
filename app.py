@@ -1243,6 +1243,292 @@ def teacher_delete_note_api(note_id):
 
 
 # ============================================================
+# TEACHER LEARNING ANALYTICS
+# ============================================================
+
+def build_learning_metrics(row):
+    total_questions = int(row["total_questions"] or 0)
+    correct_answers = int(row["correct_answers"] or 0)
+    skipped_answers = int(row["skipped_answers"] or 0)
+    accuracy = round(100 * correct_answers / total_questions, 2) if total_questions else 0
+    skip_rate = round(100 * skipped_answers / total_questions, 2) if total_questions else 0
+
+    if total_questions == 0:
+        status = "No activity"
+    elif accuracy < 50 or skip_rate >= 25:
+        status = "Needs attention"
+    elif accuracy < 75:
+        status = "Developing"
+    else:
+        status = "On track"
+
+    return {
+        "attempts": int(row["attempts"] or 0),
+        "total_questions": total_questions,
+        "correct_answers": correct_answers,
+        "skipped_answers": skipped_answers,
+        "accuracy_percent": accuracy,
+        "skip_percent": skip_rate,
+        "status": status
+    }
+
+
+def fetch_student_subject_metrics(cur, student_id, subject):
+    cur.execute(
+        """
+        SELECT
+            COUNT(DISTINCT qr.id) AS attempts,
+            COUNT(qar.id) AS total_questions,
+            COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
+            COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
+        FROM quiz_results qr
+        INNER JOIN quizzes q ON q.id = qr.quiz_id
+        LEFT JOIN quiz_answer_results qar ON qar.quiz_result_id = qr.id
+        WHERE qr.student_id = %s
+          AND LOWER(q.subject) = LOWER(%s)
+        """,
+        (student_id, subject)
+    )
+    return build_learning_metrics(cur.fetchone())
+
+
+@app.route("/api/teacher/learning-analytics", methods=["GET"])
+@login_required
+@role_required(TEACHER)
+def teacher_learning_analytics_api():
+    cur = mysql.connection.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT
+                c.id AS class_id,
+                c.name AS class_name,
+                c.grade,
+                c.section,
+                tcs.subject
+            FROM teacher_class_subjects tcs
+            INNER JOIN classes c ON c.id = tcs.class_id
+            WHERE tcs.teacher_user_id = %s
+            ORDER BY c.grade, c.section, tcs.subject
+            """,
+            (session["user_id"],)
+        )
+        assignments = cur.fetchall()
+
+        cur.execute(
+            """
+            SELECT DISTINCT
+                s.id AS student_id,
+                s.full_name,
+                s.grade,
+                c.id AS class_id,
+                c.name AS class_name,
+                c.section,
+                tcs.subject
+            FROM teacher_class_subjects tcs
+            INNER JOIN classes c ON c.id = tcs.class_id
+            INNER JOIN student_class_enrollments sce ON sce.class_id = c.id
+            INNER JOIN students s ON s.id = sce.student_id
+            WHERE tcs.teacher_user_id = %s
+            ORDER BY s.full_name, tcs.subject
+            """,
+            (session["user_id"],)
+        )
+        student_rows = cur.fetchall()
+
+        profiles = []
+        for student in student_rows:
+            metrics = fetch_student_subject_metrics(
+                cur, student["student_id"], student["subject"]
+            )
+            profiles.append({**student, **metrics})
+
+        assigned_student_ids = {profile["student_id"] for profile in profiles}
+        active_student_ids = {
+            profile["student_id"]
+            for profile in profiles
+            if profile["total_questions"] > 0
+        }
+
+        return {
+            "assignments": assignments,
+            "statistics": {
+                "assigned_students": len(assigned_student_ids),
+                "student_subject_profiles": len(profiles),
+                "students_with_activity": len(active_student_ids),
+                "profiles_needing_attention": sum(
+                    profile["status"] == "Needs attention"
+                    for profile in profiles
+                )
+            },
+            "students": profiles
+        }, 200
+
+    finally:
+        cur.close()
+
+
+@app.route("/api/teacher/students/<int:student_id>/learning-profile", methods=["GET"])
+@login_required
+@role_required(TEACHER)
+def teacher_student_learning_profile_api(student_id):
+    subject = str(request.args.get("subject") or "").strip()
+    if not subject:
+        return {"error": "Subject is required"}, 400
+
+    cur = mysql.connection.cursor()
+
+    try:
+        cur.execute(
+            """
+            SELECT DISTINCT
+                s.id AS student_id,
+                s.full_name,
+                s.grade,
+                c.id AS class_id,
+                c.name AS class_name,
+                c.section,
+                tcs.subject
+            FROM teacher_class_subjects tcs
+            INNER JOIN classes c ON c.id = tcs.class_id
+            INNER JOIN student_class_enrollments sce ON sce.class_id = c.id
+            INNER JOIN students s ON s.id = sce.student_id
+            WHERE tcs.teacher_user_id = %s
+              AND s.id = %s
+              AND LOWER(tcs.subject) = LOWER(%s)
+            LIMIT 1
+            """,
+            (session["user_id"], student_id, subject)
+        )
+        student = cur.fetchone()
+        if not student:
+            return {"error": "Student learning profile not found"}, 404
+
+        metrics = fetch_student_subject_metrics(cur, student_id, subject)
+
+        cur.execute(
+            """
+            SELECT
+                qar.topic,
+                COUNT(*) AS total_questions,
+                COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
+                COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
+            FROM quiz_answer_results qar
+            INNER JOIN quiz_results qr ON qr.id = qar.quiz_result_id
+            INNER JOIN quizzes q ON q.id = qr.quiz_id
+            WHERE qr.student_id = %s
+              AND LOWER(q.subject) = LOWER(%s)
+            GROUP BY qar.topic
+            """,
+            (student_id, subject)
+        )
+        topics = []
+        for row in cur.fetchall():
+            topic_metrics = build_learning_metrics({
+                **row,
+                "attempts": 0
+            })
+            topics.append({"topic": row["topic"], **topic_metrics})
+        topics.sort(key=lambda item: (item["accuracy_percent"], -item["total_questions"]))
+
+        cur.execute(
+            """
+            SELECT
+                qar.difficulty,
+                COUNT(*) AS total_questions,
+                COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
+                COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
+            FROM quiz_answer_results qar
+            INNER JOIN quiz_results qr ON qr.id = qar.quiz_result_id
+            INNER JOIN quizzes q ON q.id = qr.quiz_id
+            WHERE qr.student_id = %s
+              AND LOWER(q.subject) = LOWER(%s)
+            GROUP BY qar.difficulty
+            """,
+            (student_id, subject)
+        )
+        difficulties = []
+        for row in cur.fetchall():
+            difficulty_metrics = build_learning_metrics({
+                **row,
+                "attempts": 0
+            })
+            difficulties.append({
+                "difficulty": row["difficulty"],
+                **difficulty_metrics
+            })
+
+        cur.execute(
+            """
+            SELECT
+                qr.id AS attempt_id,
+                q.title AS quiz_title,
+                qr.score,
+                qr.total_questions,
+                COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
+            FROM quiz_results qr
+            INNER JOIN quizzes q ON q.id = qr.quiz_id
+            LEFT JOIN quiz_answer_results qar ON qar.quiz_result_id = qr.id
+            WHERE qr.student_id = %s
+              AND LOWER(q.subject) = LOWER(%s)
+            GROUP BY qr.id, q.title, qr.score, qr.total_questions
+            ORDER BY qr.id DESC
+            LIMIT 10
+            """,
+            (student_id, subject)
+        )
+        recent_attempts = []
+        for attempt in cur.fetchall():
+            total = int(attempt["total_questions"] or 0)
+            score = int(attempt["score"] or 0)
+            recent_attempts.append({
+                **attempt,
+                "score": score,
+                "total_questions": total,
+                "skipped_answers": int(attempt["skipped_answers"] or 0),
+                "percentage": round(100 * score / total, 2) if total else 0
+            })
+
+        cur.execute(
+            """
+            SELECT
+                qar.question_text,
+                qar.topic,
+                qar.difficulty,
+                MAX(qar.correct_answer) AS correct_answer,
+                COUNT(*) AS mistake_count
+            FROM quiz_answer_results qar
+            INNER JOIN quiz_results qr ON qr.id = qar.quiz_result_id
+            INNER JOIN quizzes q ON q.id = qr.quiz_id
+            WHERE qr.student_id = %s
+              AND LOWER(q.subject) = LOWER(%s)
+              AND qar.is_correct = FALSE
+              AND qar.is_skipped = FALSE
+            GROUP BY qar.question_text, qar.topic, qar.difficulty
+            ORDER BY mistake_count DESC, qar.topic
+            LIMIT 10
+            """,
+            (student_id, subject)
+        )
+        common_mistakes = cur.fetchall()
+        for mistake in common_mistakes:
+            mistake["mistake_count"] = int(mistake["mistake_count"] or 0)
+
+        return {
+            "student": student,
+            "summary": metrics,
+            "topics": topics,
+            "difficulties": difficulties,
+            "recent_attempts": recent_attempts,
+            "common_mistakes": common_mistakes
+        }, 200
+
+    finally:
+        cur.close()
+
+
+# ============================================================
 # TEACHER QUIZ MANAGEMENT
 # ============================================================
 

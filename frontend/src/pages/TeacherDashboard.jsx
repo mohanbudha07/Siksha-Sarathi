@@ -115,6 +115,12 @@ function TeacherDashboard() {
 
           <div className="welcome-actions">
             <button
+              className="notes-button analytics-action"
+              onClick={() => navigate("/teacher/analytics")}
+            >
+              Learning Analytics
+            </button>
+            <button
               className="notes-button"
               onClick={() => navigate("/teacher/quizzes")}
             >

@@ -67,3 +67,18 @@ which teacher owns historical content. Newly created quizzes belong to their
 teacher. Only that teacher can read, edit, publish, unpublish, or delete them.
 A quiz with attempts cannot be deleted because doing so would destroy learning
 history; the teacher must unpublish it instead.
+
+## Class and subject assignment migration
+
+Migration `004_class_subject_assignments.sql` creates classes, enrollments, and
+teacher subject assignments. It also creates one `Default` class per existing
+student grade and enrolls those students automatically:
+
+```bash
+mysql -u siksha_user -p siksha_sarathi < migrations/004_class_subject_assignments.sql
+```
+
+Teachers are not assigned automatically. Assignments must name the teacher,
+class, and subject explicitly. Teacher learning analytics only includes a
+student when that student is enrolled in the assigned class and the quiz
+subject matches the teacher assignment.
