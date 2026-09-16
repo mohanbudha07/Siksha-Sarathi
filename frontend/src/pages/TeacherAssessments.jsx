@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import './TeacherAssessments.css'
@@ -42,7 +42,7 @@ function TeacherAssessments() {
     [assignmentKey, assignments]
   )
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       setError('')
@@ -53,20 +53,20 @@ function TeacherAssessments() {
       const availableAssignments = analyticsResponse.data.assignments || []
       setAssignments(availableAssignments)
       setAssessments(assessmentResponse.data.assessments || [])
-      if (!assignmentKey && availableAssignments[0]) {
-        setAssignmentKey(`${availableAssignments[0].class_id}|${availableAssignments[0].subject}`)
-      }
+      setAssignmentKey((current) => current || (availableAssignments[0]
+        ? `${availableAssignments[0].class_id}|${availableAssignments[0].subject}`
+        : ''))
     } catch (err) {
       console.error('Load paper assessments error:', err)
       setError(err.response?.data?.error || 'Unable to load paper assessments.')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [loadData])
 
   const updateForm = (field, value) => setForm((current) => ({ ...current, [field]: value }))
 

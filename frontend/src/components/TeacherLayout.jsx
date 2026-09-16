@@ -55,6 +55,10 @@ function TeacherLayout({ children }) {
             Assessments
           </NavLink>
 
+          <NavLink to="/teacher/attendance" style={linkStyle}>
+            Attendance
+          </NavLink>
+
           <NavLink to="/teacher/analytics" style={linkStyle}>
             Learning Analytics
           </NavLink>

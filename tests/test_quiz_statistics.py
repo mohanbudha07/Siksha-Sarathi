@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import types
 import unittest
+from datetime import date
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -104,6 +105,19 @@ class QuizStatisticsTests(unittest.TestCase):
                 is_absent INTEGER DEFAULT 0, remarks TEXT DEFAULT '',
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE class_teacher_assignments(id INTEGER PRIMARY KEY,
+                teacher_user_id INTEGER, class_id INTEGER UNIQUE,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE attendance_sessions(id INTEGER PRIMARY KEY,
+                teacher_user_id INTEGER, class_id INTEGER,
+                attendance_date TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(class_id,attendance_date));
+            CREATE TABLE attendance_records(id INTEGER PRIMARY KEY,
+                attendance_session_id INTEGER, student_id INTEGER, status TEXT,
+                note TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(attendance_session_id,student_id));
             CREATE TABLE predictions(id INTEGER PRIMARY KEY, student_id INTEGER,
                 prediction TEXT, attendance REAL, assignment_score REAL,
                 quiz_score REAL, study_hours REAL);
@@ -121,6 +135,7 @@ class QuizStatisticsTests(unittest.TestCase):
             INSERT INTO student_class_enrollments VALUES(1,1,1,'2026-01-01');
             INSERT INTO student_class_enrollments VALUES(2,2,2,'2026-01-01');
             INSERT INTO teacher_class_subjects VALUES(1,2,1,'Science','2026-01-01');
+            INSERT INTO class_teacher_assignments VALUES(1,2,1,'2026-01-01');
         ''')
         self.questions = [
             {'question': 'First?', 'options': ['A', 'B'], 'answer': 'A',
@@ -838,6 +853,131 @@ class QuizStatisticsTests(unittest.TestCase):
                 self.login(role)
                 self.assertEqual(
                     self.client.get('/api/teacher/paper-assessments').status_code,
+                    403
+                )
+
+    def attendance_payload(self, **overrides):
+        payload = {
+            'class_id': 1,
+            'attendance_date': '2026-09-16',
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_attendance_dates_are_serialized_for_the_browser(self):
+        self.assertEqual(
+            self.backend.serialize_api_date(date(2026, 9, 16)),
+            '2026-09-16'
+        )
+        self.assertEqual(
+            self.backend.serialize_api_date('2026-09-16'),
+            '2026-09-16'
+        )
+
+    def test_teacher_can_create_record_list_and_delete_attendance(self):
+        self.login('teacher')
+        created = self.client.post(
+            '/api/teacher/attendance-sessions',
+            json=self.attendance_payload()
+        )
+        self.assertEqual(created.status_code, 201)
+        attendance_id = created.json['attendance_session_id']
+
+        detail = self.client.get(
+            f'/api/teacher/attendance-sessions/{attendance_id}'
+        )
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json['session']['class_name'], 'Grade 10')
+        self.assertEqual(detail.json['students'][0]['student_id'], 1)
+        self.assertIsNone(detail.json['students'][0]['status'])
+
+        saved = self.client.put(
+            f'/api/teacher/attendance-sessions/{attendance_id}/records',
+            json={'records': [{
+                'student_id': 1,
+                'status': 'present',
+                'note': 'On time',
+            }]}
+        )
+        self.assertEqual(saved.status_code, 200)
+        detail = self.client.get(
+            f'/api/teacher/attendance-sessions/{attendance_id}'
+        )
+        self.assertEqual(detail.json['students'][0]['status'], 'present')
+        self.assertEqual(detail.json['students'][0]['note'], 'On time')
+
+        listing = self.client.get('/api/teacher/attendance-sessions')
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(
+            listing.json['assigned_classes'][0]['class_name'],
+            'Grade 10'
+        )
+        self.assertEqual(listing.json['sessions'][0]['recorded_students'], 1)
+        self.assertEqual(listing.json['sessions'][0]['present_count'], 1)
+        self.assertEqual(
+            self.client.delete(
+                f'/api/teacher/attendance-sessions/{attendance_id}'
+            ).status_code,
+            200
+        )
+
+    def test_attendance_requires_valid_status_and_complete_class_roster(self):
+        self.login('teacher')
+        attendance_id = self.client.post(
+            '/api/teacher/attendance-sessions',
+            json=self.attendance_payload()
+        ).json['attendance_session_id']
+        records_url = (
+            f'/api/teacher/attendance-sessions/{attendance_id}/records'
+        )
+        self.assertEqual(self.client.put(records_url, json={'records': [{
+            'student_id': 1, 'status': 'missing'
+        }]}).status_code, 400)
+        self.assertEqual(self.client.put(records_url, json={'records': [{
+            'student_id': 2, 'status': 'present'
+        }]}).status_code, 400)
+        self.assertEqual(
+            self.client.put(records_url, json={'records': []}).status_code,
+            400
+        )
+
+    def test_duplicate_attendance_session_is_rejected(self):
+        self.login('teacher')
+        first = self.client.post(
+            '/api/teacher/attendance-sessions',
+            json=self.attendance_payload()
+        )
+        self.assertEqual(first.status_code, 201)
+        duplicate = self.client.post(
+            '/api/teacher/attendance-sessions',
+            json=self.attendance_payload()
+        )
+        self.assertEqual(duplicate.status_code, 409)
+
+    def test_attendance_is_teacher_scoped_and_requires_teacher_role(self):
+        self.login('other_teacher')
+        self.assertEqual(self.client.post(
+            '/api/teacher/attendance-sessions',
+            json=self.attendance_payload()
+        ).status_code, 404)
+
+        self.login('teacher')
+        attendance_id = self.client.post(
+            '/api/teacher/attendance-sessions',
+            json=self.attendance_payload()
+        ).json['attendance_session_id']
+        self.login('other_teacher')
+        self.assertEqual(self.client.get(
+            f'/api/teacher/attendance-sessions/{attendance_id}'
+        ).status_code, 404)
+
+        for role in ['student', 'admin']:
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(
+                    self.client.get(
+                        '/api/teacher/attendance-sessions'
+                    ).status_code,
                     403
                 )
 

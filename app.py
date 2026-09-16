@@ -2446,6 +2446,281 @@ def teacher_paper_assessment_scores_api(assessment_id):
 
 
 # ============================================================
+# TEACHER DAILY CLASS ATTENDANCE
+# ============================================================
+
+ATTENDANCE_STATUSES = {"present", "absent", "late", "excused"}
+
+
+def serialize_api_date(value):
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def teacher_has_class_assignment(cur, teacher_id, class_id):
+    cur.execute(
+        """
+        SELECT id FROM class_teacher_assignments
+        WHERE teacher_user_id = %s AND class_id = %s
+        """,
+        (teacher_id, class_id)
+    )
+    return cur.fetchone() is not None
+
+
+def validate_attendance_session_payload(data):
+    if not isinstance(data, dict):
+        raise ValueError("Attendance session data is required")
+    try:
+        class_id = int(data.get("class_id"))
+    except (TypeError, ValueError) as error:
+        raise ValueError("Class is required") from error
+    try:
+        attendance_date = datetime.strptime(
+            str(data.get("attendance_date") or ""), "%Y-%m-%d"
+        ).date()
+    except ValueError as error:
+        raise ValueError("Attendance date must use YYYY-MM-DD") from error
+    return {
+        "class_id": class_id,
+        "attendance_date": attendance_date.isoformat()
+    }
+
+
+def fetch_teacher_attendance_session(cur, attendance_session_id, teacher_id):
+    cur.execute(
+        """
+        SELECT ats.id, ats.teacher_user_id, ats.class_id,
+               ats.attendance_date, ats.created_at,
+               c.name AS class_name, c.grade, c.section
+        FROM attendance_sessions ats
+        INNER JOIN classes c ON c.id = ats.class_id
+        WHERE ats.id = %s AND ats.teacher_user_id = %s
+        """,
+        (attendance_session_id, teacher_id)
+    )
+    attendance = cur.fetchone()
+    if attendance:
+        attendance["attendance_date"] = serialize_api_date(
+            attendance["attendance_date"]
+        )
+    return attendance
+
+
+@app.route("/api/teacher/attendance-sessions", methods=["GET", "POST"])
+@login_required
+@role_required(TEACHER)
+def teacher_attendance_sessions_api():
+    cur = mysql.connection.cursor()
+    try:
+        if request.method == "GET":
+            cur.execute(
+                """
+                SELECT c.id AS class_id, c.name AS class_name,
+                       c.grade, c.section
+                FROM class_teacher_assignments cta
+                INNER JOIN classes c ON c.id = cta.class_id
+                WHERE cta.teacher_user_id = %s
+                ORDER BY c.grade, c.section, c.name
+                """,
+                (session["user_id"],)
+            )
+            assigned_classes = cur.fetchall()
+            cur.execute(
+                """
+                SELECT ats.id, ats.class_id, ats.attendance_date,
+                       c.name AS class_name,
+                       COUNT(ar.id) AS recorded_students,
+                       COALESCE(SUM(ar.status = 'present'), 0) AS present_count,
+                       COALESCE(SUM(ar.status = 'absent'), 0) AS absent_count,
+                       COALESCE(SUM(ar.status = 'late'), 0) AS late_count,
+                       COALESCE(SUM(ar.status = 'excused'), 0) AS excused_count
+                FROM attendance_sessions ats
+                INNER JOIN classes c ON c.id = ats.class_id
+                LEFT JOIN attendance_records ar ON ar.attendance_session_id = ats.id
+                WHERE ats.teacher_user_id = %s
+                GROUP BY ats.id, ats.class_id, ats.attendance_date, c.name
+                ORDER BY ats.attendance_date DESC, ats.id DESC
+                """,
+                (session["user_id"],)
+            )
+            sessions = cur.fetchall()
+            for item in sessions:
+                item["attendance_date"] = serialize_api_date(
+                    item["attendance_date"]
+                )
+                for field in (
+                    "recorded_students", "present_count", "absent_count",
+                    "late_count", "excused_count"
+                ):
+                    item[field] = int(item[field] or 0)
+            return {
+                "assigned_classes": assigned_classes,
+                "sessions": sessions
+            }, 200
+
+        try:
+            attendance = validate_attendance_session_payload(
+                request.get_json(silent=True)
+            )
+        except ValueError as error:
+            return {"error": str(error)}, 400
+        if not teacher_has_class_assignment(
+            cur, session["user_id"], attendance["class_id"]
+        ):
+            return {"error": "Class teacher assignment not found"}, 404
+        cur.execute(
+            """
+            SELECT id FROM attendance_sessions
+            WHERE class_id = %s AND attendance_date = %s
+            """,
+            (attendance["class_id"], attendance["attendance_date"])
+        )
+        if cur.fetchone():
+            return {
+                "error": "Attendance already exists for this class and date"
+            }, 409
+        cur.execute(
+            """
+            INSERT INTO attendance_sessions
+                (teacher_user_id, class_id, attendance_date)
+            VALUES (%s, %s, %s)
+            """,
+            (session["user_id"], attendance["class_id"],
+             attendance["attendance_date"])
+        )
+        attendance_session_id = cur.lastrowid
+        mysql.connection.commit()
+        return {
+            "message": "Attendance session created",
+            "attendance_session_id": attendance_session_id
+        }, 201
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Attendance session error:", error)
+        return {"error": "Failed to manage attendance session"}, 500
+    finally:
+        cur.close()
+
+
+@app.route("/api/teacher/attendance-sessions/<int:attendance_session_id>",
+           methods=["GET", "DELETE"])
+@login_required
+@role_required(TEACHER)
+def teacher_attendance_session_api(attendance_session_id):
+    cur = mysql.connection.cursor()
+    try:
+        attendance = fetch_teacher_attendance_session(
+            cur, attendance_session_id, session["user_id"]
+        )
+        if not attendance:
+            return {"error": "Attendance session not found"}, 404
+        if request.method == "DELETE":
+            cur.execute(
+                "DELETE FROM attendance_sessions WHERE id = %s AND teacher_user_id = %s",
+                (attendance_session_id, session["user_id"])
+            )
+            mysql.connection.commit()
+            return {"message": "Attendance session deleted"}, 200
+
+        cur.execute(
+            """
+            SELECT s.id AS student_id, s.full_name, s.grade,
+                   ar.status, ar.note
+            FROM student_class_enrollments sce
+            INNER JOIN students s ON s.id = sce.student_id
+            LEFT JOIN attendance_records ar
+                ON ar.student_id = s.id AND ar.attendance_session_id = %s
+            WHERE sce.class_id = %s
+            ORDER BY s.full_name, s.id
+            """,
+            (attendance_session_id, attendance["class_id"])
+        )
+        return {"session": attendance, "students": cur.fetchall()}, 200
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Attendance detail error:", error)
+        return {"error": "Failed to manage attendance session"}, 500
+    finally:
+        cur.close()
+
+
+@app.route(
+    "/api/teacher/attendance-sessions/<int:attendance_session_id>/records",
+    methods=["PUT"]
+)
+@login_required
+@role_required(TEACHER)
+def teacher_attendance_records_api(attendance_session_id):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("records"), list):
+        return {"error": "Attendance records must be provided as a list"}, 400
+    cur = mysql.connection.cursor()
+    try:
+        attendance = fetch_teacher_attendance_session(
+            cur, attendance_session_id, session["user_id"]
+        )
+        if not attendance:
+            return {"error": "Attendance session not found"}, 404
+        cur.execute(
+            "SELECT student_id FROM student_class_enrollments WHERE class_id = %s",
+            (attendance["class_id"],)
+        )
+        enrolled_ids = {int(row["student_id"]) for row in cur.fetchall()}
+        normalized = []
+        seen_ids = set()
+        for index, record in enumerate(data["records"], start=1):
+            if not isinstance(record, dict):
+                return {"error": f"Attendance record {index} is invalid"}, 400
+            try:
+                student_id = int(record.get("student_id"))
+            except (TypeError, ValueError):
+                return {"error": f"Attendance record {index} requires a student"}, 400
+            if student_id not in enrolled_ids:
+                return {"error": "Attendance contains a student outside this class"}, 400
+            if student_id in seen_ids:
+                return {"error": "Each student can appear only once"}, 400
+            seen_ids.add(student_id)
+            status = str(record.get("status") or "").strip().lower()
+            if status not in ATTENDANCE_STATUSES:
+                return {"error": "Attendance status is invalid"}, 400
+            note = str(record.get("note") or "").strip()
+            if len(note) > 255:
+                return {"error": "Attendance note must be at most 255 characters"}, 400
+            normalized.append((student_id, status, note))
+        if seen_ids != enrolled_ids:
+            return {"error": "Attendance must include every enrolled student"}, 400
+
+        cur.execute(
+            "DELETE FROM attendance_records WHERE attendance_session_id = %s",
+            (attendance_session_id,)
+        )
+        for student_id, status, note in normalized:
+            cur.execute(
+                """
+                INSERT INTO attendance_records
+                    (attendance_session_id, student_id, status, note)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (attendance_session_id, student_id, status, note)
+            )
+        mysql.connection.commit()
+        return {
+            "message": "Attendance saved",
+            "recorded_students": len(normalized)
+        }, 200
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Attendance records error:", error)
+        return {"error": "Failed to save attendance"}, 500
+    finally:
+        cur.close()
+
+
+# ============================================================
 # STUDENT AI ASSISTANT
 # ============================================================
 
