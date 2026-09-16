@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import types
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -79,13 +80,19 @@ class QuizStatisticsTests(unittest.TestCase):
                 created_at TEXT);
             CREATE TABLE quizzes(id INTEGER PRIMARY KEY, title TEXT, subject TEXT,
                 questions TEXT, created_by INTEGER, is_published INTEGER,
-                created_at TEXT);
+                created_at TEXT, requires_session INTEGER DEFAULT 0);
             CREATE TABLE quiz_results(id INTEGER PRIMARY KEY, student_id INTEGER,
-                quiz_id INTEGER, score INTEGER, total_questions INTEGER);
+                quiz_id INTEGER, score INTEGER, total_questions INTEGER,
+                quiz_session_id INTEGER);
             CREATE TABLE quiz_answer_results(id INTEGER PRIMARY KEY,
                 quiz_result_id INTEGER, question_index INTEGER, question_text TEXT,
-                topic TEXT, difficulty TEXT, selected_answer TEXT, correct_answer TEXT,
-                is_correct INTEGER, is_skipped INTEGER);
+                topic TEXT, difficulty TEXT, curriculum_code TEXT DEFAULT 'unspecified',
+                cognitive_level TEXT DEFAULT 'unspecified', selected_answer TEXT,
+                correct_answer TEXT, is_correct INTEGER, is_skipped INTEGER);
+            CREATE TABLE quiz_sessions(id INTEGER PRIMARY KEY, quiz_id INTEGER,
+                class_id INTEGER, created_by INTEGER, access_code_hash TEXT,
+                starts_at TEXT, ends_at TEXT, is_closed INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE predictions(id INTEGER PRIMARY KEY, student_id INTEGER,
                 prediction TEXT, attendance REAL, assignment_score REAL,
                 quiz_score REAL, study_hours REAL);
@@ -161,7 +168,8 @@ class QuizStatisticsTests(unittest.TestCase):
         for question in questions:
             self.assertEqual(
                 set(question),
-                {'question', 'options', 'topic', 'difficulty'}
+                {'question', 'options', 'topic', 'difficulty',
+                 'curriculum_code', 'cognitive_level'}
             )
             self.assertNotIn('answer', question)
             self.assertNotIn('explanation', question)
@@ -243,7 +251,8 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(response.json['stats']['average_quiz_score'], 100)
 
     def test_percentages_use_attempt_totals_even_after_quiz_changes(self):
-        self.db.executemany('INSERT INTO quiz_results VALUES(?,?,?,?,?)',
+        self.db.executemany('''INSERT INTO quiz_results
+            (id,student_id,quiz_id,score,total_questions) VALUES(?,?,?,?,?)''',
                             [(1, 1, 1, 2, 2), (2, 1, 1, 5, 10),
                              (3, 1, 1, 99, None), (4, 1, 1, 0, 0)])
         self.db.execute('UPDATE quizzes SET questions=?', ('[]',))
@@ -256,7 +265,8 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(teacher['student_performance'][0]['average_quiz_score'], 75)
 
     def test_zero_score_counts_in_average(self):
-        self.db.executemany('INSERT INTO quiz_results VALUES(?,?,?,?,?)',
+        self.db.executemany('''INSERT INTO quiz_results
+            (id,student_id,quiz_id,score,total_questions) VALUES(?,?,?,?,?)''',
                             [(1, 1, 1, 2, 2), (2, 1, 1, 0, 2)])
         response = self.client.get('/api/student/dashboard')
         self.assertEqual(response.json['stats']['average_quiz_score'], 50)
@@ -498,7 +508,8 @@ class QuizStatisticsTests(unittest.TestCase):
         response = self.client.post('/api/teacher/quizzes', json=self.quiz_payload())
         quiz_id = response.json['quiz_id']
         self.db.execute(
-            'INSERT INTO quiz_results VALUES(?,?,?,?,?)',
+            '''INSERT INTO quiz_results
+               (id,student_id,quiz_id,score,total_questions) VALUES(?,?,?,?,?)''',
             (10, 1, quiz_id, 1, 1)
         )
         self.db.commit()
@@ -579,6 +590,132 @@ class QuizStatisticsTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             session.clear()
         self.assertEqual(self.client.get('/api/teacher/quizzes').status_code, 401)
+
+    def lab_session_payload(self, quiz_id, **overrides):
+        now = datetime.now(timezone.utc)
+        payload = {
+            'quiz_id': quiz_id,
+            'class_id': 1,
+            'access_code': 'LAB-2048',
+            'starts_at': (now - timedelta(minutes=5)).isoformat(),
+            'ends_at': (now + timedelta(minutes=30)).isoformat(),
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_teacher_can_run_class_scoped_lab_quiz(self):
+        self.login('teacher')
+        quiz_payload = self.quiz_payload()
+        quiz_payload['questions'][0].update({
+            'curriculum_code': 'G10-SCI-FORCE-01',
+            'cognitive_level': 'application',
+        })
+        created = self.client.post('/api/teacher/quizzes', json=quiz_payload)
+        self.assertEqual(created.status_code, 201)
+        quiz_id = created.json['quiz_id']
+
+        response = self.client.post(
+            '/api/teacher/quiz-sessions',
+            json=self.lab_session_payload(quiz_id)
+        )
+        self.assertEqual(response.status_code, 201)
+        lab_session_id = response.json['session_id']
+        self.assertEqual(response.json['access_code'], 'LAB-2048')
+        stored = self.db.execute(
+            'SELECT access_code_hash FROM quiz_sessions WHERE id=?',
+            (lab_session_id,)
+        ).fetchone()['access_code_hash']
+        self.assertNotEqual(stored, 'LAB-2048')
+        self.assertEqual(
+            self.db.execute('SELECT requires_session FROM quizzes WHERE id=?',
+                            (quiz_id,)).fetchone()[0],
+            1
+        )
+
+        self.login('student')
+        available = self.client.get('/api/student/quiz-sessions')
+        self.assertEqual(available.status_code, 200)
+        self.assertEqual(available.json['sessions'][0]['state'], 'active')
+        self.assertNotIn(
+            quiz_id,
+            [quiz['id'] for quiz in self.client.get('/api/student/quizzes').json['quizzes']]
+        )
+        self.assertEqual(
+            self.client.get(f'/api/student/quiz?quiz_id={quiz_id}').status_code,
+            404
+        )
+        self.assertEqual(
+            self.client.post(
+                f'/api/student/quiz-sessions/{lab_session_id}/start',
+                json={'access_code': 'wrong'}
+            ).status_code,
+            403
+        )
+        started = self.client.post(
+            f'/api/student/quiz-sessions/{lab_session_id}/start',
+            json={'access_code': 'LAB-2048'}
+        )
+        self.assertEqual(started.status_code, 200)
+        question = started.json['quiz']['questions'][0]
+        self.assertEqual(question['curriculum_code'], 'G10-SCI-FORCE-01')
+        self.assertEqual(question['cognitive_level'], 'application')
+        self.assertNotIn('answer', question)
+
+        self.assertEqual(
+            self.client.post('/api/student/quiz/submit', json={
+                'quiz_id': quiz_id,
+                'answers': {'0': 'A push or pull'}
+            }).status_code,
+            403
+        )
+        submitted = self.client.post('/api/student/quiz/submit', json={
+            'quiz_id': quiz_id,
+            'quiz_session_id': lab_session_id,
+            'answers': {'0': 'A push or pull'}
+        })
+        self.assertEqual(submitted.status_code, 200)
+        self.assertEqual(
+            self.db.execute('SELECT quiz_session_id FROM quiz_results').fetchone()[0],
+            lab_session_id
+        )
+        self.assertEqual(
+            self.client.post(
+                f'/api/student/quiz-sessions/{lab_session_id}/start',
+                json={'access_code': 'LAB-2048'}
+            ).status_code,
+            409
+        )
+
+    def test_lab_quiz_rejects_unassigned_teacher_and_closed_session(self):
+        self.login('teacher')
+        created = self.client.post('/api/teacher/quizzes', json=self.quiz_payload())
+        quiz_id = created.json['quiz_id']
+        self.login('other_teacher')
+        self.assertEqual(
+            self.client.post('/api/teacher/quiz-sessions',
+                             json=self.lab_session_payload(quiz_id)).status_code,
+            404
+        )
+
+        self.login('teacher')
+        created_session = self.client.post(
+            '/api/teacher/quiz-sessions', json=self.lab_session_payload(quiz_id)
+        )
+        lab_session_id = created_session.json['session_id']
+        self.assertEqual(
+            self.client.post(
+                f'/api/teacher/quiz-sessions/{lab_session_id}/close'
+            ).status_code,
+            200
+        )
+        self.login('student')
+        self.assertEqual(
+            self.client.post(
+                f'/api/student/quiz-sessions/{lab_session_id}/start',
+                json={'access_code': 'LAB-2048'}
+            ).status_code,
+            409
+        )
 
     def test_teacher_can_read_update_and_delete_own_note(self):
         self.db.execute(

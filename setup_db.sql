@@ -69,8 +69,25 @@ CREATE TABLE IF NOT EXISTS quizzes (
     questions TEXT,  -- JSON string
     created_by INT NULL,
     is_published BOOLEAN NOT NULL DEFAULT TRUE,
+    requires_session BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS quiz_sessions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    quiz_id INT NOT NULL,
+    class_id INT NOT NULL,
+    created_by INT NOT NULL,
+    access_code_hash VARCHAR(255) NOT NULL,
+    starts_at DATETIME NOT NULL,
+    ends_at DATETIME NOT NULL,
+    is_closed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_quiz_sessions_class_time (class_id, starts_at, ends_at),
+    FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
+    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS quiz_results (
@@ -79,9 +96,12 @@ CREATE TABLE IF NOT EXISTS quiz_results (
     quiz_id INT,
     score INT,
     total_questions INT NOT NULL,
+    quiz_session_id INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_quiz_session_student_attempt (quiz_session_id, student_id),
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-    FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE
+    FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
+    FOREIGN KEY (quiz_session_id) REFERENCES quiz_sessions(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS quiz_answer_results (
@@ -91,6 +111,8 @@ CREATE TABLE IF NOT EXISTS quiz_answer_results (
     question_text TEXT NOT NULL,
     topic VARCHAR(100) NOT NULL,
     difficulty VARCHAR(20) NOT NULL,
+    curriculum_code VARCHAR(50) NOT NULL DEFAULT 'unspecified',
+    cognitive_level VARCHAR(30) NOT NULL DEFAULT 'unspecified',
     selected_answer TEXT NULL,
     correct_answer TEXT NOT NULL,
     is_correct BOOLEAN NOT NULL DEFAULT FALSE,

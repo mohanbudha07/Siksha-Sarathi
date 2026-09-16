@@ -82,3 +82,18 @@ Teachers are not assigned automatically. Assignments must name the teacher,
 class, and subject explicitly. Teacher learning analytics only includes a
 student when that student is enrolled in the assigned class and the quiz
 subject matches the teacher assignment.
+
+## Hybrid computer-lab quiz migration
+
+Migration 005 adds class-scoped and time-limited computer-lab quiz sessions.
+Run it after migration 004 while the Flask backend is stopped:
+
+    mysql -u siksha_user -p siksha_sarathi < migrations/005_hybrid_lab_quiz_sessions.sql
+
+Teachers can schedule their published quizzes for assigned classes and subjects.
+Students use a temporary access code during the configured time window and can
+submit only once. Access codes are stored as password hashes.
+
+Lab quizzes are removed from the ordinary practice list. Quiz questions may
+include curriculum_code and cognitive_level for improved learning analytics.
+Network or computer failures must not be recorded as zero marks.

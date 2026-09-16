@@ -11,6 +11,68 @@
   margin-right: auto;
 }
 
+.student-lab-panel {
+  margin-bottom: 20px;
+  padding: 22px;
+  border: 1px solid #bae6fd;
+  border-radius: 17px;
+  background: linear-gradient(145deg, #f0fdfa, #f0f9ff);
+}
+
+.student-lab-heading,
+.student-lab-card-title,
+.student-lab-access,
+.active-lab-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.student-lab-heading { margin-bottom: 15px; }
+.student-lab-heading p { margin: 0 0 4px; color: #0f766e; font-size: 11px; font-weight: 800; letter-spacing: 1.3px; }
+.student-lab-heading h2 { margin: 0; color: #134e4a; font-size: 21px; }
+.student-lab-heading > span { padding: 6px 10px; border-radius: 999px; background: white; color: #0369a1; font-size: 12px; font-weight: 800; }
+.student-lab-list { display: grid; gap: 11px; }
+.student-lab-empty { padding: 18px; border-radius: 11px; background: rgba(255, 255, 255, 0.75); color: #64748b; text-align: center; }
+.student-lab-card { padding: 17px; border: 1px solid #dbeafe; border-radius: 12px; background: white; }
+.student-lab-card h3 { margin: 8px 0 3px; color: #0f172a; font-size: 17px; }
+.student-lab-card-title p { margin: 0; color: #64748b; font-size: 13px; }
+.student-lab-time { display: grid; gap: 2px; color: #334155; text-align: right; }
+.student-lab-time small { color: #64748b; font-size: 11px; }
+.student-lab-time strong { font-size: 12px; }
+.student-lab-state { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.state-active { background: #dcfce7; color: #15803d; }
+.state-scheduled { background: #dbeafe; color: #1d4ed8; }
+.state-submitted { background: #ede9fe; color: #6d28d9; }
+.state-ended, .state-closed { background: #f1f5f9; color: #475569; }
+.student-lab-access { margin-top: 14px; padding-top: 14px; border-top: 1px solid #e2e8f0; }
+.student-lab-access input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; text-transform: uppercase; }
+.student-lab-access button { border: 0; border-radius: 8px; padding: 11px 17px; background: #0f766e; color: white; font-weight: 800; cursor: pointer; }
+.student-lab-access button:disabled { opacity: 0.6; cursor: wait; }
+.student-lab-note { margin: 13px 0 0; padding-top: 12px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 12px; }
+.student-lab-note.success { color: #15803d; font-weight: 700; }
+.active-lab-banner { margin-bottom: 16px; padding: 13px 17px; border: 1px solid #99f6e4; border-radius: 11px; background: #ecfdf5; color: #065f46; }
+.active-lab-banner span { font-size: 13px; }
+.lab-quiz-hero { background: linear-gradient(135deg, #0f766e, #0891b2); }
+.practice-empty-card { padding: 45px 24px; border: 1px solid #e2e8f0; border-radius: 17px; background: white; text-align: center; }
+.practice-empty-card div { font-size: 42px; }
+.practice-empty-card h2 { margin: 10px 0 7px; }
+.practice-empty-card p { margin: 0; color: #64748b; }
+
+@media (max-width: 700px) {
+  .student-lab-card-title,
+  .student-lab-access,
+  .active-lab-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .student-lab-time {
+    text-align: left;
+  }
+}
+
 .quiz-selector-card {
   display: flex;
   align-items: center;
