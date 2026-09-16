@@ -92,7 +92,14 @@ function TeacherLearningAnalytics() {
       attention: filteredStudents.filter(
         (student) => student.status === 'Needs attention'
       ).length,
-      profiles: filteredStudents.length,
+      paper: filteredStudents.filter(
+        (student) => student.paper_assessments?.recorded_assessments > 0
+      ).length,
+      attendance: new Set(
+        filteredStudents
+          .filter((student) => student.attendance?.recorded_days > 0)
+          .map((student) => student.student_id)
+      ).size,
     }
   }, [filteredStudents])
 
@@ -130,11 +137,11 @@ function TeacherLearningAnalytics() {
     <div className="tla-page">
       <section className="tla-hero">
         <div>
-          <p className="tla-eyebrow">TEACHER INSIGHTS</p>
-          <h1>Learning Analytics</h1>
+          <p className="tla-eyebrow">LEARNING EVIDENCE</p>
+          <h1>Learning Insights</h1>
           <p>
-            Find learning gaps using question-level performance from only your
-            assigned classes and subjects.
+            Compare online quiz evidence, paper marks and daily attendance
+            without hiding them inside one unclear score.
           </p>
         </div>
         <div className="tla-hero-scope">
@@ -171,9 +178,14 @@ function TeacherLearningAnalytics() {
               <small>Profiles requiring teacher support</small>
             </article>
             <article>
-              <span>Learning profiles</span>
-              <strong>{filteredStatistics.profiles}</strong>
-              <small>Student-subject combinations</small>
+              <span>Paper evidence</span>
+              <strong>{filteredStatistics.paper}</strong>
+              <small>Profiles with published marks</small>
+            </article>
+            <article>
+              <span>Attendance tracked</span>
+              <strong>{filteredStatistics.attendance}</strong>
+              <small>Students with daily records</small>
             </article>
           </section>
 
@@ -181,7 +193,7 @@ function TeacherLearningAnalytics() {
             <div className="tla-section-heading">
               <div>
                 <h2>Student learning profiles</h2>
-                <p>Filter the assigned students and open a detailed diagnosis.</p>
+                <p>Scan the three evidence sources, then open a detailed diagnosis.</p>
               </div>
             </div>
 
@@ -238,11 +250,10 @@ function TeacherLearningAnalytics() {
                   <thead>
                     <tr>
                       <th>Student</th>
-                      <th>Class</th>
-                      <th>Subject</th>
-                      <th>Attempts</th>
-                      <th>Accuracy</th>
-                      <th>Skipped</th>
+                      <th>Class & subject</th>
+                      <th>Online quiz</th>
+                      <th>Paper marks</th>
+                      <th>Attendance</th>
                       <th>Status</th>
                       <th aria-label="Profile action" />
                     </tr>
@@ -259,16 +270,18 @@ function TeacherLearningAnalytics() {
                             </div>
                           </div>
                         </td>
-                        <td>{student.class_name}</td>
-                        <td><span className="tla-subject">{student.subject}</span></td>
-                        <td>{student.attempts}</td>
                         <td>
-                          <strong>{student.accuracy_percent}%</strong>
+                          <strong>{student.class_name}</strong>
+                          <small className="tla-cell-note"><span className="tla-subject">{student.subject}</span></small>
+                        </td>
+                        <td>
+                          <strong>{student.total_questions ? `${student.accuracy_percent}%` : '—'}</strong>
                           <small className="tla-cell-note">
-                            {student.correct_answers}/{student.total_questions} correct
+                            {student.attempts} attempts · {student.skip_percent}% skipped
                           </small>
                         </td>
-                        <td>{student.skip_percent}%</td>
+                        <td><strong>{student.paper_assessments?.recorded_assessments ? `${student.paper_assessments.average_percent}%` : '—'}</strong><small className="tla-cell-note">{student.paper_assessments?.recorded_assessments || 0} published records</small></td>
+                        <td><strong>{student.attendance?.recorded_days ? `${student.attendance.attendance_percent}%` : '—'}</strong><small className="tla-cell-note">{student.attendance?.recorded_days || 0} school days</small></td>
                         <td><span className={statusClass(student.status)}>{student.status}</span></td>
                         <td>
                           <button

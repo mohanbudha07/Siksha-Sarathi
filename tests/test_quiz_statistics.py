@@ -390,6 +390,73 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(data['common_mistakes'][0]['question_text'], 'Second?')
         self.assertEqual(data['common_mistakes'][0]['correct_answer'], 'D')
 
+    def test_learning_profile_keeps_school_performance_factors_separate(self):
+        self.db.executemany(
+            '''INSERT INTO paper_assessments
+               (id,teacher_user_id,class_id,subject,title,assessment_type,
+                assessment_date,max_marks,is_published)
+               VALUES(?,?,?,?,?,?,?,?,?)''',
+            [
+                (1, 2, 1, 'Science', 'Unit Test', 'unit_test',
+                 '2026-09-10', 50, 1),
+                (2, 2, 1, 'Science', 'Terminal', 'terminal_exam',
+                 '2026-09-15', 100, 1),
+            ]
+        )
+        self.db.executemany(
+            '''INSERT INTO paper_assessment_scores
+               (id,assessment_id,student_id,marks_obtained,is_absent,remarks)
+               VALUES(?,?,?,?,?,?)''',
+            [
+                (1, 1, 1, 40, 0, 'Good'),
+                (2, 2, 1, None, 1, 'Medical leave'),
+            ]
+        )
+        self.db.executemany(
+            '''INSERT INTO attendance_sessions
+               (id,teacher_user_id,class_id,attendance_date)
+               VALUES(?,?,?,?)''',
+            [
+                (1, 2, 1, '2026-09-13'),
+                (2, 2, 1, '2026-09-14'),
+                (3, 2, 1, '2026-09-15'),
+            ]
+        )
+        self.db.executemany(
+            '''INSERT INTO attendance_records
+               (id,attendance_session_id,student_id,status,note)
+               VALUES(?,?,?,?,?)''',
+            [
+                (1, 1, 1, 'present', ''),
+                (2, 2, 1, 'late', 'Bus delay'),
+                (3, 3, 1, 'absent', 'Unwell'),
+            ]
+        )
+        self.db.commit()
+        self.login('teacher')
+
+        overview = self.client.get('/api/teacher/learning-analytics')
+        profile = overview.json['students'][0]
+        self.assertEqual(profile['paper_assessments']['average_percent'], 80)
+        self.assertEqual(profile['paper_assessments']['recorded_assessments'], 2)
+        self.assertEqual(profile['paper_assessments']['absent_assessments'], 1)
+        self.assertEqual(profile['attendance']['attendance_percent'], 66.67)
+        self.assertEqual(profile['attendance']['late_days'], 1)
+        self.assertEqual(profile['attendance']['absent_days'], 1)
+
+        detail = self.client.get(
+            '/api/teacher/students/1/learning-profile?subject=Science'
+        )
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json['paper_assessments']['average_percent'], 80)
+        self.assertEqual(detail.json['attendance']['recorded_days'], 3)
+        self.assertEqual(len(detail.json['recent_paper_assessments']), 2)
+        self.assertEqual(
+            detail.json['recent_paper_assessments'][1]['percentage'], 80
+        )
+        self.assertEqual(len(detail.json['recent_attendance']), 3)
+        self.assertEqual(detail.json['recent_attendance'][0]['status'], 'absent')
+
     def test_unassigned_teacher_cannot_access_student_learning_profile(self):
         self.login('other_teacher')
         overview = self.client.get('/api/teacher/learning-analytics')

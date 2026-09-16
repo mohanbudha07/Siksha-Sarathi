@@ -1,322 +1,86 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../api";
-import "./TeacherDashboard.css";
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import api from '../api'
+import './TeacherDashboard.css'
+
+const quickActions = [
+  { title: 'Take attendance', text: 'Open today’s class register.', path: '/teacher/attendance', tone: 'green' },
+  { title: 'Record paper marks', text: 'Enter exam or assignment results.', path: '/teacher/assessments', tone: 'orange' },
+  { title: 'Run a lab quiz', text: 'Schedule a supervised computer-lab quiz.', path: '/teacher/lab-quizzes', tone: 'blue' },
+  { title: 'Share learning notes', text: 'Create or manage student materials.', path: '/teacher/notes', tone: 'purple' },
+]
 
 function TeacherDashboard() {
-  const navigate = useNavigate();
+  const navigate = useNavigate()
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    fetchDashboard();
-  }, []);
-
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
-      setLoading(true);
-      setError("");
-
-      const response = await api.get("/teacher/dashboard");
-      setData(response.data);
+      setLoading(true)
+      setError('')
+      const response = await api.get('/teacher/dashboard')
+      setData(response.data)
     } catch (err) {
-      console.error("Teacher dashboard error:", err);
+      console.error('Teacher dashboard error:', err)
+      setError(err.response?.data?.error || 'Unable to load the teacher dashboard.')
+    } finally { setLoading(false) }
+  }, [])
 
-      if (err.response) {
-        setError(
-          err.response.data?.error ||
-            `Server error: ${err.response.status}`
-        );
-      } else {
-        setError(
-          "Unable to connect to the server. Make sure Flask is running."
-        );
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  useEffect(() => { fetchDashboard() }, [fetchDashboard])
 
-  const handleLogout = async () => {
-    try {
-      await api.post("/logout");
-    } catch (err) {
-      console.error("Logout error:", err);
-    } finally {
-      navigate("/login");
-    }
-  };
+  if (loading) return <div className="teacher-overview-state"><div className="teacher-overview-spinner" /><p>Loading your workspace...</p></div>
+  if (error) return <div className="teacher-overview-state error"><h2>Dashboard unavailable</h2><p>{error}</p><button onClick={fetchDashboard}>Try again</button></div>
 
-  if (loading) {
-    return (
-      <div className="teacher-dashboard-page">
-        <div className="teacher-loading">
-          <div className="loading-spinner"></div>
-          <p>Loading teacher dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="teacher-dashboard-page">
-        <div className="teacher-error">
-          <h2>Unable to load dashboard</h2>
-          <p>{error}</p>
-          <button onClick={fetchDashboard}>Try Again</button>
-        </div>
-      </div>
-    );
-  }
-
-  const teacher = data?.teacher || {};
-  const statistics = data?.statistics || {};
-  const recentNotes = data?.recent_notes || [];
-  const studentPerformance = data?.student_performance || [];
+  const teacher = data?.teacher || {}
+  const statistics = data?.statistics || {}
+  const recentNotes = data?.recent_notes || []
+  const firstName = String(teacher.name || 'Teacher').trim().split(/\s+/)[0]
 
   return (
-    <div className="teacher-dashboard-page">
-      {/* HEADER */}
-      <header className="teacher-header">
-        <div>
-          <h1>Siksha Sarathi</h1>
-          <p>Teacher Dashboard</p>
+    <div className="teacher-overview-page">
+      <section className="teacher-overview-heading">
+        <div><p>TEACHER OVERVIEW</p><h1>Welcome back, {firstName}</h1><span>See what needs your attention and continue today’s teaching work.</span></div>
+        <button onClick={() => navigate('/teacher/analytics')}>Review learning insights →</button>
+      </section>
+
+      <section className="teacher-overview-stats">
+        <article><span>Students</span><strong>{statistics.total_students ?? 0}</strong><small>Across the school records</small></article>
+        <article><span>Quiz attempts</span><strong>{statistics.total_quiz_attempts ?? 0}</strong><small>Recorded online attempts</small></article>
+        <article><span>Average quiz score</span><strong>{statistics.average_quiz_score ?? 0}%</strong><small>Online activity only</small></article>
+        <article className="attention"><span>Needs follow-up</span><strong>{statistics.students_needing_improvement ?? 0}</strong><small>Open insights for evidence</small></article>
+      </section>
+
+      <section className="teacher-overview-section">
+        <div className="teacher-overview-section-title"><div><h2>Continue your work</h2><p>Common teacher tasks, grouped in one place.</p></div></div>
+        <div className="teacher-quick-grid">
+          {quickActions.map((action) => (
+            <button key={action.path} className={`teacher-quick-card ${action.tone}`} onClick={() => navigate(action.path)}>
+              <span>{action.title.charAt(0)}</span><div><strong>{action.title}</strong><small>{action.text}</small></div><b>→</b>
+            </button>
+          ))}
         </div>
+      </section>
 
-        <div className="teacher-header-right">
-          <div className="teacher-profile">
-            <div className="teacher-avatar">
-              {(teacher.name || "T").charAt(0).toUpperCase()}
-            </div>
-
-            <div>
-              <strong>{teacher.name || "Teacher"}</strong>
-              <span>Teacher</span>
-            </div>
-          </div>
-
-          <button className="logout-button" onClick={handleLogout}>
-            Logout
-          </button>
-        </div>
-      </header>
-
-      {/* MAIN CONTENT */}
-      <main className="teacher-main">
-        {/* WELCOME */}
-        <section className="teacher-welcome">
-          <div>
-            <h2>Welcome, {teacher.name || "Teacher"} 👋</h2>
-            <p>Monitor student learning progress and performance.</p>
-          </div>
-
-          <div className="welcome-actions">
-            <button
-              className="notes-button analytics-action"
-              onClick={() => navigate("/teacher/analytics")}
-            >
-              Learning Analytics
-            </button>
-            <button
-              className="notes-button"
-              onClick={() => navigate("/teacher/quizzes")}
-            >
-              Manage Quizzes
-            </button>
-            <button
-              className="notes-button secondary-action"
-              onClick={() => navigate("/teacher/notes")}
-            >
-              Manage Notes
-            </button>
-          </div>
+      <div className="teacher-overview-columns">
+        <section className="teacher-overview-section teacher-insight-callout">
+          <p>LEARNING SUPPORT</p><h2>Move from scores to action</h2>
+          <span>Learning Insights combines topic-level quiz evidence with paper marks and attendance, without hiding them inside one unclear score.</span>
+          <button onClick={() => navigate('/teacher/analytics')}>Open student evidence</button>
         </section>
 
-        {/* STATISTICS */}
-        <section className="statistics-grid">
-          <div className="stat-card">
-            <div className="stat-icon">👨‍🎓</div>
-            <div>
-              <span>Total Students</span>
-              <h3>{statistics.total_students ?? 0}</h3>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">📝</div>
-            <div>
-              <span>Quiz Attempts</span>
-              <h3>{statistics.total_quiz_attempts ?? 0}</h3>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">📊</div>
-            <div>
-              <span>Average Quiz Score</span>
-              <h3>{statistics.average_quiz_score ?? 0}%</h3>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">📚</div>
-            <div>
-              <span>My Notes</span>
-              <h3>{statistics.total_notes ?? 0}</h3>
-            </div>
-          </div>
-
-          <div className="stat-card warning-card">
-            <div className="stat-icon">⚠️</div>
-            <div>
-              <span>Needs Improvement</span>
-              <h3>{statistics.students_needing_improvement ?? 0}</h3>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">🤖</div>
-            <div>
-              <span>ML Predictions</span>
-              <h3>{statistics.total_predictions ?? 0}</h3>
-            </div>
-          </div>
-        </section>
-
-        {/* STUDENT PERFORMANCE */}
-        <section className="dashboard-section">
-          <div className="section-header">
-            <div>
-              <h2>Student Performance</h2>
-              <p>Overview of individual student learning performance</p>
-            </div>
-          </div>
-
-          {studentPerformance.length === 0 ? (
-            <div className="empty-state">
-              <div>👨‍🎓</div>
-              <h3>No student performance data</h3>
-              <p>
-                Student performance data will appear here once students
-                complete learning activities.
-              </p>
-            </div>
-          ) : (
-            <div className="performance-table-wrapper">
-              <table className="performance-table">
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th>Grade</th>
-                    <th>Quiz Attempts</th>
-                    <th>Avg. Quiz Score</th>
-                    <th>Attendance</th>
-                    <th>Assignment</th>
-                    <th>Study Hours</th>
-                    <th>ML Prediction</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {studentPerformance.map((student) => (
-                    <tr key={student.student_id}>
-                      <td>
-                        <div className="student-name">
-                          <div className="student-avatar">
-                            {student.full_name?.charAt(0).toUpperCase()}
-                          </div>
-                          <strong>{student.full_name}</strong>
-                        </div>
-                      </td>
-
-                      <td>
-                        <span className="grade-badge">
-                          Grade {student.grade}
-                        </span>
-                      </td>
-
-                      <td>{student.quiz_attempts ?? 0}</td>
-                      <td>{student.average_quiz_score ?? 0}%</td>
-                      <td>{student.attendance ?? 0}%</td>
-                      <td>{student.assignment_score ?? 0}%</td>
-                      <td>{student.study_hours ?? 0} hrs</td>
-
-                      <td>
-                        <span
-                          className={`prediction-badge ${
-                            student.prediction === "Needs Improvement"
-                              ? "prediction-warning"
-                              : student.prediction === "Good"
-                              ? "prediction-good"
-                              : "prediction-normal"
-                          }`}
-                        >
-                          {student.prediction || "Not Available"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <section className="teacher-overview-section">
+          <div className="teacher-overview-section-title"><div><h2>Recent notes</h2><p>Your latest learning materials.</p></div><button onClick={() => navigate('/teacher/notes')}>View all</button></div>
+          {recentNotes.length === 0 ? <div className="teacher-overview-empty">No notes uploaded yet.</div> : (
+            <div className="teacher-recent-list">{recentNotes.slice(0, 4).map((note) => (
+              <article key={note.id}><span>{note.subject?.charAt(0) || 'N'}</span><div><strong>{note.title}</strong><small>{note.subject}{note.chapter ? ` · Chapter ${note.chapter}` : ''}</small></div></article>
+            ))}</div>
           )}
         </section>
-
-        {/* RECENT NOTES */}
-        <section className="dashboard-section">
-          <div className="section-header">
-            <div>
-              <h2>Recent Notes</h2>
-              <p>Notes uploaded by you</p>
-            </div>
-
-            <button
-              className="section-button"
-              onClick={() => navigate("/teacher/notes")}
-            >
-              View All Notes
-            </button>
-          </div>
-
-          {recentNotes.length === 0 ? (
-            <div className="empty-state compact">
-              <div>📚</div>
-              <h3>No notes uploaded yet</h3>
-              <p>Upload your first learning note to get started.</p>
-
-              <button onClick={() => navigate("/teacher/notes")}>
-                Upload Note
-              </button>
-            </div>
-          ) : (
-            <div className="notes-grid">
-              {recentNotes.map((note) => (
-                <div className="note-card" key={note.id}>
-                  <div className="note-card-icon">📖</div>
-
-                  <div>
-                    <h3>{note.title}</h3>
-                    <p>
-                      {note.subject} • Chapter {note.chapter}
-                    </p>
-
-                    {note.created_at && (
-                      <small>
-                        {new Date(note.created_at).toLocaleDateString()}
-                      </small>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </main>
+      </div>
     </div>
-  );
+  )
 }
 
-export default TeacherDashboard;
+export default TeacherDashboard

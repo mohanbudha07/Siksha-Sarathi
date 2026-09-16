@@ -1293,6 +1293,81 @@ def fetch_student_subject_metrics(cur, student_id, subject):
     return build_learning_metrics(cur.fetchone())
 
 
+def fetch_student_paper_metrics(
+    cur, teacher_id, student_id, class_id, subject
+):
+    cur.execute(
+        """
+        SELECT
+            COUNT(CASE WHEN pas.id IS NOT NULL THEN 1 END) AS recorded_assessments,
+            COALESCE(SUM(CASE WHEN pas.is_absent = TRUE THEN 1 ELSE 0 END), 0)
+                AS absent_assessments,
+            COALESCE(SUM(CASE
+                WHEN pas.is_absent = FALSE AND pas.marks_obtained IS NOT NULL
+                THEN pas.marks_obtained ELSE 0 END), 0) AS marks_obtained,
+            COALESCE(SUM(CASE
+                WHEN pas.is_absent = FALSE AND pas.marks_obtained IS NOT NULL
+                THEN pa.max_marks ELSE 0 END), 0) AS maximum_marks
+        FROM paper_assessments pa
+        LEFT JOIN paper_assessment_scores pas
+            ON pas.assessment_id = pa.id AND pas.student_id = %s
+        WHERE pa.teacher_user_id = %s
+          AND pa.class_id = %s
+          AND LOWER(pa.subject) = LOWER(%s)
+          AND pa.is_published = TRUE
+        """,
+        (student_id, teacher_id, class_id, subject)
+    )
+    row = cur.fetchone()
+    recorded = int(row["recorded_assessments"] or 0)
+    absent = int(row["absent_assessments"] or 0)
+    marks = float(row["marks_obtained"] or 0)
+    maximum = float(row["maximum_marks"] or 0)
+    return {
+        "recorded_assessments": recorded,
+        "graded_assessments": max(recorded - absent, 0),
+        "absent_assessments": absent,
+        "marks_obtained": round(marks, 2),
+        "maximum_marks": round(maximum, 2),
+        "average_percent": round(100 * marks / maximum, 2) if maximum else 0
+    }
+
+
+def fetch_student_attendance_metrics(cur, student_id, class_id):
+    cur.execute(
+        """
+        SELECT
+            COUNT(ar.id) AS recorded_days,
+            COALESCE(SUM(CASE WHEN ar.status = 'present' THEN 1 ELSE 0 END), 0)
+                AS present_days,
+            COALESCE(SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END), 0)
+                AS absent_days,
+            COALESCE(SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END), 0)
+                AS late_days,
+            COALESCE(SUM(CASE WHEN ar.status = 'excused' THEN 1 ELSE 0 END), 0)
+                AS excused_days
+        FROM attendance_sessions ats
+        INNER JOIN attendance_records ar ON ar.attendance_session_id = ats.id
+        WHERE ats.class_id = %s AND ar.student_id = %s
+        """,
+        (class_id, student_id)
+    )
+    row = cur.fetchone()
+    recorded = int(row["recorded_days"] or 0)
+    present = int(row["present_days"] or 0)
+    late = int(row["late_days"] or 0)
+    return {
+        "recorded_days": recorded,
+        "present_days": present,
+        "absent_days": int(row["absent_days"] or 0),
+        "late_days": late,
+        "excused_days": int(row["excused_days"] or 0),
+        "attendance_percent": (
+            round(100 * (present + late) / recorded, 2) if recorded else 0
+        )
+    }
+
+
 @app.route("/api/teacher/learning-analytics", methods=["GET"])
 @login_required
 @role_required(TEACHER)
@@ -1343,7 +1418,19 @@ def teacher_learning_analytics_api():
             metrics = fetch_student_subject_metrics(
                 cur, student["student_id"], student["subject"]
             )
-            profiles.append({**student, **metrics})
+            paper_metrics = fetch_student_paper_metrics(
+                cur, session["user_id"], student["student_id"],
+                student["class_id"], student["subject"]
+            )
+            attendance_metrics = fetch_student_attendance_metrics(
+                cur, student["student_id"], student["class_id"]
+            )
+            profiles.append({
+                **student,
+                **metrics,
+                "paper_assessments": paper_metrics,
+                "attendance": attendance_metrics
+            })
 
         assigned_student_ids = {profile["student_id"] for profile in profiles}
         active_student_ids = {
@@ -1407,6 +1494,67 @@ def teacher_student_learning_profile_api(student_id):
             return {"error": "Student learning profile not found"}, 404
 
         metrics = fetch_student_subject_metrics(cur, student_id, subject)
+        paper_metrics = fetch_student_paper_metrics(
+            cur, session["user_id"], student_id,
+            student["class_id"], student["subject"]
+        )
+        attendance_metrics = fetch_student_attendance_metrics(
+            cur, student_id, student["class_id"]
+        )
+
+        cur.execute(
+            """
+            SELECT pa.id AS assessment_id, pa.title, pa.assessment_type,
+                   pa.assessment_date, pa.max_marks, pas.marks_obtained,
+                   pas.is_absent, pas.remarks
+            FROM paper_assessments pa
+            INNER JOIN paper_assessment_scores pas
+                ON pas.assessment_id = pa.id
+            WHERE pa.teacher_user_id = %s
+              AND pa.class_id = %s
+              AND pas.student_id = %s
+              AND LOWER(pa.subject) = LOWER(%s)
+              AND pa.is_published = TRUE
+            ORDER BY pa.assessment_date DESC, pa.id DESC
+            LIMIT 10
+            """,
+            (session["user_id"], student["class_id"], student_id, subject)
+        )
+        recent_paper_assessments = cur.fetchall()
+        for assessment in recent_paper_assessments:
+            assessment["assessment_date"] = serialize_api_date(
+                assessment["assessment_date"]
+            )
+            maximum = float(assessment["max_marks"] or 0)
+            marks = assessment["marks_obtained"]
+            assessment["max_marks"] = maximum
+            assessment["marks_obtained"] = (
+                float(marks) if marks is not None else None
+            )
+            assessment["percentage"] = (
+                round(100 * float(marks) / maximum, 2)
+                if marks is not None and maximum else None
+            )
+            assessment["is_absent"] = bool(assessment["is_absent"])
+
+        cur.execute(
+            """
+            SELECT ats.id AS attendance_session_id, ats.attendance_date,
+                   ar.status, ar.note
+            FROM attendance_sessions ats
+            INNER JOIN attendance_records ar
+                ON ar.attendance_session_id = ats.id
+            WHERE ats.class_id = %s AND ar.student_id = %s
+            ORDER BY ats.attendance_date DESC, ats.id DESC
+            LIMIT 30
+            """,
+            (student["class_id"], student_id)
+        )
+        recent_attendance = cur.fetchall()
+        for record in recent_attendance:
+            record["attendance_date"] = serialize_api_date(
+                record["attendance_date"]
+            )
 
         cur.execute(
             """
@@ -1519,6 +1667,10 @@ def teacher_student_learning_profile_api(student_id):
         return {
             "student": student,
             "summary": metrics,
+            "paper_assessments": paper_metrics,
+            "attendance": attendance_metrics,
+            "recent_paper_assessments": recent_paper_assessments,
+            "recent_attendance": recent_attendance,
             "topics": topics,
             "difficulties": difficulties,
             "recent_attempts": recent_attempts,

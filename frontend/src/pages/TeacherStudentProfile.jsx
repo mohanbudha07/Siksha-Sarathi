@@ -86,6 +86,10 @@ function TeacherStudentProfile() {
   const difficulties = data?.difficulties || []
   const attempts = data?.recent_attempts || []
   const mistakes = data?.common_mistakes || []
+  const paper = data?.paper_assessments || {}
+  const attendance = data?.attendance || {}
+  const paperHistory = data?.recent_paper_assessments || []
+  const attendanceHistory = data?.recent_attendance || []
 
   return (
     <div className="tla-page tla-profile-page">
@@ -114,19 +118,19 @@ function TeacherStudentProfile() {
           <small>{summary.correct_answers}/{summary.total_questions} correct answers</small>
         </article>
         <article>
-          <span>Quiz attempts</span>
-          <strong>{summary.attempts}</strong>
-          <small>Recorded for {student.subject}</small>
+          <span>Paper assessments</span>
+          <strong>{paper.recorded_assessments ? `${paper.average_percent}%` : '—'}</strong>
+          <small>{paper.recorded_assessments || 0} published records</small>
+        </article>
+        <article>
+          <span>Daily attendance</span>
+          <strong>{attendance.recorded_days ? `${attendance.attendance_percent}%` : '—'}</strong>
+          <small>{attendance.recorded_days || 0} school days tracked</small>
         </article>
         <article>
           <span>Skipped answers</span>
           <strong>{summary.skipped_answers}</strong>
-          <small>{summary.skip_percent}% of tracked questions</small>
-        </article>
-        <article>
-          <span>Questions tracked</span>
-          <strong>{summary.total_questions}</strong>
-          <small>Used in this diagnosis</small>
+          <small>{summary.skip_percent}% of quiz questions</small>
         </article>
       </section>
 
@@ -184,6 +188,30 @@ function TeacherStudentProfile() {
               ))}
             </div>
           )}
+        </section>
+      </div>
+
+      <div className="tla-profile-grid tla-school-evidence-grid">
+        <section className="tla-panel">
+          <div className="tla-section-heading"><div><h2>Paper assessment evidence</h2><p>Published teacher-entered marks only.</p></div></div>
+          {paperHistory.length === 0 ? <p className="tla-muted">No published paper marks have been recorded.</p> : (
+            <div className="tla-evidence-list">
+              {paperHistory.map((item) => (
+                <article key={item.assessment_id}>
+                  <div><strong>{item.title}</strong><small>{item.assessment_date} · {String(item.assessment_type).replaceAll('_', ' ')}</small></div>
+                  <span className={item.is_absent ? 'is-absent' : ''}>{item.is_absent ? 'Absent' : `${item.percentage}%`}</span>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="tla-panel">
+          <div className="tla-section-heading"><div><h2>Attendance evidence</h2><p>Daily class attendance, separate from subject scores.</p></div></div>
+          <div className="tla-attendance-counts">
+            <span><strong>{attendance.present_days || 0}</strong>Present</span><span><strong>{attendance.absent_days || 0}</strong>Absent</span><span><strong>{attendance.late_days || 0}</strong>Late</span><span><strong>{attendance.excused_days || 0}</strong>Excused</span>
+          </div>
+          {attendanceHistory.length > 0 && <div className="tla-attendance-recent">{attendanceHistory.slice(0, 7).map((item) => <span key={item.attendance_session_id} className={`status-${item.status}`}><strong>{item.attendance_date}</strong>{item.status}</span>)}</div>}
         </section>
       </div>
 

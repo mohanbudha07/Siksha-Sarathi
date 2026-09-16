@@ -1,97 +1,67 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import api from '../api'
+import './TeacherLayout.css'
+
+const navigation = [
+  { label: 'Overview', items: [{ to: '/teacher/dashboard', icon: '⌂', label: 'Dashboard' }] },
+  { label: 'Teaching', items: [
+    { to: '/teacher/notes', icon: 'N', label: 'Learning Notes' },
+    { to: '/teacher/quizzes', icon: 'Q', label: 'Quizzes' },
+    { to: '/teacher/lab-quizzes', icon: 'L', label: 'Lab Sessions' },
+  ] },
+  { label: 'School records', items: [
+    { to: '/teacher/assessments', icon: 'M', label: 'Paper Marks' },
+    { to: '/teacher/attendance', icon: 'A', label: 'Attendance' },
+  ] },
+  { label: 'Insights', items: [{ to: '/teacher/analytics', icon: 'I', label: 'Learning Insights' }] },
+]
 
 function TeacherLayout({ children }) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => { setMenuOpen(false) }, [location.pathname])
 
   const handleLogout = async () => {
-    try {
-      await api.post('/logout')
-    } catch (error) {
-      console.error('Logout error:', error)
-    } finally {
-      navigate('/login')
-    }
+    try { await api.post('/logout') }
+    catch (error) { console.error('Logout error:', error) }
+    finally { navigate('/login') }
   }
 
   return (
-    <div className="teacher-layout">
-      <nav
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '15px 30px',
-          background: 'linear-gradient(135deg, #4f00ff, #6d00e8)',
-          color: 'white',
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Siksha Sarathi</h2>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'center',
-          }}
-        >
-          <NavLink to="/teacher/dashboard" style={linkStyle}>
-            Dashboard
-          </NavLink>
-
-          <NavLink to="/teacher/notes" style={linkStyle}>
-            My Notes
-          </NavLink>
-
-          <NavLink to="/teacher/quizzes" style={linkStyle}>
-            Quizzes
-          </NavLink>
-
-          <NavLink to="/teacher/lab-quizzes" style={linkStyle}>
-            Lab Quizzes
-          </NavLink>
-
-          <NavLink to="/teacher/assessments" style={linkStyle}>
-            Assessments
-          </NavLink>
-
-          <NavLink to="/teacher/attendance" style={linkStyle}>
-            Attendance
-          </NavLink>
-
-          <NavLink to="/teacher/analytics" style={linkStyle}>
-            Learning Analytics
-          </NavLink>
-
-          <button
-            onClick={handleLogout}
-            style={{
-              marginLeft: '10px',
-              padding: '8px 14px',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              background: 'white',
-              color: '#4f00ff',
-              fontWeight: '600',
-            }}
-          >
-            Logout
-          </button>
+    <div className="teacher-shell">
+      <header className="teacher-mobile-header">
+        <button className="teacher-menu-button" onClick={() => setMenuOpen(true)} aria-label="Open teacher navigation">☰</button>
+        <div><strong>Siksha Sarathi</strong><span>Teacher workspace</span></div>
+      </header>
+      {menuOpen && <button className="teacher-nav-overlay" onClick={() => setMenuOpen(false)} aria-label="Close teacher navigation" />}
+      <aside className={`teacher-sidebar ${menuOpen ? 'is-open' : ''}`}>
+        <div className="teacher-brand">
+          <span>SS</span><div><strong>Siksha Sarathi</strong><small>Teacher workspace</small></div>
+          <button onClick={() => setMenuOpen(false)} aria-label="Close teacher navigation">×</button>
         </div>
-      </nav>
-
-      <main>{children}</main>
+        <nav className="teacher-navigation" aria-label="Teacher navigation">
+          {navigation.map((group) => (
+            <section key={group.label}>
+              <p>{group.label}</p>
+              {group.items.map((item) => (
+                <NavLink key={item.to} to={item.to} className={({ isActive }) => `teacher-nav-link ${isActive ? 'active' : ''}`}>
+                  <span>{item.icon}</span>{item.label}
+                </NavLink>
+              ))}
+            </section>
+          ))}
+        </nav>
+        <div className="teacher-sidebar-footer">
+          <div><span>T</span><div><strong>Teacher account</strong><small>Secure workspace</small></div></div>
+          <button onClick={handleLogout}>Log out</button>
+        </div>
+      </aside>
+      <main className="teacher-shell-content">{children}</main>
     </div>
   )
 }
-
-const linkStyle = ({ isActive }) => ({
-  color: 'white',
-  textDecoration: 'none',
-  fontWeight: isActive ? 'bold' : 'normal',
-  padding: '8px 10px',
-  borderRadius: '6px',
-})
 
 export default TeacherLayout
