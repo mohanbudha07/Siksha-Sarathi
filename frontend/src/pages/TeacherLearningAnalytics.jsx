@@ -42,6 +42,7 @@ function TeacherLearningAnalytics() {
 
   const assignments = data?.assignments || EMPTY_LIST
   const students = data?.students || EMPTY_LIST
+  const topicPriorities = data?.topic_priorities || EMPTY_LIST
 
   const classes = useMemo(() => {
     const unique = new Map()
@@ -102,6 +103,14 @@ function TeacherLearningAnalytics() {
       ).size,
     }
   }, [filteredStudents])
+
+  const visiblePriorities = useMemo(() => topicPriorities.filter((item) =>
+    (classFilter === 'all' || String(item.class_id) === classFilter) &&
+    (subjectFilter === 'all' || item.subject === subjectFilter) &&
+    (!search.trim() || item.students_to_support.some((student) =>
+      student.full_name.toLowerCase().includes(search.trim().toLowerCase())
+    ))
+  ), [topicPriorities, classFilter, subjectFilter, search])
 
   const openProfile = (student) => {
     const subject = encodeURIComponent(student.subject)
@@ -192,8 +201,8 @@ function TeacherLearningAnalytics() {
           <section className="tla-content">
             <div className="tla-section-heading">
               <div>
-                <h2>Student learning profiles</h2>
-                <p>Scan the three evidence sources, then open a detailed diagnosis.</p>
+                <h2>Explore learning evidence</h2>
+                <p>Filter by class, subject or student to focus your review.</p>
               </div>
             </div>
 
@@ -237,6 +246,39 @@ function TeacherLearningAnalytics() {
                   placeholder="Search by name"
                 />
               </label>
+            </div>
+
+            <div className="tla-section-heading">
+              <div>
+                <h2>Topics to review with the class</h2>
+                <p>Based on tagged quiz answers. A student needs at least three answers across two different questions, with accuracy below 60%.</p>
+              </div>
+            </div>
+            {visiblePriorities.length ? (
+              <div className="tla-priority-grid">
+                {visiblePriorities.map((item) => (
+                  <article key={`${item.class_id}-${item.subject}-${item.topic}`}>
+                    <small>{classes.find((entry) => entry.class_id === item.class_id)?.class_name} · {item.subject}</small>
+                    <h3>{item.topic}</h3>
+                    <p>{item.correct_answers}/{item.total_questions} correct · {item.skipped_answers} skipped</p>
+                    <strong>{item.students_to_support.length} {item.students_to_support.length === 1 ? 'student needs' : 'students need'} practice</strong>
+                    <div className="tla-priority-students">
+                      {item.students_to_support.map((student) => (
+                        <button key={student.student_id} type="button" onClick={() => openProfile({ ...student, subject: item.subject })}>
+                          {student.full_name} →
+                        </button>
+                      ))}
+                    </div>
+                    <small>Review the concept together, then check a new practice question.</small>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="tla-muted tla-priority-empty">No topic meets the review threshold in this selection. Add topic tags to quiz questions to get specific suggestions.</p>
+            )}
+
+            <div className="tla-section-heading tla-profiles-heading">
+              <div><h2>Student learning profiles</h2><p>Open a profile to see the evidence and suggested next steps.</p></div>
             </div>
 
             {filteredStudents.length === 0 ? (

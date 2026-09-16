@@ -90,6 +90,7 @@ function TeacherStudentProfile() {
   const attendance = data?.attendance || {}
   const paperHistory = data?.recent_paper_assessments || []
   const attendanceHistory = data?.recent_attendance || []
+  const actions = data?.teacher_actions || []
 
   return (
     <div className="tla-page tla-profile-page">
@@ -132,6 +133,31 @@ function TeacherStudentProfile() {
           <strong>{summary.skipped_answers}</strong>
           <small>{summary.skip_percent}% of quiz questions</small>
         </article>
+      </section>
+
+      <section className="tla-panel tla-actions-panel">
+        <div className="tla-section-heading">
+          <div>
+            <h2>Suggested next steps</h2>
+            <p>Each suggestion uses recorded evidence. Talk with the student before deciding what support will help.</p>
+          </div>
+        </div>
+        {actions.length ? (
+          <div className="tla-actions-list">
+            {actions.map((action, index) => (
+              <article key={`${action.kind}-${index}`}>
+                <span className={`tla-action-kind tla-action-${action.kind}`}>{action.kind}</span>
+                <div>
+                  <h3>{action.title}</h3>
+                  <small>{action.evidence}</small>
+                  <p>{action.suggestion}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="tla-muted">No focused suggestion yet. Record more tagged quiz answers, published paper marks, or daily attendance and review this profile again.</p>
+        )}
       </section>
 
       <div className="tla-profile-grid">

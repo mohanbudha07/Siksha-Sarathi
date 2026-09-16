@@ -1368,6 +1368,134 @@ def fetch_student_attendance_metrics(cur, student_id, class_id):
     }
 
 
+def build_teacher_actions(topics, metrics, paper, attendance, subject):
+    """Suggest review steps from observed evidence, without predicting causes."""
+    actions = []
+    specific_topics = [
+        topic for topic in topics
+        if str(topic["topic"]).strip().casefold() not in
+        {"unspecified", str(subject).strip().casefold()}
+        and topic["total_questions"] >= 3
+        and topic["distinct_questions"] >= 2
+        and topic["accuracy_percent"] < 60
+    ]
+    for topic in specific_topics[:2]:
+        actions.append({
+            "kind": "topic",
+            "title": f'Review {topic["topic"]}',
+            "evidence": (
+                f'{topic["correct_answers"]}/{topic["total_questions"]} '
+                f'correct; {topic["skipped_answers"]} skipped'
+            ),
+            "suggestion": (
+                "Revisit the concept with a worked example, then give a "
+                "short practice quiz and check whether accuracy improves."
+            )
+        })
+
+    if metrics["total_questions"] >= 4 and metrics["skip_percent"] >= 25:
+        actions.append({
+            "kind": "quiz",
+            "title": "Check unanswered quiz questions",
+            "evidence": (
+                f'{metrics["skipped_answers"]}/{metrics["total_questions"]} '
+                "questions skipped"
+            ),
+            "suggestion": (
+                "Ask which questions were unclear and offer guided practice. "
+                "A skipped answer does not identify the reason."
+            )
+        })
+
+    if paper["graded_assessments"] >= 2 and paper["average_percent"] < 60:
+        actions.append({
+            "kind": "paper",
+            "title": "Review paper assessment work",
+            "evidence": (
+                f'{paper["average_percent"]}% across '
+                f'{paper["graded_assessments"]} graded assessments'
+            ),
+            "suggestion": (
+                "Compare marked answers with the lesson objectives and "
+                "discuss where the student needs support."
+            )
+        })
+
+    if attendance["recorded_days"] >= 5 and attendance["absent_days"] >= 2:
+        actions.append({
+            "kind": "attendance",
+            "title": "Follow up on missed school days",
+            "evidence": (
+                f'{attendance["absent_days"]} absences in '
+                f'{attendance["recorded_days"]} recorded days'
+            ),
+            "suggestion": (
+                "Check in privately and offer a way to catch up on missed lessons. "
+                "Attendance alone does not explain learning performance."
+            )
+        })
+
+    return actions
+
+
+def fetch_teacher_topic_priorities(cur, teacher_id):
+    cur.execute(
+        """
+        SELECT tcs.class_id, tcs.subject, qar.topic, s.id AS student_id,
+               s.full_name, COUNT(*) AS total_questions,
+               COUNT(DISTINCT qar.question_text) AS distinct_questions,
+               COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
+               COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
+        FROM teacher_class_subjects tcs
+        INNER JOIN student_class_enrollments sce
+            ON sce.class_id = tcs.class_id
+        INNER JOIN students s ON s.id = sce.student_id
+        INNER JOIN quiz_results qr ON qr.student_id = s.id
+        INNER JOIN quizzes q ON q.id = qr.quiz_id
+            AND LOWER(q.subject) = LOWER(tcs.subject)
+        INNER JOIN quiz_answer_results qar ON qar.quiz_result_id = qr.id
+        WHERE tcs.teacher_user_id = %s
+        GROUP BY tcs.class_id, tcs.subject, qar.topic, s.id, s.full_name
+        """,
+        (teacher_id,)
+    )
+    groups = {}
+    for row in cur.fetchall():
+        topic = str(row["topic"] or "").strip()
+        if topic.casefold() in {"", "unspecified", row["subject"].casefold()}:
+            continue
+        key = (row["class_id"], row["subject"], topic)
+        group = groups.setdefault(key, {
+            "class_id": row["class_id"], "subject": row["subject"],
+            "topic": topic, "total_questions": 0, "correct_answers": 0,
+            "skipped_answers": 0, "students_to_support": []
+        })
+        total = int(row["total_questions"] or 0)
+        correct = int(row["correct_answers"] or 0)
+        group["total_questions"] += total
+        group["correct_answers"] += correct
+        group["skipped_answers"] += int(row["skipped_answers"] or 0)
+        if total >= 3 and int(row["distinct_questions"] or 0) >= 2 \
+                and correct / total < 0.6:
+            group["students_to_support"].append({
+                "student_id": row["student_id"],
+                "full_name": row["full_name"]
+            })
+    priorities = []
+    for group in groups.values():
+        if group["total_questions"] < 3 or not group["students_to_support"]:
+            continue
+        group["accuracy_percent"] = round(
+            100 * group["correct_answers"] / group["total_questions"], 2
+        )
+        priorities.append(group)
+    priorities.sort(key=lambda item: (
+        -len(item["students_to_support"]), item["accuracy_percent"],
+        item["class_id"], item["subject"], item["topic"]
+    ))
+    return priorities[:10]
+
+
 @app.route("/api/teacher/learning-analytics", methods=["GET"])
 @login_required
 @role_required(TEACHER)
@@ -1413,6 +1541,10 @@ def teacher_learning_analytics_api():
         )
         student_rows = cur.fetchall()
 
+        topic_priorities = fetch_teacher_topic_priorities(
+            cur, session["user_id"]
+        )
+
         profiles = []
         for student in student_rows:
             metrics = fetch_student_subject_metrics(
@@ -1441,6 +1573,7 @@ def teacher_learning_analytics_api():
 
         return {
             "assignments": assignments,
+            "topic_priorities": topic_priorities,
             "statistics": {
                 "assigned_students": len(assigned_student_ids),
                 "student_subject_profiles": len(profiles),
@@ -1561,6 +1694,7 @@ def teacher_student_learning_profile_api(student_id):
             SELECT
                 qar.topic,
                 COUNT(*) AS total_questions,
+                COUNT(DISTINCT qar.question_text) AS distinct_questions,
                 COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
                 COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
             FROM quiz_answer_results qar
@@ -1578,8 +1712,16 @@ def teacher_student_learning_profile_api(student_id):
                 **row,
                 "attempts": 0
             })
-            topics.append({"topic": row["topic"], **topic_metrics})
+            topics.append({
+                "topic": row["topic"],
+                "distinct_questions": int(row["distinct_questions"] or 0),
+                **topic_metrics
+            })
         topics.sort(key=lambda item: (item["accuracy_percent"], -item["total_questions"]))
+
+        teacher_actions = build_teacher_actions(
+            topics, metrics, paper_metrics, attendance_metrics, subject
+        )
 
         cur.execute(
             """
@@ -1672,6 +1814,7 @@ def teacher_student_learning_profile_api(student_id):
             "recent_paper_assessments": recent_paper_assessments,
             "recent_attendance": recent_attendance,
             "topics": topics,
+            "teacher_actions": teacher_actions,
             "difficulties": difficulties,
             "recent_attempts": recent_attempts,
             "common_mistakes": common_mistakes

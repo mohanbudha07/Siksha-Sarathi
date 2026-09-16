@@ -457,6 +457,97 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(len(detail.json['recent_attendance']), 3)
         self.assertEqual(detail.json['recent_attendance'][0]['status'], 'absent')
 
+    def test_teacher_topic_priorities_and_actions_use_assigned_evidence(self):
+        questions = [dict(question) for question in self.questions]
+        questions[1]['topic'] = 'Force'
+        self.db.execute('UPDATE quizzes SET questions = ? WHERE id = 1',
+                        (json.dumps(questions),))
+        for _ in range(3):
+            self.assertEqual(self.submit({'0': 'B', '1': 'C'}).status_code, 200)
+        self.db.execute(
+            '''INSERT INTO quiz_results(id,student_id,quiz_id,score,total_questions)
+               VALUES(90,2,1,0,1)'''
+        )
+        self.db.execute(
+            '''INSERT INTO quiz_answer_results
+               (quiz_result_id,question_index,question_text,topic,difficulty,
+                is_correct,is_skipped) VALUES(90,0,'Outside?', 'Force', 'easy',0,0)'''
+        )
+        self.db.executemany(
+            '''INSERT INTO paper_assessments
+               (id,teacher_user_id,class_id,subject,title,assessment_type,
+                assessment_date,max_marks,is_published)
+               VALUES(?,2,1,'Science',?,'unit_test','2026-09-16',100,1)''',
+            [(1, 'Paper 1'), (2, 'Paper 2')]
+        )
+        self.db.executemany(
+            '''INSERT INTO paper_assessment_scores
+               (assessment_id,student_id,marks_obtained,is_absent)
+               VALUES(?,1,40,0)''', [(1,), (2,)]
+        )
+        self.db.executemany(
+            '''INSERT INTO attendance_sessions
+               (id,teacher_user_id,class_id,attendance_date) VALUES(?,2,1,?)''',
+            [(i, f'2026-09-{i + 10}') for i in range(1, 6)]
+        )
+        self.db.executemany(
+            '''INSERT INTO attendance_records
+               (attendance_session_id,student_id,status) VALUES(?,1,?)''',
+            [(i, 'absent' if i <= 2 else 'present') for i in range(1, 6)]
+        )
+        self.db.commit()
+
+        self.login('teacher')
+        overview = self.client.get('/api/teacher/learning-analytics')
+        self.assertEqual(overview.status_code, 200)
+        priorities = overview.json['topic_priorities']
+        self.assertEqual(len(priorities), 1)
+        self.assertEqual(priorities[0]['topic'], 'Force')
+        self.assertEqual(priorities[0]['total_questions'], 6)
+        self.assertEqual(priorities[0]['students_to_support'][0]['student_id'], 1)
+
+        profile = self.client.get(
+            '/api/teacher/students/1/learning-profile?subject=Science'
+        )
+        actions = {action['kind']: action for action in profile.json['teacher_actions']}
+        self.assertEqual(set(actions), {'topic', 'paper', 'attendance'})
+        self.assertIn('Force', actions['topic']['title'])
+        self.assertIn('2 absences', actions['attendance']['evidence'])
+        self.assertIn('40.0%', actions['paper']['evidence'])
+
+        self.login('other_teacher')
+        self.assertEqual(
+            self.client.get('/api/teacher/learning-analytics').json['topic_priorities'],
+            []
+        )
+        self.assertEqual(self.client.get(
+            '/api/teacher/students/1/learning-profile?subject=Science'
+        ).status_code, 404)
+
+    def test_sparse_quiz_data_does_not_create_topic_intervention(self):
+        self.assertEqual(self.submit({'0': 'B', '1': 'D'}).status_code, 200)
+        self.login('teacher')
+        overview = self.client.get('/api/teacher/learning-analytics')
+        profile = self.client.get(
+            '/api/teacher/students/1/learning-profile?subject=Science'
+        )
+        self.assertEqual(overview.json['topic_priorities'], [])
+        self.assertEqual(profile.json['teacher_actions'], [])
+
+    def test_repeating_one_question_does_not_create_topic_intervention(self):
+        for _ in range(3):
+            self.assertEqual(self.submit({'0': 'B', '1': 'D'}).status_code, 200)
+        self.login('teacher')
+        self.assertEqual(
+            self.client.get('/api/teacher/learning-analytics').json['topic_priorities'],
+            []
+        )
+        profile = self.client.get(
+            '/api/teacher/students/1/learning-profile?subject=Science'
+        )
+        self.assertFalse(any(action['kind'] == 'topic'
+                             for action in profile.json['teacher_actions']))
+
     def test_unassigned_teacher_cannot_access_student_learning_profile(self):
         self.login('other_teacher')
         overview = self.client.get('/api/teacher/learning-analytics')
