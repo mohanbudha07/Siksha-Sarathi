@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../api'
 import './Notes.css'
 
 function Notes() {
+  const [searchParams] = useSearchParams()
+  const subjectFilter = searchParams.get('subject') || ''
   const [notes, setNotes] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(searchParams.get('search') || '')
   const [selectedNote, setSelectedNote] = useState(null)
 
   useEffect(() => {
@@ -36,6 +39,9 @@ function Notes() {
   }, [selectedNote])
 
   const filteredNotes = notes.filter((note) => {
+    if (subjectFilter && note.subject?.toLowerCase() !== subjectFilter.toLowerCase()) {
+      return false
+    }
     const text = `
       ${note.title}
       ${note.subject}

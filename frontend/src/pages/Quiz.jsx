@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../api'
 import './Quiz.css'
 
@@ -8,6 +9,8 @@ const formatTime = (value) => new Intl.DateTimeFormat(undefined, {
 }).format(new Date(value))
 
 function Quiz() {
+  const [searchParams] = useSearchParams()
+  const requestedQuizId = searchParams.get('quiz_id')
   const [quizzes, setQuizzes] = useState([])
   const [labSessions, setLabSessions] = useState([])
   const [quiz, setQuiz] = useState(null)
@@ -34,7 +37,9 @@ function Quiz() {
         setLabSessions(sessionResponse.data.sessions || [])
 
         if (available.length) {
-          const firstId = String(available[0].id)
+          const firstId = String(
+            available.find((item) => String(item.id) === requestedQuizId)?.id || available[0].id
+          )
           setSelectedQuizId(firstId)
           const response = await api.get('/student/quiz', {
             params: { quiz_id: firstId },
@@ -49,7 +54,7 @@ function Quiz() {
       }
     }
     loadPage()
-  }, [])
+  }, [requestedQuizId])
 
   const handleQuizChange = async (event) => {
     const quizId = event.target.value

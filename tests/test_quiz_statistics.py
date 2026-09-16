@@ -304,6 +304,60 @@ class QuizStatisticsTests(unittest.TestCase):
         response = self.client.get('/api/teacher/dashboard')
         self.assertEqual(response.json['statistics']['average_quiz_score'], 0)
 
+    def test_student_practice_plan_requires_own_activity_and_student_role(self):
+        response = self.client.get('/api/student/practice-plan')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['topics'], [])
+
+        self.login('teacher')
+        self.assertEqual(self.client.get('/api/student/practice-plan').status_code, 403)
+        with self.client.session_transaction() as login_session:
+            login_session.clear()
+        self.assertEqual(self.client.get('/api/student/practice-plan').status_code, 401)
+
+    def test_student_practice_plan_links_only_matching_published_resources(self):
+        questions = [dict(question) for question in self.questions]
+        questions[1]['topic'] = 'Force'
+        self.db.execute('UPDATE quizzes SET questions=? WHERE id=1',
+                        (json.dumps(questions),))
+        self.db.executemany(
+            '''INSERT INTO notes(id,title,subject,chapter,content,created_at,uploaded_by)
+               VALUES(?,?,?,?,?,'2026-09-01',2)''',
+            [(1,'Force lesson','Science','Force and motion','Content'),
+             (2,'Other science lesson','Science','Electricity','Content'),
+             (3,'Other subject','Math','Force','Content')]
+        )
+        self.db.execute(
+            '''INSERT INTO quizzes(id,title,subject,questions,created_by,is_published,
+               created_at,requires_session) VALUES(2,'Lab Force','Science',?,2,1,
+               '2026-09-01',1)''', (json.dumps(questions),)
+        )
+        for _ in range(3):
+            self.assertEqual(self.submit({'0': 'B', '1': 'C'}).status_code, 200)
+        self.db.execute('''INSERT INTO quiz_results(id,student_id,quiz_id,score,total_questions)
+                           VALUES(90,2,1,0,1)''')
+        self.db.execute('''INSERT INTO quiz_answer_results(quiz_result_id,
+                           question_index,question_text,topic,difficulty,is_correct,
+                           is_skipped) VALUES(90,0,'Other student?','Force','easy',0,0)''')
+
+        response = self.client.get('/api/student/practice-plan')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json['topics']), 1)
+        topic = response.json['topics'][0]
+        self.assertEqual((topic['subject'], topic['topic']), ('Science', 'Force'))
+        self.assertEqual((topic['correct_answers'],topic['total_questions']), (0,6))
+        self.assertEqual([note['id'] for note in topic['notes']], [1])
+        self.assertEqual([quiz['id'] for quiz in topic['quizzes']], [1])
+        self.assertNotIn('correct_answer', topic)
+        self.assertEqual(set(topic['quizzes'][0]), {'id', 'title'})
+
+    def test_student_practice_plan_does_not_guess_from_one_repeated_question(self):
+        for _ in range(3):
+            self.assertEqual(self.submit({'0': 'B', '1': 'D'}).status_code, 200)
+        response = self.client.get('/api/student/practice-plan')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['topics'], [])
+
     def test_risk_counts_match_latest_prediction(self):
         self.db.executemany('INSERT INTO predictions(id,student_id,prediction) VALUES(?,?,?)',
                             [(1, 1, 'Needs Improvement'), (2, 1, 'Good'),

@@ -212,6 +212,43 @@
 
 /* Learning section */
 
+.student-plan-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 35px;
+  padding: 24px 28px;
+  border: 1px solid #c4b5fd;
+  border-radius: 18px;
+  background: #f4f0ff;
+}
+
+.student-plan-prompt h2 {
+  margin: 6px 0;
+  color: #331384;
+}
+
+.student-plan-prompt p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.student-plan-prompt button {
+  flex: 0 0 auto;
+  padding: 12px 17px;
+  border: 0;
+  border-radius: 10px;
+  background: #4f00ff;
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.student-plan-prompt button:hover { background: #3d00c7; }
+
 .section-heading {
   margin-bottom: 20px;
 }
@@ -330,6 +367,12 @@
 }
 
 @media (max-width: 700px) {
+  .student-plan-prompt {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 22px;
+  }
+
   .dashboard-header {
     padding: 20px;
     flex-direction: column;

@@ -10,6 +10,7 @@ import TeacherRegister from './pages/TeacherRegister'
 import StudentLayout from './components/StudentLayout'
 import TeacherLayout from './components/TeacherLayout'
 import StudentDashboard from './pages/StudentDashboard'
+import StudentPracticePlan from './pages/StudentPracticePlan'
 import Quiz from './pages/Quiz'
 import Notes from './pages/Notes'
 import Performance from './pages/Performance'
@@ -123,6 +124,9 @@ function App() {
         {/* Student routes */}
         <Route path="/student/dashboard" element={
           <StudentPage><StudentDashboard /></StudentPage>
+        } />
+        <Route path="/student/practice-plan" element={
+          <StudentPage><StudentPracticePlan /></StudentPage>
         } />
         <Route path="/student/quiz" element={
           <StudentPage><Quiz /></StudentPage>

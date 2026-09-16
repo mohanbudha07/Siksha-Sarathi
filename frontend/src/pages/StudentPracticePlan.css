@@ -1,0 +1,63 @@
+.practice-plan-page {
+  max-width: 1150px;
+  margin: 0 auto;
+  padding: 38px 28px 70px;
+  color: #1e293b;
+}
+.practice-plan-hero {
+  padding: 32px 36px;
+  border-radius: 22px;
+  background: linear-gradient(120deg, #371394, #7051c8);
+  color: white;
+}
+.practice-plan-hero > span { font-size: 12px; font-weight: 800; letter-spacing: 1.5px; color: #e8ddff; }
+.practice-plan-hero h1 { margin: 9px 0 12px; font-size: clamp(28px, 4vw, 40px); }
+.practice-plan-hero p { max-width: 730px; margin: 0; color: #eee8ff; line-height: 1.6; }
+.practice-plan-message, .practice-plan-empty, .practice-plan-card, .practice-plan-state {
+  margin-top: 22px;
+  padding: 23px 26px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: white;
+}
+.practice-plan-message { border-color: #ddd3f7; background: #f8f5ff; }
+.practice-plan-message p { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
+.practice-plan-message small, .practice-plan-evidence { color: #64748b; }
+.practice-plan-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 18px; }
+.practice-plan-card { margin-top: 22px; }
+.practice-plan-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+.practice-plan-rank { color: #5b35ae; font-size: 12px; font-weight: 800; letter-spacing: .6px; }
+.practice-plan-card h2 { margin: 8px 0 4px; font-size: 23px; }
+.practice-plan-score {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f1eaff;
+  color: #4f239b;
+  font-size: 12px;
+  font-weight: 800;
+}
+.practice-plan-evidence { font-size: 13px; }
+.practice-plan-card ol { padding-left: 23px; line-height: 1.7; }
+.practice-plan-card li { padding-left: 4px; margin: 7px 0; }
+.practice-plan-resources { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding-top: 15px; border-top: 1px solid #e2e8f0; }
+.practice-plan-resources h3 { margin: 0 0 8px; font-size: 14px; }
+.practice-plan-resources a, .practice-plan-empty a {
+  display: block;
+  margin: 8px 0;
+  color: #4f239b;
+  font-weight: 700;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.practice-plan-resources a:hover, .practice-plan-empty a:hover { text-decoration: underline; }
+.practice-plan-empty h2 { margin: 0 0 7px; }
+.practice-plan-empty p { color: #64748b; line-height: 1.6; }
+.practice-plan-empty > div { display: flex; flex-wrap: wrap; gap: 15px; }
+.practice-plan-error { color: #9f1239; background: #fff1f2; border-color: #fecdd3; }
+@media (max-width: 700px) {
+  .practice-plan-page { padding: 22px 16px 50px; }
+  .practice-plan-hero { padding: 26px 22px; }
+  .practice-plan-resources { grid-template-columns: 1fr; }
+  .practice-plan-card-heading { flex-direction: column; }
+}

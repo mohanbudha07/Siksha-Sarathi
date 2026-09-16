@@ -1,8 +1,20 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import api from '../api'
+import './StudentLayout.css'
+
+const links = [
+  { to: '/student/dashboard', label: 'Dashboard' },
+  { to: '/student/practice-plan', label: 'My Plan' },
+  { to: '/student/quiz', label: 'Quizzes' },
+  { to: '/student/notes', label: 'Notes' },
+  { to: '/student/performance', label: 'Performance' },
+  { to: '/student/ai', label: 'AI Assistant' },
+]
 
 function StudentLayout({ children }) {
   const navigate = useNavigate()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   const handleLogout = async () => {
     try {
@@ -15,75 +27,33 @@ function StudentLayout({ children }) {
   }
 
   return (
-    <div>
-      <nav
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '15px 30px',
-          background: '#2563eb',
-          color: 'white',
-        }}
-      >
-        <h2 style={{ margin: 0 }}>Siksha Sarathi</h2>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'center',
-          }}
+    <div className="student-shell">
+      <header className="student-site-header">
+        <NavLink className="student-brand" to="/student/dashboard">Siksha Sarathi</NavLink>
+        <button
+          className="student-menu-button"
+          type="button"
+          aria-label={menuOpen ? 'Close student menu' : 'Open student menu'}
+          aria-expanded={menuOpen}
+          aria-controls="student-site-nav"
+          onClick={() => setMenuOpen(!menuOpen)}
         >
-          <NavLink to="/student/dashboard" style={linkStyle}>
-            Dashboard
-          </NavLink>
-
-          <NavLink to="/student/performance" style={linkStyle}>
-            Performance
-          </NavLink>
-
-          <NavLink to="/student/quiz" style={linkStyle}>
-            Quizzes
-          </NavLink>
-
-          <NavLink to="/student/notes" style={linkStyle}>
-            Notes
-          </NavLink>
-
-          <NavLink to="/student/ai" style={linkStyle}>
-            AI Assistant
-          </NavLink>
-
-          <button
-            onClick={handleLogout}
-            style={{
-              marginLeft: '10px',
-              padding: '8px 14px',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              background: 'white',
-              color: '#2563eb',
-              fontWeight: '600',
-            }}
-          >
-            Logout
-          </button>
-        </div>
-      </nav>
-
+          {menuOpen ? '✕' : '☰'}
+        </button>
+        <nav id="student-site-nav" className={`student-site-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Student navigation">
+          {links.map((link) => (
+            <NavLink key={link.to} to={link.to}
+              className={({ isActive }) => isActive ? 'student-nav-link active' : 'student-nav-link'}
+              onClick={() => setMenuOpen(false)}>
+              {link.label}
+            </NavLink>
+          ))}
+          <button type="button" className="student-logout" onClick={handleLogout}>Logout</button>
+        </nav>
+      </header>
       <main>{children}</main>
     </div>
   )
 }
-
-const linkStyle = ({ isActive }) => ({
-  color: 'white',
-  textDecoration: 'none',
-  fontWeight: isActive ? 'bold' : 'normal',
-  padding: '8px 10px',
-  borderRadius: '6px',
-})
 
 export default StudentLayout

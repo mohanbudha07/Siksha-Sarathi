@@ -32,8 +32,8 @@ function StudentDashboard() {
 
       <header className="dashboard-header">
         <div>
-          <h1>Siksha Sarathi</h1>
-          <p>Student Learning Dashboard</p>
+          <h1>Your learning</h1>
+          <p>Keep practising one topic at a time.</p>
         </div>
 
         <div className="student-info">
@@ -153,6 +153,17 @@ function StudentDashboard() {
             </div>
           </section>
         )}
+
+        <section className="student-plan-prompt">
+          <div>
+            <span className="section-label">YOUR NEXT STEP</span>
+            <h2>Make a practice plan</h2>
+            <p>See topics to review from your recent quiz answers, with notes and practice quizzes when available.</p>
+          </div>
+          <button type="button" onClick={() => navigate('/student/practice-plan')}>
+            View my plan →
+          </button>
+        </section>
 
         {/* Learning activities */}
         <section className="section-heading">

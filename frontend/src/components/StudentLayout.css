@@ -1,0 +1,67 @@
+.student-shell { min-height: 100vh; background: #f8fafc; }
+.student-site-header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 68px;
+  padding: 12px max(22px, calc((100vw - 1250px) / 2));
+  background: #371394;
+  color: white;
+}
+.student-brand { color: white; font-size: 20px; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.student-site-nav { display: flex; align-items: center; gap: 4px; }
+.student-nav-link {
+  padding: 9px 10px;
+  border-radius: 9px;
+  color: #e8ddff;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.student-nav-link:hover, .student-nav-link.active { background: rgba(255,255,255,.15); color: white; }
+.student-logout {
+  margin-left: 8px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: white;
+  color: #371394;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.student-menu-button { display: none; }
+@media (max-width: 1000px) {
+  .student-site-header { min-height: 64px; padding: 12px 18px; }
+  .student-menu-button {
+    display: block;
+    border: 1px solid rgba(255,255,255,.4);
+    border-radius: 8px;
+    padding: 5px 11px;
+    background: transparent;
+    color: white;
+    font-size: 23px;
+    cursor: pointer;
+  }
+  .student-site-nav {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+    padding: 12px 18px 18px;
+    background: #371394;
+    box-shadow: 0 15px 25px rgba(20, 10, 55, .2);
+  }
+  .student-site-nav.is-open { display: flex; }
+  .student-nav-link { padding: 11px 12px; }
+  .student-logout { align-self: flex-start; margin: 9px 0 0; }
+}

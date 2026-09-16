@@ -688,6 +688,128 @@ def create_student_prediction():
 # STUDENT NOTES
 # ============================================================
 
+@app.route("/api/student/practice-plan", methods=["GET"])
+@login_required
+@role_required(STUDENT)
+def student_practice_plan_api():
+    """Suggest practice from the student's recent, tagged quiz answers."""
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute(
+            "SELECT id, full_name FROM students WHERE user_id = %s",
+            (session["user_id"],)
+        )
+        student = cur.fetchone()
+        if not student:
+            return {"error": "Student profile not found"}, 404
+
+        cur.execute(
+            """
+            SELECT q.subject, qar.topic,
+                   COUNT(*) AS total_questions,
+                   COUNT(DISTINCT qar.question_text) AS distinct_questions,
+                   COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
+                   COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
+            FROM (
+                SELECT id FROM quiz_results
+                WHERE student_id = %s ORDER BY id DESC LIMIT 10
+            ) recent
+            INNER JOIN quiz_answer_results qar
+                ON qar.quiz_result_id = recent.id
+            INNER JOIN quiz_results qr ON qr.id = recent.id
+            INNER JOIN quizzes q ON q.id = qr.quiz_id
+            GROUP BY q.subject, qar.topic
+            """,
+            (student["id"],)
+        )
+        rows = cur.fetchall()
+        priorities = []
+        for row in rows:
+            subject = str(row["subject"] or "").strip()
+            topic = str(row["topic"] or "").strip()
+            if not topic or topic.casefold() in {"unspecified", subject.casefold()}:
+                continue
+            total = int(row["total_questions"] or 0)
+            correct = int(row["correct_answers"] or 0)
+            if total < 3 or int(row["distinct_questions"] or 0) < 2:
+                continue
+            accuracy = round(100 * correct / total, 2)
+            if accuracy >= 60:
+                continue
+            priorities.append({
+                "subject": subject, "topic": topic,
+                "total_questions": total, "correct_answers": correct,
+                "skipped_answers": int(row["skipped_answers"] or 0),
+                "accuracy_percent": accuracy,
+                "steps": [
+                    f"Review your notes about {topic}.",
+                    "Try a short practice quiz and check your answers.",
+                    "Ask your teacher about questions you still find difficult."
+                ],
+                "notes": [], "quizzes": []
+            })
+        priorities.sort(key=lambda item: (
+            item["accuracy_percent"], -item["total_questions"],
+            item["subject"], item["topic"]
+        ))
+        priorities = priorities[:3]
+
+        if priorities:
+            cur.execute(
+                "SELECT id, title, subject, chapter FROM notes ORDER BY id DESC"
+            )
+            notes = cur.fetchall()
+            cur.execute(
+                """
+                SELECT id, title, subject, questions FROM quizzes
+                WHERE is_published = TRUE AND requires_session = FALSE
+                ORDER BY id DESC
+                """
+            )
+            quizzes = cur.fetchall()
+            for priority in priorities:
+                subject = priority["subject"].casefold()
+                topic = priority["topic"].casefold()
+                priority["notes"] = [
+                    {"id": note["id"], "title": note["title"],
+                     "chapter": note["chapter"]}
+                    for note in notes
+                    if str(note["subject"] or "").casefold() == subject
+                    and topic in str(note["chapter"] or "").casefold()
+                ][:2]
+                for quiz in quizzes:
+                    if str(quiz["subject"] or "").casefold() != subject:
+                        continue
+                    try:
+                        questions = parse_quiz_questions(
+                            quiz["questions"], quiz["subject"] or "General"
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                    if any(str(question["topic"]).casefold() == topic
+                           for question in questions):
+                        priority["quizzes"].append({
+                            "id": quiz["id"], "title": quiz["title"]
+                        })
+                    if len(priority["quizzes"]) >= 2:
+                        break
+
+        if priorities:
+            message = "Start with one topic, then check your progress with new questions."
+        elif rows:
+            message = (
+                "No clear topic to practise yet. Keep learning and try more "
+                "questions across different topics."
+            )
+        else:
+            message = (
+                "Take a practice quiz to start building a plan for your learning."
+            )
+        return {"message": message, "topics": priorities}, 200
+    finally:
+        cur.close()
+
+
 @app.route("/api/student/notes", methods=["GET"])
 @login_required
 @role_required(STUDENT)
