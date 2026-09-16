@@ -93,6 +93,17 @@ class QuizStatisticsTests(unittest.TestCase):
                 class_id INTEGER, created_by INTEGER, access_code_hash TEXT,
                 starts_at TEXT, ends_at TEXT, is_closed INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE paper_assessments(id INTEGER PRIMARY KEY,
+                teacher_user_id INTEGER, class_id INTEGER, subject TEXT,
+                title TEXT, assessment_type TEXT, assessment_date TEXT,
+                max_marks REAL, academic_year TEXT DEFAULT '', term TEXT DEFAULT '',
+                is_published INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE paper_assessment_scores(id INTEGER PRIMARY KEY,
+                assessment_id INTEGER, student_id INTEGER, marks_obtained REAL,
+                is_absent INTEGER DEFAULT 0, remarks TEXT DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE predictions(id INTEGER PRIMARY KEY, student_id INTEGER,
                 prediction TEXT, attendance REAL, assignment_score REAL,
                 quiz_score REAL, study_hours REAL);
@@ -716,6 +727,119 @@ class QuizStatisticsTests(unittest.TestCase):
             ).status_code,
             409
         )
+
+    def paper_assessment_payload(self, **overrides):
+        payload = {
+            'class_id': 1,
+            'subject': 'Science',
+            'title': 'First Terminal Examination',
+            'assessment_type': 'terminal_exam',
+            'assessment_date': '2026-09-16',
+            'max_marks': 50,
+            'academic_year': '2083 BS',
+            'term': 'First Term',
+            'is_published': False,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_teacher_can_create_record_and_delete_paper_assessment(self):
+        self.login('teacher')
+        response = self.client.post(
+            '/api/teacher/paper-assessments',
+            json=self.paper_assessment_payload()
+        )
+        self.assertEqual(response.status_code, 201)
+        assessment_id = response.json['assessment_id']
+
+        detail = self.client.get(
+            f'/api/teacher/paper-assessments/{assessment_id}'
+        )
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json['assessment']['class_name'], 'Grade 10')
+        self.assertEqual(detail.json['students'][0]['student_id'], 1)
+        self.assertIsNone(detail.json['students'][0]['marks_obtained'])
+
+        saved = self.client.put(
+            f'/api/teacher/paper-assessments/{assessment_id}/scores',
+            json={'scores': [{
+                'student_id': 1,
+                'marks_obtained': 42,
+                'is_absent': False,
+                'remarks': 'Good progress',
+            }]}
+        )
+        self.assertEqual(saved.status_code, 200)
+        detail = self.client.get(
+            f'/api/teacher/paper-assessments/{assessment_id}'
+        )
+        self.assertEqual(detail.json['students'][0]['percentage'], 84)
+        self.assertEqual(detail.json['students'][0]['remarks'], 'Good progress')
+
+        invalid_update = self.client.put(
+            f'/api/teacher/paper-assessments/{assessment_id}',
+            json=self.paper_assessment_payload(max_marks=40)
+        )
+        self.assertEqual(invalid_update.status_code, 409)
+
+        listing = self.client.get('/api/teacher/paper-assessments')
+        self.assertEqual(listing.json['assessments'][0]['recorded_students'], 1)
+        self.assertEqual(
+            self.client.delete(
+                f'/api/teacher/paper-assessments/{assessment_id}'
+            ).status_code,
+            200
+        )
+
+    def test_paper_assessment_scores_validate_marks_absence_and_enrollment(self):
+        self.login('teacher')
+        assessment_id = self.client.post(
+            '/api/teacher/paper-assessments',
+            json=self.paper_assessment_payload()
+        ).json['assessment_id']
+        scores_url = f'/api/teacher/paper-assessments/{assessment_id}/scores'
+
+        self.assertEqual(self.client.put(scores_url, json={'scores': [{
+            'student_id': 1, 'marks_obtained': 51
+        }]}).status_code, 400)
+        self.assertEqual(self.client.put(scores_url, json={'scores': [{
+            'student_id': 2, 'marks_obtained': 40
+        }]}).status_code, 400)
+        response = self.client.put(scores_url, json={'scores': [{
+            'student_id': 1, 'marks_obtained': 50,
+            'is_absent': True, 'remarks': 'Medical leave'
+        }]})
+        self.assertEqual(response.status_code, 200)
+        row = self.db.execute(
+            'SELECT marks_obtained,is_absent FROM paper_assessment_scores'
+        ).fetchone()
+        self.assertEqual(tuple(row), (None, 1))
+
+    def test_paper_assessment_is_scoped_to_assigned_teacher(self):
+        self.login('other_teacher')
+        self.assertEqual(self.client.post(
+            '/api/teacher/paper-assessments',
+            json=self.paper_assessment_payload()
+        ).status_code, 404)
+
+        self.login('teacher')
+        assessment_id = self.client.post(
+            '/api/teacher/paper-assessments',
+            json=self.paper_assessment_payload()
+        ).json['assessment_id']
+        self.login('other_teacher')
+        self.assertEqual(self.client.get(
+            f'/api/teacher/paper-assessments/{assessment_id}'
+        ).status_code, 404)
+
+    def test_paper_assessment_management_requires_teacher_role(self):
+        for role in ['student', 'admin']:
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(
+                    self.client.get('/api/teacher/paper-assessments').status_code,
+                    403
+                )
 
     def test_teacher_can_read_update_and_delete_own_note(self):
         self.db.execute(

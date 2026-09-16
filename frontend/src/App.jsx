@@ -24,6 +24,8 @@ import TeacherQuizEditor from './pages/TeacherQuizEditor'
 import TeacherLearningAnalytics from './pages/TeacherLearningAnalytics'
 import TeacherStudentProfile from './pages/TeacherStudentProfile'
 import TeacherLabQuizzes from './pages/TeacherLabQuizzes'
+import TeacherAssessments from './pages/TeacherAssessments'
+import TeacherAssessmentScores from './pages/TeacherAssessmentScores'
 
 // ---------- Auth Context Helper ----------
 function useAuthCheck() {
@@ -163,6 +165,14 @@ function App() {
 
         <Route path="/teacher/lab-quizzes" element={
           <TeacherPage><TeacherLabQuizzes /></TeacherPage>
+        } />
+
+        <Route path="/teacher/assessments" element={
+          <TeacherPage><TeacherAssessments /></TeacherPage>
+        } />
+
+        <Route path="/teacher/assessments/:assessmentId/scores" element={
+          <TeacherPage><TeacherAssessmentScores /></TeacherPage>
         } />
 
         <Route path="/teacher/analytics" element={

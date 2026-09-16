@@ -1,0 +1,76 @@
+.paper-assessments-page, .paper-scores-page { min-height: calc(100vh - 70px); padding: 34px 40px 60px; background: #f8fafc; color: #172033; }
+.paper-assessments-page > *, .paper-scores-page > * { max-width: 1180px; margin-left: auto; margin-right: auto; }
+.paper-assessment-hero, .paper-score-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 30px 34px; margin-bottom: 22px; border-radius: 20px; background: linear-gradient(135deg, #7c2d12, #c2410c); color: white; box-shadow: 0 14px 30px rgba(194, 65, 12, .18); }
+.paper-assessment-hero p, .paper-score-hero p { margin: 0 0 8px; color: #ffedd5; font-size: 12px; font-weight: 800; letter-spacing: 1.5px; }
+.paper-assessment-hero h1, .paper-score-hero h1 { margin: 0 0 8px; font-size: 32px; }
+.paper-assessment-hero span, .paper-score-hero > div > span { color: #fff7ed; line-height: 1.55; }
+.paper-assessment-hero button { flex: 0 0 auto; border: 0; border-radius: 10px; padding: 12px 17px; background: white; color: #9a3412; font-weight: 800; cursor: pointer; }
+.paper-assessment-error, .paper-assessment-success { padding: 14px 18px; margin-bottom: 18px; border-radius: 12px; }
+.paper-assessment-error { border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
+.paper-assessment-success { border: 1px solid #a7f3d0; background: #ecfdf5; color: #065f46; }
+.paper-assessment-form, .paper-assessment-list-section, .paper-marks-section { padding: 25px; margin-bottom: 22px; border: 1px solid #e2e8f0; border-radius: 17px; background: white; box-shadow: 0 5px 16px rgba(15, 23, 42, .04); }
+.paper-form-heading, .paper-list-heading, .paper-marks-heading, .paper-save-bar { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.paper-form-heading, .paper-list-heading, .paper-marks-heading { margin-bottom: 20px; }
+.paper-form-heading h2, .paper-list-heading h2, .paper-marks-heading h2 { margin: 0 0 5px; font-size: 21px; }
+.paper-form-heading p, .paper-list-heading p, .paper-marks-heading p { margin: 0; color: #64748b; font-size: 13px; }
+.paper-form-heading > span, .paper-marks-heading > span { padding: 6px 10px; border-radius: 999px; background: #fff7ed; color: #9a3412; font-size: 11px; font-weight: 800; }
+.paper-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.paper-form-grid label { display: grid; gap: 7px; color: #334155; font-size: 13px; font-weight: 700; }
+.paper-form-grid input, .paper-form-grid select { width: 100%; box-sizing: border-box; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 9px; background: white; color: #172033; font: inherit; }
+.paper-form-grid input:focus, .paper-form-grid select:focus { outline: 3px solid #ffedd5; border-color: #ea580c; }
+.paper-primary-button { border: 0; border-radius: 10px; padding: 12px 18px; background: #c2410c; color: white; font-weight: 800; cursor: pointer; }
+.paper-assessment-form > .paper-primary-button { margin-top: 19px; }
+.paper-primary-button:disabled { opacity: .55; cursor: not-allowed; }
+.paper-form-warning { color: #b45309; font-size: 13px; }
+.paper-list-heading button { border: 1px solid #fed7aa; border-radius: 9px; padding: 9px 14px; background: #fff7ed; color: #9a3412; font-weight: 800; cursor: pointer; }
+.paper-empty-state { display: grid; gap: 7px; padding: 45px 25px; border-radius: 12px; background: #f8fafc; color: #64748b; text-align: center; }
+.paper-empty-state strong { color: #334155; font-size: 18px; }
+.paper-assessment-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.paper-assessment-card { display: flex; flex-direction: column; padding: 20px; border: 1px solid #e2e8f0; border-radius: 14px; background: white; }
+.paper-card-top, .paper-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+.paper-type-badge, .paper-published, .paper-draft { padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: capitalize; }
+.paper-type-badge { background: #fff7ed; color: #9a3412; }
+.paper-published { background: #dcfce7; color: #15803d; }
+.paper-draft { background: #f1f5f9; color: #475569; }
+.paper-assessment-card h3 { margin: 17px 0 5px; font-size: 18px; line-height: 1.4; }
+.paper-assessment-card > p { margin: 0 0 15px; color: #64748b; font-size: 13px; }
+.paper-assessment-card dl { display: grid; gap: 8px; margin: auto 0 18px; }
+.paper-assessment-card dl div { display: flex; justify-content: space-between; gap: 12px; }
+.paper-assessment-card dt { color: #64748b; font-size: 12px; }
+.paper-assessment-card dd { margin: 0; color: #334155; font-size: 12px; font-weight: 700; text-align: right; }
+.paper-card-actions button { flex: 1; padding: 9px; border: 0; border-radius: 8px; background: #c2410c; color: white; font-weight: 700; cursor: pointer; }
+.paper-card-actions .paper-delete-button { flex: 0 0 auto; border: 1px solid #fecaca; background: white; color: #b91c1c; }
+.paper-back-button { display: block; margin-bottom: 14px; border: 0; background: transparent; color: #9a3412; font-weight: 800; cursor: pointer; }
+.paper-publish-toggle { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 11px; background: rgba(255,255,255,.14); cursor: pointer; }
+.paper-publish-toggle input { width: 19px; height: 19px; accent-color: #fed7aa; }
+.paper-publish-toggle > span { display: grid; gap: 2px; }
+.paper-publish-toggle small { color: #ffedd5; }
+.paper-score-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; margin-bottom: 20px; }
+.paper-score-summary article { display: flex; align-items: center; justify-content: space-between; padding: 17px 19px; border: 1px solid #e2e8f0; border-radius: 12px; background: white; }
+.paper-score-summary span { color: #64748b; font-size: 13px; }
+.paper-score-summary strong { color: #9a3412; font-size: 22px; }
+.paper-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 12px; }
+.paper-marks-table { width: 100%; border-collapse: collapse; min-width: 930px; }
+.paper-marks-table th { padding: 12px; background: #fff7ed; color: #7c2d12; font-size: 12px; text-align: left; }
+.paper-marks-table td { padding: 12px; border-top: 1px solid #e2e8f0; color: #334155; }
+.paper-marks-table td:nth-child(2) { display: grid; gap: 3px; min-width: 150px; }
+.paper-marks-table td:nth-child(2) small { color: #94a3b8; }
+.paper-marks-table input { box-sizing: border-box; padding: 9px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+.paper-mark-input { width: 115px; }
+.paper-remark-input { width: 100%; min-width: 180px; }
+.paper-marks-table input:focus { outline: 3px solid #ffedd5; border-color: #ea580c; }
+.paper-marks-table input:disabled { background: #f1f5f9; color: #94a3b8; }
+.paper-absent-row { background: #f8fafc; }
+.paper-absent-check { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.paper-absent-check input { width: 17px; height: 17px; accent-color: #c2410c; }
+.paper-percent { display: inline-block; min-width: 48px; padding: 5px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; text-align: center; }
+.paper-percent.good { background: #dcfce7; color: #15803d; }
+.paper-percent.developing { background: #fef3c7; color: #b45309; }
+.paper-percent.low { background: #fee2e2; color: #b91c1c; }
+.paper-percent.empty { background: #f1f5f9; color: #64748b; }
+.paper-save-bar { padding-top: 20px; }
+.paper-save-bar p { margin: 0; color: #64748b; font-size: 13px; }
+.paper-page-state { min-height: 65vh; display: grid; place-items: center; color: #64748b; }
+.paper-state-error { color: #991b1b; }
+@media (max-width: 950px) { .paper-assessment-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .paper-score-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) { .paper-assessments-page, .paper-scores-page { padding: 20px 15px 45px; } .paper-assessment-hero, .paper-score-hero, .paper-form-heading, .paper-list-heading, .paper-marks-heading, .paper-save-bar { align-items: flex-start; flex-direction: column; } .paper-form-grid, .paper-assessment-grid { grid-template-columns: 1fr; } .paper-score-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .paper-score-summary article { align-items: flex-start; flex-direction: column; gap: 5px; } }

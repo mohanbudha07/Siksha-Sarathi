@@ -97,3 +97,13 @@ submit only once. Access codes are stored as password hashes.
 Lab quizzes are removed from the ordinary practice list. Quiz questions may
 include curriculum_code and cognitive_level for improved learning analytics.
 Network or computer failures must not be recorded as zero marks.
+
+## Paper assessment migration
+
+Migration 006 adds teacher-managed paper assessments and student marks.
+
+    sudo mysql siksha_sarathi < migrations/006_paper_assessments.sql
+
+Teachers can create assessments only for assigned classes and subjects. Marks,
+absence status, and teacher remarks are recorded separately for each student.
+Draft results can be reviewed before being published.

@@ -51,6 +51,10 @@ function TeacherLayout({ children }) {
             Lab Quizzes
           </NavLink>
 
+          <NavLink to="/teacher/assessments" style={linkStyle}>
+            Assessments
+          </NavLink>
+
           <NavLink to="/teacher/analytics" style={linkStyle}>
             Learning Analytics
           </NavLink>
