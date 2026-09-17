@@ -120,8 +120,8 @@ function TeacherStudentProfile() {
         </article>
         <article>
           <span>Paper assessments</span>
-          <strong>{paper.recorded_assessments ? `${paper.average_percent}%` : '—'}</strong>
-          <small>{paper.recorded_assessments || 0} published records</small>
+          <strong>{paper.graded_assessments ? `${paper.average_percent}%` : '—'}</strong>
+          <small>{paper.recorded_assessments || 0} recorded entries</small>
         </article>
         <article>
           <span>Daily attendance</span>

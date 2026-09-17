@@ -493,6 +493,7 @@ class QuizStatisticsTests(unittest.TestCase):
         profile = overview.json['students'][0]
         self.assertEqual(profile['paper_assessments']['average_percent'], 80)
         self.assertEqual(profile['paper_assessments']['recorded_assessments'], 2)
+        self.assertEqual(profile['paper_assessments']['graded_assessments'], 1)
         self.assertEqual(profile['paper_assessments']['absent_assessments'], 1)
         self.assertEqual(profile['attendance']['attendance_percent'], 66.67)
         self.assertEqual(profile['attendance']['late_days'], 1)
@@ -510,6 +511,58 @@ class QuizStatisticsTests(unittest.TestCase):
         )
         self.assertEqual(len(detail.json['recent_attendance']), 3)
         self.assertEqual(detail.json['recent_attendance'][0]['status'], 'absent')
+
+    def test_ungraded_paper_marks_do_not_count_as_graded_or_trigger_action(self):
+        self.db.executemany(
+            '''INSERT INTO paper_assessments
+               (id,teacher_user_id,class_id,subject,title,assessment_type,
+                assessment_date,max_marks,is_published)
+               VALUES(?,2,1,'Science',?,'unit_test','2026-09-16',100,1)''',
+            [(1, 'Marked'), (2, 'Awaiting marks'), (3, 'Absent')]
+        )
+        self.db.executemany(
+            '''INSERT INTO paper_assessment_scores
+               (assessment_id,student_id,marks_obtained,is_absent)
+               VALUES(?,1,?,?)''',
+            [(1, 40, 0), (2, None, 0), (3, None, 1)]
+        )
+        self.db.commit()
+        self.login('teacher')
+
+        overview = self.client.get('/api/teacher/learning-analytics')
+        self.assertEqual(overview.status_code, 200)
+        paper = overview.json['students'][0]['paper_assessments']
+        self.assertEqual(paper['recorded_assessments'], 3)
+        self.assertEqual(paper['graded_assessments'], 1)
+        self.assertEqual(paper['absent_assessments'], 1)
+        self.assertEqual(paper['average_percent'], 40)
+
+        url = '/api/teacher/students/1/learning-profile?subject=Science'
+        profile = self.client.get(url)
+        self.assertEqual(profile.status_code, 200)
+        self.assertFalse(any(action['kind'] == 'paper'
+                             for action in profile.json['teacher_actions']))
+
+        self.db.execute(
+            '''UPDATE paper_assessment_scores
+               SET marks_obtained = 30 WHERE assessment_id = 2'''
+        )
+        self.db.commit()
+        profile = self.client.get(url)
+        self.assertEqual(profile.json['paper_assessments']['graded_assessments'], 2)
+        self.assertTrue(any(action['kind'] == 'paper'
+                            for action in profile.json['teacher_actions']))
+
+        self.db.execute(
+            '''UPDATE paper_assessment_scores SET marks_obtained = NULL
+               WHERE assessment_id IN (1, 2)'''
+        )
+        self.db.commit()
+        profile = self.client.get(url)
+        self.assertEqual(profile.json['paper_assessments']['graded_assessments'], 0)
+        self.assertEqual(profile.json['paper_assessments']['average_percent'], 0)
+        self.assertFalse(any(action['kind'] == 'paper'
+                             for action in profile.json['teacher_actions']))
 
     def test_teacher_topic_priorities_and_actions_use_assigned_evidence(self):
         questions = [dict(question) for question in self.questions]

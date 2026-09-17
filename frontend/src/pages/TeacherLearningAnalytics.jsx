@@ -322,7 +322,7 @@ function TeacherLearningAnalytics() {
                             {student.attempts} attempts · {student.skip_percent}% skipped
                           </small>
                         </td>
-                        <td><strong>{student.paper_assessments?.recorded_assessments ? `${student.paper_assessments.average_percent}%` : '—'}</strong><small className="tla-cell-note">{student.paper_assessments?.recorded_assessments || 0} published records</small></td>
+                        <td><strong>{student.paper_assessments?.graded_assessments ? `${student.paper_assessments.average_percent}%` : '—'}</strong><small className="tla-cell-note">{student.paper_assessments?.recorded_assessments || 0} recorded entries</small></td>
                         <td><strong>{student.attendance?.recorded_days ? `${student.attendance.attendance_percent}%` : '—'}</strong><small className="tla-cell-note">{student.attendance?.recorded_days || 0} school days</small></td>
                         <td><span className={statusClass(student.status)}>{student.status}</span></td>
                         <td>

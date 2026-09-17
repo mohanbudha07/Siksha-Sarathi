@@ -1422,6 +1422,9 @@ def fetch_student_paper_metrics(
         """
         SELECT
             COUNT(CASE WHEN pas.id IS NOT NULL THEN 1 END) AS recorded_assessments,
+            COUNT(CASE
+                WHEN pas.is_absent = FALSE AND pas.marks_obtained IS NOT NULL
+                THEN 1 END) AS graded_assessments,
             COALESCE(SUM(CASE WHEN pas.is_absent = TRUE THEN 1 ELSE 0 END), 0)
                 AS absent_assessments,
             COALESCE(SUM(CASE
@@ -1447,7 +1450,7 @@ def fetch_student_paper_metrics(
     maximum = float(row["maximum_marks"] or 0)
     return {
         "recorded_assessments": recorded,
-        "graded_assessments": max(recorded - absent, 0),
+        "graded_assessments": int(row["graded_assessments"] or 0),
         "absent_assessments": absent,
         "marks_obtained": round(marks, 2),
         "maximum_marks": round(maximum, 2),
