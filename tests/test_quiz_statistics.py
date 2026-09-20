@@ -1,6 +1,7 @@
 """Exercise real Flask routes without a running MySQL server or ML artifacts."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -192,6 +193,18 @@ class QuizStatisticsTests(unittest.TestCase):
     def submit(self, answers):
         return self.client.post('/api/student/quiz/submit',
                                 json={'quiz_id': 1, 'answers': answers})
+
+    def test_environment_boolean_parser_uses_explicit_true_values(self):
+        for value in ('1', 'true', 'TRUE', 'yes', 'on'):
+            with self.subTest(value=value), patch.dict(
+                os.environ, {'SIKSHA_TEST_FLAG': value}
+            ):
+                self.assertTrue(self.backend.env_flag('SIKSHA_TEST_FLAG'))
+        for value in ('0', 'false', 'no', 'off', 'unexpected'):
+            with self.subTest(value=value), patch.dict(
+                os.environ, {'SIKSHA_TEST_FLAG': value}
+            ):
+                self.assertFalse(self.backend.env_flag('SIKSHA_TEST_FLAG'))
 
     def quiz_payload(self, **overrides):
         payload = {

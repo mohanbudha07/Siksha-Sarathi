@@ -2,13 +2,13 @@ import os
 
 class Config:
     # Flask Settings
-    SECRET_KEY = "SikshaSarathi@2026_FYP"
+    SECRET_KEY = os.getenv("SECRET_KEY")
 
     # MySQL Configuration
-    MYSQL_HOST = "localhost"
-    MYSQL_USER = "root"
-    MYSQL_PASSWORD = ""  # Empty if using auth_socket
-    MYSQL_DB = "siksha_sarathi"
+    MYSQL_HOST = os.getenv("MYSQL_HOST", "localhost")
+    MYSQL_USER = os.getenv("MYSQL_USER", "siksha_user")
+    MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
+    MYSQL_DB = os.getenv("MYSQL_DB", "siksha_sarathi")
     MYSQL_CURSORCLASS = "DictCursor"
 
     # Base Directory
@@ -48,4 +48,6 @@ class Config:
     }
 
     # Flask Debug Mode
-    DEBUG = True
+    DEBUG = os.getenv("FLASK_DEBUG", "false").strip().lower() in {
+        "1", "true", "yes", "on"
+    }

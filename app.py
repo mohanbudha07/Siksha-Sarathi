@@ -6,6 +6,7 @@ from flask_cors import CORS
 
 import os
 import json
+import secrets
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
@@ -16,30 +17,53 @@ load_dotenv()
 # APPLICATION CONFIGURATION
 # ============================================================
 
+def env_flag(name, default=False):
+    """Read a boolean environment variable without accepting ambiguous values."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 app = Flask(__name__)
+app_environment = os.getenv("APP_ENV", "development").strip().lower()
+is_production = app_environment == "production"
+
+default_cors_origins = "http://localhost:5173,http://localhost:5174"
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", default_cors_origins).split(",")
+    if origin.strip()
+]
 
 CORS(
     app,
-    origins=[
-        "http://localhost:5173",
-        "http://localhost:5174"
-    ],
+    origins=cors_origins,
     supports_credentials=True
 )
 
-# Secret key (prefer environment variable)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-this-in-production-2026")
-app.secret_key = app.config["SECRET_KEY"]   # keep this for compatibility
+# A production deployment must provide a stable, private signing key. Local
+# development receives an ephemeral key instead of an unsafe shared default.
+secret_key = os.getenv("SECRET_KEY", "").strip()
+if not secret_key:
+    if is_production:
+        raise RuntimeError("SECRET_KEY is required when APP_ENV=production")
+    secret_key = secrets.token_hex(32)
+app.config["SECRET_KEY"] = secret_key
 
 # Session cookie settings (important for React + credentials)
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SAMESITE"] = os.getenv(
+    "SESSION_COOKIE_SAMESITE", "Lax"
+)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-# app.config["SESSION_COOKIE_SECURE"] = True   # enable later when using HTTPS
+app.config["SESSION_COOKIE_SECURE"] = env_flag(
+    "SESSION_COOKIE_SECURE", default=is_production
+)
 
 # MySQL Configuration (prefer environment variables)
 app.config["MYSQL_HOST"] = os.getenv("MYSQL_HOST", "localhost")
 app.config["MYSQL_USER"] = os.getenv("MYSQL_USER", "siksha_user")
-app.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "Siksha123!")
+app.config["MYSQL_PASSWORD"] = os.getenv("MYSQL_PASSWORD", "")
 app.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "siksha_sarathi")
 app.config["MYSQL_CURSORCLASS"] = "DictCursor"
 
@@ -4498,7 +4522,7 @@ def admin_dashboard_api():
 if __name__ == "__main__":
 
     app.run(
-        host="127.0.0.1",
-        port=5000,
-        debug=True
+        host=os.getenv("FLASK_HOST", "127.0.0.1"),
+        port=int(os.getenv("FLASK_PORT", "5000")),
+        debug=env_flag("FLASK_DEBUG", default=False)
     )

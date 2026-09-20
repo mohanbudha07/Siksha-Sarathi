@@ -169,7 +169,7 @@ def main():
     load_dotenv()
     connection = MySQLdb.connect(host=os.getenv("MYSQL_HOST", "localhost"),
                                  user=os.getenv("MYSQL_USER", "siksha_user"),
-                                 passwd=os.getenv("MYSQL_PASSWORD", "Siksha123!"),
+                                 passwd=os.getenv("MYSQL_PASSWORD", ""),
                                  db=os.getenv("MYSQL_DB", "siksha_sarathi"),
                                  cursorclass=DictCursor)
     try:
