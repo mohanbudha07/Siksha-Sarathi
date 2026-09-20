@@ -6,7 +6,6 @@ from flask_cors import CORS
 
 import os
 import json
-import joblib
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
@@ -45,28 +44,6 @@ app.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "siksha_sarathi")
 app.config["MYSQL_CURSORCLASS"] = "DictCursor"
 
 mysql = MySQL(app)
-
-
-# ============================================================
-# MACHINE LEARNING MODEL
-# ============================================================
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-MODEL_PATH = os.path.join(
-    BASE_DIR,
-    "ml",
-    "performance_model.pkl"
-)
-
-LABEL_ENCODER_PATH = os.path.join(
-    BASE_DIR,
-    "ml",
-    "label_encoder.pkl"
-)
-
-model = joblib.load(MODEL_PATH)
-label_encoder = joblib.load(LABEL_ENCODER_PATH)
 
 
 # ============================================================
@@ -456,236 +433,14 @@ def student_dashboard_api():
             2
         )
 
-        # ----------------------------------------------------
-        # Latest ML prediction
-        # ----------------------------------------------------
-
-        cur.execute(
-            """
-            SELECT
-                prediction,
-                attendance,
-                assignment_score,
-                quiz_score,
-                study_hours
-            FROM predictions
-            WHERE student_id = %s
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (student_id,)
-        )
-
-        prediction = cur.fetchone()
-
         return {
             "student": student,
             "stats": {
                 "total_notes": total_notes,
                 "completed_quizzes": completed_quizzes,
                 "average_quiz_score": average_score
-            },
-            "prediction": prediction
-        }, 200
-
-    finally:
-
-        cur.close()
-
-
-# ============================================================
-# STUDENT PERFORMANCE / ML PREDICTION
-# ============================================================
-
-@app.route("/api/student/prediction", methods=["GET"])
-@login_required
-@role_required(STUDENT)
-def get_student_prediction():
-
-    cur = mysql.connection.cursor()
-
-    try:
-
-        cur.execute(
-            """
-            SELECT
-                p.id,
-                p.attendance,
-                p.assignment_score,
-                p.quiz_score,
-                p.study_hours,
-                p.prediction
-            FROM predictions p
-            INNER JOIN students s
-                ON p.student_id = s.id
-            WHERE s.user_id = %s
-            ORDER BY p.id DESC
-            LIMIT 1
-            """,
-            (session["user_id"],)
-        )
-
-        prediction = cur.fetchone()
-
-        return {
-            "prediction": prediction
-        }, 200
-
-    finally:
-
-        cur.close()
-
-
-@app.route("/api/student/prediction", methods=["POST"])
-@login_required
-@role_required(STUDENT)
-def create_student_prediction():
-
-    data = request.get_json(silent=True)
-
-    if not data:
-        return {
-            "error": "Prediction data is required"
-        }, 400
-
-    try:
-
-        attendance = float(data.get("attendance"))
-        assignment_score = float(data.get("assignment_score"))
-        quiz_score = float(data.get("quiz_score"))
-        study_hours = float(data.get("study_hours"))
-
-    except (TypeError, ValueError):
-
-        return {
-            "error": "Attendance, assignment score, quiz score, and study hours must be numbers"
-        }, 400
-
-    # --------------------------------------------------------
-    # Validate values
-    # --------------------------------------------------------
-
-    if not 0 <= attendance <= 100:
-        return {
-            "error": "Attendance must be between 0 and 100"
-        }, 400
-
-    if not 0 <= assignment_score <= 100:
-        return {
-            "error": "Assignment score must be between 0 and 100"
-        }, 400
-
-    if not 0 <= quiz_score <= 100:
-        return {
-            "error": "Quiz score must be between 0 and 100"
-        }, 400
-
-    if study_hours < 0:
-        return {
-            "error": "Study hours cannot be negative"
-        }, 400
-
-    # --------------------------------------------------------
-    # ML prediction
-    # --------------------------------------------------------
-
-    prediction_result = model.predict(
-        [[
-            attendance,
-            assignment_score,
-            quiz_score,
-            study_hours
-        ]]
-    )
-
-    prediction = label_encoder.inverse_transform(
-        prediction_result
-    )[0]
-
-    # --------------------------------------------------------
-    # Find student
-    # --------------------------------------------------------
-
-    cur = mysql.connection.cursor()
-
-    try:
-
-        cur.execute(
-            """
-            SELECT id
-            FROM students
-            WHERE user_id = %s
-            """,
-            (session["user_id"],)
-        )
-
-        student = cur.fetchone()
-
-        if not student:
-
-            return {
-                "error": "Student profile not found"
-            }, 404
-
-        student_id = student["id"]
-
-        # ----------------------------------------------------
-        # Save prediction
-        # ----------------------------------------------------
-
-        cur.execute(
-            """
-            INSERT INTO predictions
-            (
-                student_id,
-                attendance,
-                assignment_score,
-                quiz_score,
-                study_hours,
-                prediction
-            )
-            VALUES
-            (
-                %s,
-                %s,
-                %s,
-                %s,
-                %s,
-                %s
-            )
-            """,
-            (
-                student_id,
-                attendance,
-                assignment_score,
-                quiz_score,
-                study_hours,
-                prediction
-            )
-        )
-
-        mysql.connection.commit()
-
-        return {
-            "message": "Prediction generated successfully",
-            "prediction": {
-                "result": prediction,
-                "attendance": attendance,
-                "assignment_score": assignment_score,
-                "quiz_score": quiz_score,
-                "study_hours": study_hours
             }
-        }, 201
-
-    except Exception as e:
-
-        mysql.connection.rollback()
-
-        print("Prediction error:", e)
-
-        return {
-            "error": "Prediction failed"
-        }, 500
+        }, 200
 
     finally:
 
@@ -4704,33 +4459,6 @@ def admin_dashboard_api():
         total_quiz_attempts = cur.fetchone()["total_quiz_attempts"]
 
         # ----------------------------------------------------
-        # ML predictions
-        # ----------------------------------------------------
-        cur.execute("""
-            SELECT COUNT(*) AS total_predictions
-            FROM predictions
-        """)
-
-        total_predictions = cur.fetchone()["total_predictions"]
-
-        # ----------------------------------------------------
-        # Students needing improvement
-        # ----------------------------------------------------
-        cur.execute("""
-            SELECT COUNT(DISTINCT student_id)
-            AS students_needing_improvement
-            FROM predictions p
-            WHERE p.prediction = 'Needs Improvement'
-              AND p.id = (
-                  SELECT MAX(latest.id)
-                  FROM predictions latest
-                  WHERE latest.student_id = p.student_id
-              )
-        """)
-
-        improvement = cur.fetchone()
-
-        # ----------------------------------------------------
         # Recent users
         # ----------------------------------------------------
         cur.execute("""
@@ -4755,11 +4483,7 @@ def admin_dashboard_api():
                 "total_admins": int(user_stats["total_admins"] or 0),
                 "total_notes": int(total_notes or 0),
                 "total_quizzes": int(total_quizzes or 0),
-                "total_quiz_attempts": int(total_quiz_attempts or 0),
-                "total_predictions": int(total_predictions or 0),
-                "students_needing_improvement": int(
-                    improvement["students_needing_improvement"] or 0
-                )
+                "total_quiz_attempts": int(total_quiz_attempts or 0)
             },
             "recent_users": recent_users
         }, 200

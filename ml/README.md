@@ -12,7 +12,13 @@ The target is a **published Grade 10 terminal paper exam** with recorded marks. 
 
 The report waits for at least 30 distinct students and two exam dates; it also needs 30 training students from earlier exam dates and 10 students on the latest date. The latest exam date is the test set. Thresholds are only a guard against reporting a meaningless score with one student: 30 students do not prove a model is reliable. Students can appear in both earlier and later exams, so this measures later performance for a school cohort, not how the model works at a new school. Before using a prediction for decisions, assess error across more terms, schools, and student groups, compare with teacher judgement and the baseline, and check for missing data and unfair disparities.
 
-The app's current Random Forest was trained on 15 illustrative rows in `student_performance.csv` and uses manually entered values. The separate Gradient Boosting scripts use a different dataset and target. Neither validates predictions for this school. Until representative school outcomes are collected and evaluated, teacher actions and student practice suggestions should rely on the observed paper, lab quiz, and attendance evidence.
+The legacy Random Forest was trained on 15 illustrative rows in
+`student_performance.csv` and used manually entered values. It is retained only
+as historical research and is not loaded or served by the application. The
+separate Gradient Boosting scripts use a different dataset and target. Neither
+validates predictions for this school. Until representative school outcomes are
+collected and evaluated, teacher actions and student practice suggestions rely
+on observed paper, lab quiz, attendance, and intervention evidence.
 
 ## Public dataset research: 1,044 subject records
 

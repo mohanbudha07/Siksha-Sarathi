@@ -6,7 +6,6 @@ import './StudentDashboard.css'
 function StudentDashboard() {
   const [student, setStudent] = useState(null)
   const [stats, setStats] = useState(null)
-  const [prediction, setPrediction] = useState(null)
   const [error, setError] = useState('')
 
   const navigate = useNavigate()
@@ -17,7 +16,6 @@ function StudentDashboard() {
       .then((response) => {
         setStudent(response.data.student)
         setStats(response.data.stats)
-        setPrediction(response.data.prediction)
       })
       .catch((error) => {
         console.error(error)
@@ -107,52 +105,7 @@ function StudentDashboard() {
             </div>
           </div>
 
-          <div className="stat-card">
-            <div className="stat-icon">🎯</div>
-            <div>
-              <span>Performance</span>
-              <strong className="prediction-text">
-                {prediction?.prediction || 'Not available'}
-              </strong>
-            </div>
-          </div>
-
         </section>
-
-        {/* Performance summary */}
-        {prediction && (
-          <section className="performance-summary">
-            <div>
-              <span className="section-label">Latest Performance</span>
-              <h2>{prediction.prediction}</h2>
-              <p>
-                Your latest recorded academic performance prediction.
-              </p>
-            </div>
-
-            <div className="performance-details">
-              <div>
-                <span>Attendance</span>
-                <strong>{prediction.attendance}%</strong>
-              </div>
-
-              <div>
-                <span>Assignment</span>
-                <strong>{prediction.assignment_score}</strong>
-              </div>
-
-              <div>
-                <span>Quiz</span>
-                <strong>{prediction.quiz_score}</strong>
-              </div>
-
-              <div>
-                <span>Study Hours</span>
-                <strong>{prediction.study_hours}</strong>
-              </div>
-            </div>
-          </section>
-        )}
 
         <section className="student-plan-prompt">
           <div>
@@ -172,18 +125,6 @@ function StudentDashboard() {
         </section>
 
         <section className="dashboard-cards">
-
-          <div
-            className="dashboard-card"
-            onClick={() => navigate('/student/performance')}
-          >
-            <div className="card-icon">📈</div>
-            <h3>Performance</h3>
-            <p>
-              View your predicted academic performance and learning indicators.
-            </p>
-            <button>View Performance →</button>
-          </div>
 
           <div
             className="dashboard-card"

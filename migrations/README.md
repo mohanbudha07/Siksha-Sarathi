@@ -22,8 +22,9 @@ the percentage average; if there are no usable percentages, the dashboard shows 
 For a new database, use the updated setup_db.sql. CREATE TABLE IF NOT EXISTS does
 not update an existing table, so existing databases require the migration above.
 
-Both teacher and admin warning counts now use the latest prediction per student.
-A student whose latest result is Good is not counted because of an older warning.
+The legacy self-reported prediction feature has been retired. Existing rows in
+the `predictions` table are preserved as historical data but are not used for
+student guidance or administrator statistics.
 
 Run the regression tests with the backend environment activated:
 

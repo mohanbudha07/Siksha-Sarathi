@@ -60,7 +60,7 @@ class QuizStatisticsTests(unittest.TestCase):
         cls.backend = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules, {
             'flask_mysqldb': mysql_module, 'dotenv': dotenv_module
-        }), patch('joblib.load'):
+        }):
             spec.loader.exec_module(cls.backend)
         cls.backend.app.config.update(TESTING=True, SECRET_KEY='isolated-test-secret')
 
@@ -448,16 +448,18 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json['topics'], [])
 
-    def test_risk_counts_match_latest_prediction(self):
-        self.db.executemany('INSERT INTO predictions(id,student_id,prediction) VALUES(?,?,?)',
-                            [(1, 1, 'Needs Improvement'), (2, 1, 'Good'),
-                             (3, 2, 'Good'), (4, 2, 'Needs Improvement')])
-        self.login('admin')
-        response = self.client.get('/api/admin/dashboard')
-        self.assertEqual(response.json['statistics']['students_needing_improvement'], 1)
-        self.db.execute("UPDATE predictions SET prediction='Good' WHERE id=4")
-        response = self.client.get('/api/admin/dashboard')
-        self.assertEqual(response.json['statistics']['students_needing_improvement'], 0)
+    def test_legacy_student_prediction_api_is_retired(self):
+        self.assertEqual(self.client.get('/api/student/prediction').status_code, 404)
+        self.assertEqual(self.client.post(
+            '/api/student/prediction',
+            json={'attendance': 100, 'assignment_score': 100,
+                  'quiz_score': 100, 'study_hours': 10}
+        ).status_code, 404)
+
+    def test_student_dashboard_does_not_return_legacy_prediction(self):
+        response = self.client.get('/api/student/dashboard')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('prediction', response.json)
 
     def test_teacher_dashboard_only_shows_assigned_students_and_quiz_evidence(self):
         self.assertEqual(self.submit({'0': 'B', '1': 'C'}).status_code, 200)

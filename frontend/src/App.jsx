@@ -12,7 +12,6 @@ import StudentDashboard from './pages/StudentDashboard'
 import StudentPracticePlan from './pages/StudentPracticePlan'
 import Quiz from './pages/Quiz'
 import Notes from './pages/Notes'
-import Performance from './pages/Performance'
 import AIAssistant from './pages/AIAssistant'
 import TeacherDashboard from './pages/TeacherDashboard'
 import TeacherNotes from './pages/TeacherNotes'
@@ -132,9 +131,6 @@ function App() {
         } />
         <Route path="/student/notes" element={
           <StudentPage><Notes /></StudentPage>
-        } />
-        <Route path="/student/performance" element={
-          <StudentPage><Performance /></StudentPage>
         } />
         <Route path="/student/ai" element={
           <StudentPage><AIAssistant /></StudentPage>

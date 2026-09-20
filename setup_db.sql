@@ -268,7 +268,8 @@ CREATE TABLE IF NOT EXISTS chat_history (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- FIXED predictions table to match app.py
+-- Legacy prediction history. The application no longer creates or displays
+-- self-reported predictions; keep this table for existing installations.
 CREATE TABLE IF NOT EXISTS predictions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,

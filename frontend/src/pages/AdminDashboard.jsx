@@ -102,11 +102,6 @@ function AdminDashboard() {
           <strong>{stats.total_quiz_attempts ?? 0}</strong>
         </div>
 
-        <div className="admin-card warning">
-          <span>Needs Improvement</span>
-          <strong>{stats.students_needing_improvement ?? 0}</strong>
-        </div>
-
       </div>
 
       <section className="admin-section">

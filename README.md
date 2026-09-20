@@ -11,13 +11,13 @@ It helps students track their academic performance using Machine Learning, take 
 - Student Dashboard
 - Learning Notes
 - Interactive Quizzes
-- ML-based Performance Prediction
+- Evidence-based practice plans from quiz activity
 - AI Study Assistant
 
 ### Teacher
 - Teacher Dashboard
 - Upload & Manage Notes
-- View Student Performance Overview
+- View class-scoped learning analytics and intervention progress
 
 ### Admin
 - System Overview Dashboard
