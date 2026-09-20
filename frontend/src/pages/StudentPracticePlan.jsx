@@ -5,12 +5,19 @@ import './StudentPracticePlan.css'
 
 function StudentPracticePlan() {
   const [plan, setPlan] = useState(null)
+  const [teacherPlans, setTeacherPlans] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.get('/student/practice-plan')
-      .then((response) => setPlan(response.data))
+    Promise.all([
+      api.get('/student/practice-plan'),
+      api.get('/student/interventions'),
+    ])
+      .then(([practiceResponse, interventionResponse]) => {
+        setPlan(practiceResponse.data)
+        setTeacherPlans(interventionResponse.data.interventions || [])
+      })
       .catch((err) => {
         console.error('Practice plan error:', err)
         setError(err.response?.data?.error || 'Unable to load your practice plan.')
@@ -33,6 +40,22 @@ function StudentPracticePlan() {
           <section className="practice-plan-message">
             <p>{plan.message}</p>
             <small>Topic suggestions appear after at least three answers across two different tagged questions in a topic.</small>
+          </section>
+
+          <section className="student-support-plans">
+            <div className="student-support-heading">
+              <div><span>TEACHER GUIDANCE</span><h2>My Support Plans</h2></div>
+              <strong>{teacherPlans.filter((item) => item.status !== 'completed').length} active</strong>
+            </div>
+            {teacherPlans.length === 0 ? <p className="practice-plan-evidence">Your teacher has not assigned a support plan yet.</p> : <div className="student-support-list">
+              {teacherPlans.map((item) => <article key={item.id}>
+                <div><span>{item.subject} · {String(item.status).replaceAll('_', ' ')}</span><h3>{item.focus_area}</h3></div>
+                <p>{item.action_plan}</p>
+                {item.success_criteria && <p><strong>Goal:</strong> {item.success_criteria}</p>}
+                <small>Review date: {item.review_date || 'To be decided'} · Teacher: {item.teacher_name}</small>
+                {item.outcome_note && <blockquote>{item.outcome_note}</blockquote>}
+              </article>)}
+            </div>}
           </section>
 
           {plan.topics.length === 0 ? (

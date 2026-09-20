@@ -127,3 +127,12 @@ percentages are calculated automatically. Existing daily attendance is converted
 into monthly totals, while the original daily tables remain available as history.
 
     sudo mysql siksha_sarathi < migrations/009_monthly_attendance_summaries.sql
+
+## Teacher intervention migration
+
+Migration 010 stores evidence-based support plans created by assigned teachers.
+Plans have a focus area, action, success criteria, review date, progress status,
+and outcome note. Students can read their plans, but only the assigned teacher
+can create or update them.
+
+    sudo mysql siksha_sarathi < migrations/010_teacher_interventions.sql

@@ -2007,6 +2007,276 @@ def teacher_student_learning_profile_api(student_id):
 
 
 # ============================================================
+# TEACHER SUPPORT INTERVENTIONS
+# ============================================================
+
+INTERVENTION_SOURCES = {"topic", "paper", "attendance", "manual"}
+INTERVENTION_STATUSES = {"planned", "in_progress", "completed", "cancelled"}
+
+
+def teacher_can_support_student(cur, teacher_id, student_id, subject):
+    cur.execute(
+        """
+        SELECT s.id
+        FROM teacher_class_subjects tcs
+        INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+        INNER JOIN students s ON s.id = sce.student_id
+        WHERE tcs.teacher_user_id = %s
+          AND s.id = %s
+          AND LOWER(tcs.subject) = LOWER(%s)
+        LIMIT 1
+        """,
+        (teacher_id, student_id, subject)
+    )
+    return cur.fetchone() is not None
+
+
+def normalize_intervention_payload(data, existing=None):
+    if not isinstance(data, dict):
+        raise ValueError("Support plan data is required")
+    current = existing or {}
+    subject = str(data.get("subject", current.get("subject", "")) or "").strip()
+    source_kind = str(
+        data.get("source_kind", current.get("source_kind", "manual")) or "manual"
+    ).strip().lower()
+    focus_area = str(
+        data.get("focus_area", current.get("focus_area", "")) or ""
+    ).strip()
+    evidence = str(data.get("evidence", current.get("evidence", "")) or "").strip()
+    action_plan = str(
+        data.get("action_plan", current.get("action_plan", "")) or ""
+    ).strip()
+    success_criteria = str(
+        data.get("success_criteria", current.get("success_criteria", "")) or ""
+    ).strip()
+    status = str(
+        data.get("status", current.get("status", "planned")) or "planned"
+    ).strip().lower()
+    outcome_note = str(
+        data.get("outcome_note", current.get("outcome_note", "")) or ""
+    ).strip()
+    review_value = data.get("review_date", current.get("review_date"))
+    review_date = None
+    if review_value:
+        try:
+            review_date = datetime.strptime(
+                str(review_value)[:10], "%Y-%m-%d"
+            ).date().isoformat()
+        except ValueError as error:
+            raise ValueError("Review date must use YYYY-MM-DD") from error
+    if not subject or len(subject) > 100:
+        raise ValueError("Subject is required and must be at most 100 characters")
+    if source_kind not in INTERVENTION_SOURCES:
+        raise ValueError("Support plan source is invalid")
+    if not focus_area or len(focus_area) > 150:
+        raise ValueError("Focus area is required and must be at most 150 characters")
+    if len(evidence) > 500:
+        raise ValueError("Evidence must be at most 500 characters")
+    if not 10 <= len(action_plan) <= 2000:
+        raise ValueError("Action plan must contain 10 to 2000 characters")
+    if len(success_criteria) > 500:
+        raise ValueError("Success criteria must be at most 500 characters")
+    if status not in INTERVENTION_STATUSES:
+        raise ValueError("Support plan status is invalid")
+    if len(outcome_note) > 1000:
+        raise ValueError("Outcome note must be at most 1000 characters")
+    if status == "completed" and not outcome_note:
+        raise ValueError("An outcome note is required before completing a plan")
+    return {
+        "subject": subject,
+        "source_kind": source_kind,
+        "focus_area": focus_area,
+        "evidence": evidence,
+        "action_plan": action_plan,
+        "success_criteria": success_criteria,
+        "status": status,
+        "review_date": review_date,
+        "outcome_note": outcome_note
+    }
+
+
+def serialize_intervention(row):
+    if not row:
+        return row
+    for field in ("review_date", "completed_at", "created_at", "updated_at"):
+        if field in row:
+            row[field] = serialize_api_date(row[field])
+    return row
+
+
+def fetch_teacher_intervention(cur, intervention_id, teacher_id):
+    cur.execute(
+        """
+        SELECT i.*, s.full_name
+        FROM teacher_interventions i
+        INNER JOIN students s ON s.id = i.student_id
+        WHERE i.id = %s AND i.teacher_user_id = %s
+        """,
+        (intervention_id, teacher_id)
+    )
+    return serialize_intervention(cur.fetchone())
+
+
+@app.route("/api/teacher/students/<int:student_id>/interventions",
+           methods=["GET", "POST"])
+@login_required
+@role_required(TEACHER)
+def teacher_student_interventions_api(student_id):
+    data = request.get_json(silent=True) if request.method == "POST" else None
+    subject = str(
+        (data or {}).get("subject") or request.args.get("subject") or ""
+    ).strip()
+    if not subject:
+        return {"error": "Subject is required"}, 400
+    cur = mysql.connection.cursor()
+    try:
+        if not teacher_can_support_student(
+            cur, session["user_id"], student_id, subject
+        ):
+            return {"error": "Student support profile not found"}, 404
+        if request.method == "GET":
+            cur.execute(
+                """
+                SELECT i.*, s.full_name
+                FROM teacher_interventions i
+                INNER JOIN students s ON s.id = i.student_id
+                WHERE i.teacher_user_id = %s
+                  AND i.student_id = %s
+                  AND LOWER(i.subject) = LOWER(%s)
+                ORDER BY
+                  CASE i.status
+                    WHEN 'in_progress' THEN 1 WHEN 'planned' THEN 2
+                    WHEN 'completed' THEN 3 ELSE 4
+                  END,
+                  i.review_date, i.id DESC
+                """,
+                (session["user_id"], student_id, subject)
+            )
+            return {
+                "interventions": [
+                    serialize_intervention(row) for row in cur.fetchall()
+                ]
+            }, 200
+        try:
+            plan = normalize_intervention_payload(data)
+        except ValueError as error:
+            return {"error": str(error)}, 400
+        cur.execute(
+            """
+            INSERT INTO teacher_interventions
+                (teacher_user_id, student_id, subject, source_kind,
+                 focus_area, evidence, action_plan, success_criteria,
+                 status, review_date, outcome_note)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (session["user_id"], student_id, plan["subject"],
+             plan["source_kind"], plan["focus_area"], plan["evidence"],
+             plan["action_plan"], plan["success_criteria"], plan["status"],
+             plan["review_date"], plan["outcome_note"])
+        )
+        intervention_id = cur.lastrowid
+        mysql.connection.commit()
+        return {
+            "message": "Student support plan created",
+            "intervention_id": intervention_id
+        }, 201
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Teacher intervention error:", error)
+        return {"error": "Failed to manage student support plan"}, 500
+    finally:
+        cur.close()
+
+
+@app.route("/api/teacher/interventions/<int:intervention_id>",
+           methods=["PUT", "DELETE"])
+@login_required
+@role_required(TEACHER)
+def teacher_intervention_api(intervention_id):
+    cur = mysql.connection.cursor()
+    try:
+        existing = fetch_teacher_intervention(
+            cur, intervention_id, session["user_id"]
+        )
+        if not existing:
+            return {"error": "Student support plan not found"}, 404
+        if request.method == "DELETE":
+            cur.execute(
+                "DELETE FROM teacher_interventions "
+                "WHERE id = %s AND teacher_user_id = %s",
+                (intervention_id, session["user_id"])
+            )
+            mysql.connection.commit()
+            return {"message": "Student support plan deleted"}, 200
+        try:
+            plan = normalize_intervention_payload(
+                request.get_json(silent=True), existing
+            )
+        except ValueError as error:
+            return {"error": str(error)}, 400
+        if not teacher_can_support_student(
+            cur, session["user_id"], existing["student_id"], plan["subject"]
+        ):
+            return {"error": "Student support profile not found"}, 404
+        cur.execute(
+            """
+            UPDATE teacher_interventions
+            SET subject = %s, source_kind = %s, focus_area = %s,
+                evidence = %s, action_plan = %s, success_criteria = %s,
+                status = %s, review_date = %s, outcome_note = %s,
+                completed_at = CASE WHEN %s = 'completed'
+                    THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE NULL END
+            WHERE id = %s AND teacher_user_id = %s
+            """,
+            (plan["subject"], plan["source_kind"], plan["focus_area"],
+             plan["evidence"], plan["action_plan"], plan["success_criteria"],
+             plan["status"], plan["review_date"], plan["outcome_note"],
+             plan["status"], intervention_id, session["user_id"])
+        )
+        mysql.connection.commit()
+        return {"message": "Student support plan updated"}, 200
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Teacher intervention update error:", error)
+        return {"error": "Failed to update student support plan"}, 500
+    finally:
+        cur.close()
+
+
+@app.route("/api/student/interventions", methods=["GET"])
+@login_required
+@role_required(STUDENT)
+def student_interventions_api():
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT i.id, i.subject, i.source_kind, i.focus_area, i.evidence,
+                   i.action_plan, i.success_criteria, i.status, i.review_date,
+                   i.outcome_note, i.completed_at, i.created_at, i.updated_at,
+                   u.username AS teacher_name
+            FROM students s
+            INNER JOIN teacher_interventions i ON i.student_id = s.id
+            INNER JOIN users u ON u.id = i.teacher_user_id
+            WHERE s.user_id = %s AND i.status <> 'cancelled'
+            ORDER BY
+              CASE i.status
+                WHEN 'in_progress' THEN 1 WHEN 'planned' THEN 2 ELSE 3
+              END,
+              i.review_date, i.id DESC
+            """,
+            (session["user_id"],)
+        )
+        return {
+            "interventions": [
+                serialize_intervention(row) for row in cur.fetchall()
+            ]
+        }, 200
+    finally:
+        cur.close()
+
+
+# ============================================================
 # TEACHER QUIZ MANAGEMENT
 # ============================================================
 

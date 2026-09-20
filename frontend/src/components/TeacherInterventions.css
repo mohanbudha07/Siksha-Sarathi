@@ -1,0 +1,43 @@
+.intervention-heading > div:last-child { display: flex; align-items: center; gap: 10px; }
+.intervention-heading > div:last-child span { padding: 7px 10px; border-radius: 999px; background: #ecfdf5; color: #047857; font-size: 12px; font-weight: 800; }
+.intervention-heading button, .intervention-suggestions button, .intervention-card-actions button, .intervention-primary { border: 0; border-radius: 9px; padding: 10px 13px; background: #0f766e; color: white; font-weight: 800; cursor: pointer; }
+.intervention-message { padding: 11px 14px; border-radius: 10px; font-weight: 700; }
+.intervention-message.error { background: #fff1f2; color: #9f1239; }
+.intervention-message.success { background: #ecfdf5; color: #047857; }
+.intervention-suggestions { display: grid; gap: 10px; margin: 18px 0; }
+.intervention-suggestions > h3 { margin: 0 0 2px; font-size: 15px; }
+.intervention-suggestions article { display: grid; grid-template-columns: auto 1fr auto; align-items: start; gap: 13px; padding: 14px; border: 1px solid #e2e8f0; border-radius: 12px; }
+.intervention-suggestions strong, .intervention-suggestions small { display: block; }
+.intervention-suggestions small { margin-top: 4px; color: #64748b; }
+.intervention-suggestions p { margin: 6px 0 0; }
+.intervention-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin: 18px 0; padding: 20px; border: 1px solid #c4b5fd; border-radius: 14px; background: #faf8ff; }
+.intervention-form-title { grid-column: 1/-1; display: flex; justify-content: space-between; align-items: center; }
+.intervention-form-title h3 { margin: 0; }
+.intervention-form-title button { border: 0; background: transparent; font-size: 24px; cursor: pointer; }
+.intervention-form label, .intervention-edit-row label { display: grid; gap: 6px; color: #475569; font-size: 13px; font-weight: 800; }
+.intervention-form label:nth-of-type(2), .intervention-form label:nth-of-type(3), .intervention-form label:nth-of-type(4) { grid-column: 1/-1; }
+.intervention-form input, .intervention-form textarea, .intervention-edit-row input, .intervention-edit-row textarea, .intervention-card select { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid #cbd5e1; border-radius: 9px; background: white; color: #1e293b; font: inherit; }
+.intervention-form textarea { min-height: 72px; resize: vertical; }
+.intervention-primary { justify-self: end; align-self: end; }
+.intervention-list { display: grid; gap: 14px; margin-top: 16px; }
+.intervention-card { padding: 18px; border: 1px solid #e2e8f0; border-left: 5px solid #64748b; border-radius: 13px; }
+.intervention-card.status-planned { border-left-color: #7c3aed; }
+.intervention-card.status-in_progress { border-left-color: #0284c7; }
+.intervention-card.status-completed { border-left-color: #059669; }
+.intervention-card.status-cancelled { opacity: .72; }
+.intervention-card-heading { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
+.intervention-card-heading span { color: #6d28d9; text-transform: uppercase; font-size: 11px; font-weight: 900; letter-spacing: .7px; }
+.intervention-card-heading h3 { margin: 4px 0; }
+.intervention-card-heading small { color: #64748b; }
+.intervention-card select { width: 150px; }
+.intervention-card p { color: #475569; line-height: 1.55; }
+.intervention-edit-row { display: grid; grid-template-columns: minmax(150px,.4fr) 1fr; gap: 12px; }
+.intervention-edit-row textarea { min-height: 68px; resize: vertical; }
+.intervention-card-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 13px; }
+.intervention-card-actions .danger { background: #fff1f2; color: #be123c; }
+@media (max-width: 720px) {
+  .intervention-heading, .intervention-suggestions article, .intervention-card-heading { align-items: stretch; grid-template-columns: 1fr; flex-direction: column; }
+  .intervention-form, .intervention-edit-row { grid-template-columns: 1fr; }
+  .intervention-form label { grid-column: 1/-1; }
+  .intervention-card select { width: 100%; }
+}

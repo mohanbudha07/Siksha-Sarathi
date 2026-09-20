@@ -55,9 +55,22 @@
 .practice-plan-empty p { color: #64748b; line-height: 1.6; }
 .practice-plan-empty > div { display: flex; flex-wrap: wrap; gap: 15px; }
 .practice-plan-error { color: #9f1239; background: #fff1f2; border-color: #fecdd3; }
+.student-support-plans { margin-top: 22px; padding: 24px 26px; border: 1px solid #bae6fd; border-radius: 16px; background: #f0f9ff; }
+.student-support-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.student-support-heading span { color: #0369a1; font-size: 11px; font-weight: 900; letter-spacing: 1px; }
+.student-support-heading h2 { margin: 5px 0 0; }
+.student-support-heading > strong { padding: 7px 10px; border-radius: 999px; background: #e0f2fe; color: #0369a1; font-size: 12px; }
+.student-support-list { display: grid; gap: 13px; margin-top: 17px; }
+.student-support-list article { padding: 17px; border: 1px solid #bae6fd; border-left: 5px solid #0284c7; border-radius: 12px; background: white; }
+.student-support-list article > div span { color: #0369a1; text-transform: uppercase; font-size: 11px; font-weight: 900; }
+.student-support-list h3 { margin: 5px 0 9px; }
+.student-support-list p { color: #475569; line-height: 1.55; }
+.student-support-list small { color: #64748b; }
+.student-support-list blockquote { margin: 12px 0 0; padding: 10px 13px; border-left: 3px solid #10b981; background: #ecfdf5; color: #065f46; }
 @media (max-width: 700px) {
   .practice-plan-page { padding: 22px 16px 50px; }
   .practice-plan-hero { padding: 26px 22px; }
   .practice-plan-resources { grid-template-columns: 1fr; }
   .practice-plan-card-heading { flex-direction: column; }
+  .student-support-heading { flex-direction: column; }
 }

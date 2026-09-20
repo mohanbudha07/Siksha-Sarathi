@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import api from '../api'
+import TeacherInterventions from '../components/TeacherInterventions'
 import './TeacherLearningAnalytics.css'
 
 const statusClass = (status) =>
@@ -135,30 +136,11 @@ function TeacherStudentProfile() {
         </article>
       </section>
 
-      <section className="tla-panel tla-actions-panel">
-        <div className="tla-section-heading">
-          <div>
-            <h2>Suggested next steps</h2>
-            <p>Each suggestion uses recorded evidence. Talk with the student before deciding what support will help.</p>
-          </div>
-        </div>
-        {actions.length ? (
-          <div className="tla-actions-list">
-            {actions.map((action, index) => (
-              <article key={`${action.kind}-${index}`}>
-                <span className={`tla-action-kind tla-action-${action.kind}`}>{action.kind}</span>
-                <div>
-                  <h3>{action.title}</h3>
-                  <small>{action.evidence}</small>
-                  <p>{action.suggestion}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="tla-muted">No focused suggestion yet. Record more tagged quiz answers, published paper marks, or monthly attendance and review this profile again.</p>
-        )}
-      </section>
+      <TeacherInterventions
+        studentId={studentId}
+        subject={subject}
+        suggestions={actions}
+      />
 
       <div className="tla-profile-grid">
         <section className="tla-panel">

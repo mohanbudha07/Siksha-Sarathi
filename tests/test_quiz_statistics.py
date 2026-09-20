@@ -128,6 +128,14 @@ class QuizStatisticsTests(unittest.TestCase):
                 note TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(summary_id,student_id));
+            CREATE TABLE teacher_interventions(id INTEGER PRIMARY KEY,
+                teacher_user_id INTEGER, student_id INTEGER, subject TEXT,
+                source_kind TEXT DEFAULT 'manual', focus_area TEXT,
+                evidence TEXT DEFAULT '', action_plan TEXT,
+                success_criteria TEXT DEFAULT '', status TEXT DEFAULT 'planned',
+                review_date TEXT, outcome_note TEXT DEFAULT '', completed_at TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE predictions(id INTEGER PRIMARY KEY, student_id INTEGER,
                 prediction TEXT, attendance REAL, assignment_score REAL,
                 quiz_score REAL, study_hours REAL);
@@ -1485,6 +1493,101 @@ class QuizStatisticsTests(unittest.TestCase):
                 self.assertEqual(self.client.get(
                     '/api/teacher/monthly-attendance'
                 ).status_code, 403)
+
+    def intervention_payload(self, **overrides):
+        payload = {
+            'subject': 'Science',
+            'source_kind': 'topic',
+            'focus_area': 'Force concepts',
+            'evidence': 'Two repeated incorrect answers about force.',
+            'action_plan': 'Review force examples and complete one guided quiz.',
+            'success_criteria': 'Score at least 70% on the review quiz.',
+            'status': 'planned',
+            'review_date': '2026-09-30',
+            'outcome_note': '',
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_teacher_tracks_support_plan_and_student_can_read_it(self):
+        self.login('teacher')
+        created = self.client.post(
+            '/api/teacher/students/1/interventions',
+            json=self.intervention_payload()
+        )
+        self.assertEqual(created.status_code, 201)
+        intervention_id = created.json['intervention_id']
+
+        listing = self.client.get(
+            '/api/teacher/students/1/interventions?subject=Science'
+        )
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.json['interventions'][0]['focus_area'],
+                         'Force concepts')
+
+        self.assertEqual(self.client.put(
+            f'/api/teacher/interventions/{intervention_id}',
+            json={'status': 'completed'}
+        ).status_code, 400)
+        completed = self.client.put(
+            f'/api/teacher/interventions/{intervention_id}',
+            json={
+                'status': 'completed',
+                'outcome_note': 'Student scored 80% after guided review.'
+            }
+        )
+        self.assertEqual(completed.status_code, 200)
+
+        self.login('student')
+        student_view = self.client.get('/api/student/interventions')
+        self.assertEqual(student_view.status_code, 200)
+        plan = student_view.json['interventions'][0]
+        self.assertEqual(plan['status'], 'completed')
+        self.assertEqual(plan['teacher_name'], 'Teacher')
+        self.assertIn('80%', plan['outcome_note'])
+
+    def test_interventions_are_assignment_scoped_and_role_protected(self):
+        self.login('other_teacher')
+        self.assertEqual(self.client.post(
+            '/api/teacher/students/1/interventions',
+            json=self.intervention_payload()
+        ).status_code, 404)
+
+        self.login('teacher')
+        intervention_id = self.client.post(
+            '/api/teacher/students/1/interventions',
+            json=self.intervention_payload()
+        ).json['intervention_id']
+        self.login('other_teacher')
+        self.assertEqual(self.client.put(
+            f'/api/teacher/interventions/{intervention_id}',
+            json={'status': 'in_progress'}
+        ).status_code, 404)
+        self.assertEqual(self.client.delete(
+            f'/api/teacher/interventions/{intervention_id}'
+        ).status_code, 404)
+
+        for role in ['student', 'admin']:
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(self.client.get(
+                    '/api/teacher/students/1/interventions?subject=Science'
+                ).status_code, 403)
+
+    def test_intervention_validation_rejects_unsupported_or_invalid_plans(self):
+        self.login('teacher')
+        invalid_payloads = [
+            self.intervention_payload(action_plan='short'),
+            self.intervention_payload(source_kind='prediction'),
+            self.intervention_payload(status='done'),
+            self.intervention_payload(focus_area=''),
+            self.intervention_payload(review_date='tomorrow'),
+        ]
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                self.assertEqual(self.client.post(
+                    '/api/teacher/students/1/interventions', json=payload
+                ).status_code, 400)
 
     def test_teacher_can_read_update_and_delete_own_note(self):
         self.db.execute(
