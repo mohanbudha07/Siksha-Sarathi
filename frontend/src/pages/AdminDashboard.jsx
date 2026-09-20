@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import './AdminDashboard.css'
 
 function AdminDashboard() {
-  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -62,7 +60,6 @@ function AdminDashboard() {
           <h1>Admin Dashboard</h1>
           <p>System overview and platform statistics</p>
         </div>
-        <button onClick={() => navigate('/admin/school-setup')}>Manage School Setup →</button>
       </div>
 
       <div className="admin-stats">

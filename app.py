@@ -549,11 +549,14 @@ def student_practice_plan_api():
             cur.execute(
                 """
                 SELECT id, title, subject, questions FROM quizzes
-                WHERE is_published = TRUE AND requires_session = FALSE
+                WHERE is_published = TRUE
                 ORDER BY id DESC
                 """
             )
-            quizzes = cur.fetchall()
+            quizzes = [
+                quiz for quiz in cur.fetchall()
+                if not quiz_has_open_lab_session(cur, quiz["id"])
+            ]
             for priority in priorities:
                 subject = priority["subject"].casefold()
                 topic = priority["topic"].casefold()
@@ -2513,6 +2516,20 @@ def public_quiz_payload(quiz_data, questions):
     }
 
 
+def quiz_has_open_lab_session(cur, quiz_id, now=None):
+    """Return whether a scheduled or active lab session still protects a quiz."""
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    cur.execute(
+        """
+        SELECT COUNT(*) AS session_count
+        FROM quiz_sessions
+        WHERE quiz_id = %s AND is_closed = FALSE AND ends_at > %s
+        """,
+        (quiz_id, now)
+    )
+    return int(cur.fetchone()["session_count"] or 0) > 0
+
+
 @app.route("/api/teacher/quiz-sessions", methods=["GET", "POST"])
 @login_required
 @role_required(TEACHER)
@@ -2611,14 +2628,20 @@ def teacher_close_quiz_session_api(lab_session_id):
     cur = mysql.connection.cursor()
     try:
         cur.execute(
-            "SELECT id FROM quiz_sessions WHERE id = %s AND created_by = %s",
+            "SELECT id, quiz_id FROM quiz_sessions WHERE id = %s AND created_by = %s",
             (lab_session_id, session["user_id"])
         )
-        if not cur.fetchone():
+        lab_session = cur.fetchone()
+        if not lab_session:
             return {"error": "Lab quiz session not found"}, 404
         cur.execute(
             "UPDATE quiz_sessions SET is_closed = TRUE WHERE id = %s AND created_by = %s",
             (lab_session_id, session["user_id"])
+        )
+        still_protected = quiz_has_open_lab_session(cur, lab_session["quiz_id"])
+        cur.execute(
+            "UPDATE quizzes SET requires_session = %s WHERE id = %s",
+            (still_protected, lab_session["quiz_id"])
         )
         mysql.connection.commit()
         return {"message": "Lab quiz session closed"}, 200
@@ -3814,12 +3837,14 @@ def student_quizzes_api():
             """
             SELECT id, title, subject, questions
             FROM quizzes
-            WHERE is_published = TRUE AND requires_session = FALSE
+            WHERE is_published = TRUE
             ORDER BY id
             """
         )
         quizzes = []
         for quiz in cur.fetchall():
+            if quiz_has_open_lab_session(cur, quiz["id"]):
+                continue
             try:
                 question_count = len(parse_quiz_questions(
                     quiz["questions"], quiz["subject"] or "General"
@@ -3858,22 +3883,27 @@ def student_quiz_api():
                 """
                 SELECT id, title, subject, questions
                 FROM quizzes
-                WHERE is_published = TRUE AND requires_session = FALSE
+                WHERE is_published = TRUE
                 ORDER BY id
-                LIMIT 1
                 """
             )
+            quiz_data = None
+            for candidate in cur.fetchall():
+                if not quiz_has_open_lab_session(cur, candidate["id"]):
+                    quiz_data = candidate
+                    break
         else:
             cur.execute(
                 """
                 SELECT id, title, subject, questions
                 FROM quizzes
-                WHERE id = %s AND is_published = TRUE AND requires_session = FALSE
+                WHERE id = %s AND is_published = TRUE
                 """,
                 (quiz_id,)
             )
-
-        quiz_data = cur.fetchone()
+            quiz_data = cur.fetchone()
+            if quiz_data and quiz_has_open_lab_session(cur, quiz_data["id"]):
+                quiz_data = None
 
         if not quiz_data:
 
@@ -3960,8 +3990,7 @@ def submit_student_quiz():
             SELECT
                 id,
                 subject,
-                questions,
-                requires_session
+                questions
             FROM quizzes
             WHERE id = %s AND is_published = TRUE
             """,
@@ -4046,7 +4075,8 @@ def submit_student_quiz():
         student_id = student["id"]
 
         lab_session_id = None
-        if bool(quiz_data["requires_session"]):
+        requires_session = quiz_has_open_lab_session(cur, quiz_id)
+        if requires_session:
             try:
                 lab_session_id = int(raw_lab_session_id)
             except (TypeError, ValueError):

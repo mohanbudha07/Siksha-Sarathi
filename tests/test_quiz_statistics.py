@@ -435,6 +435,13 @@ class QuizStatisticsTests(unittest.TestCase):
                created_at,requires_session) VALUES(2,'Lab Force','Science',?,2,1,
                '2026-09-01',1)''', (json.dumps(questions),)
         )
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        self.db.execute(
+            '''INSERT INTO quiz_sessions
+               (id,quiz_id,class_id,created_by,access_code_hash,starts_at,ends_at,is_closed)
+               VALUES(20,2,1,2,'hash',?,?,0)''',
+            (now - timedelta(minutes=5), now + timedelta(minutes=30))
+        )
         for _ in range(3):
             self.assertEqual(self.submit({'0': 'B', '1': 'C'}).status_code, 200)
         self.db.execute('''INSERT INTO quiz_results(id,student_id,quiz_id,score,total_questions)
@@ -1133,6 +1140,11 @@ class QuizStatisticsTests(unittest.TestCase):
             ).status_code,
             200
         )
+        self.assertEqual(
+            self.db.execute('SELECT requires_session FROM quizzes WHERE id=?',
+                            (quiz_id,)).fetchone()[0],
+            0
+        )
         self.login('student')
         self.assertEqual(
             self.client.post(
@@ -1140,6 +1152,68 @@ class QuizStatisticsTests(unittest.TestCase):
                 json={'access_code': 'LAB-2048'}
             ).status_code,
             409
+        )
+        self.assertIn(
+            quiz_id,
+            [quiz['id'] for quiz in self.client.get(
+                '/api/student/quizzes'
+            ).json['quizzes']]
+        )
+        self.assertEqual(
+            self.client.get(f'/api/student/quiz?quiz_id={quiz_id}').status_code,
+            200
+        )
+
+    def test_ended_lab_session_does_not_hide_practice_quiz(self):
+        ended = datetime.now(timezone.utc) - timedelta(minutes=5)
+        self.db.execute('UPDATE quizzes SET requires_session=1 WHERE id=1')
+        self.db.execute(
+            '''INSERT INTO quiz_sessions
+               (id,quiz_id,class_id,created_by,access_code_hash,starts_at,ends_at,is_closed)
+               VALUES(20,1,1,2,'hash',?,?,0)''',
+            ((ended - timedelta(minutes=30)).replace(tzinfo=None),
+             ended.replace(tzinfo=None))
+        )
+        self.db.commit()
+        response = self.client.get('/api/student/quizzes')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(1, [quiz['id'] for quiz in response.json['quizzes']])
+        self.assertEqual(
+            self.client.get('/api/student/quiz?quiz_id=1').status_code,
+            200
+        )
+
+    def test_closing_one_of_two_open_lab_sessions_keeps_quiz_protected(self):
+        self.login('teacher')
+        created = self.client.post('/api/teacher/quizzes', json=self.quiz_payload())
+        quiz_id = created.json['quiz_id']
+        first = self.client.post(
+            '/api/teacher/quiz-sessions', json=self.lab_session_payload(quiz_id)
+        ).json['session_id']
+        self.assertEqual(
+            self.client.post(
+                '/api/teacher/quiz-sessions',
+                json=self.lab_session_payload(quiz_id, access_code='SECOND')
+            ).status_code,
+            201
+        )
+        self.assertEqual(
+            self.client.post(
+                f'/api/teacher/quiz-sessions/{first}/close'
+            ).status_code,
+            200
+        )
+        self.assertEqual(
+            self.db.execute('SELECT requires_session FROM quizzes WHERE id=?',
+                            (quiz_id,)).fetchone()[0],
+            1
+        )
+        self.login('student')
+        self.assertNotIn(
+            quiz_id,
+            [quiz['id'] for quiz in self.client.get(
+                '/api/student/quizzes'
+            ).json['quizzes']]
         )
 
     def paper_assessment_payload(self, **overrides):

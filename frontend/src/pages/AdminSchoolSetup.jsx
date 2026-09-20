@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import './AdminSchoolSetup.css'
 
 function AdminSchoolSetup() {
-  const navigate = useNavigate()
   const [data, setData] = useState({ classes: [], teachers: [], students: [], assignments: [] })
   const [classForm, setClassForm] = useState({ name: '', grade: '', section: 'Default' })
   const [teacherForm, setTeacherForm] = useState({ username: '', email: '', password: '' })
@@ -31,7 +29,6 @@ function AdminSchoolSetup() {
   }
 
   return <div className="school-setup-page">
-    <button className="school-back" onClick={() => navigate('/admin/dashboard')}>← Admin Dashboard</button>
     <section className="school-setup-hero"><p>ADMIN CONTROL</p><h1>School Setup</h1><span>Create the structure that teacher marks, attendance, quizzes and analytics depend on.</span></section>
     {error && <div className="school-message error">{error}</div>}{success && <div className="school-message success">{success}</div>}
 

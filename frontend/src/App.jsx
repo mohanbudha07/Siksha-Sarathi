@@ -8,6 +8,7 @@ import StudentRegister from './pages/StudentRegister'
 
 import StudentLayout from './components/StudentLayout'
 import TeacherLayout from './components/TeacherLayout'
+import AdminLayout from './components/AdminLayout'
 import StudentDashboard from './pages/StudentDashboard'
 import StudentPracticePlan from './pages/StudentPracticePlan'
 import Quiz from './pages/Quiz'
@@ -104,7 +105,7 @@ function TeacherPage({ children }) {
 function AdminPage({ children }) {
   return (
     <ProtectedRoute allowedRoles={['admin']}>
-      {children}
+      <AdminLayout>{children}</AdminLayout>
     </ProtectedRoute>
   )
 }

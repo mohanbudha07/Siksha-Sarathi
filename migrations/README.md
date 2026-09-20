@@ -99,6 +99,11 @@ Lab quizzes are removed from the ordinary practice list. Quiz questions may
 include curriculum_code and cognitive_level for improved learning analytics.
 Network or computer failures must not be recorded as zero marks.
 
+A quiz is protected from ordinary practice only while it has a scheduled or
+active lab session. Closing the final open session, or allowing all sessions to
+end, makes the published quiz available for practice again. Closing one session
+does not expose a quiz that still has another scheduled or active session.
+
 ## Paper assessment migration
 
 Migration 006 adds teacher-managed paper assessments and student marks.

@@ -1,6 +1,5 @@
 .school-setup-page { min-height: 100vh; padding: 30px 38px 60px; background: #f6f8fc; color: #172033; }
 .school-setup-page > * { max-width: 1180px; margin-left: auto; margin-right: auto; }
-.school-back { margin-bottom: 14px; border: 0; background: transparent; color: #2563eb; font-weight: 800; cursor: pointer; }
 .school-setup-hero { padding: 28px 32px; border-radius: 18px; background: linear-gradient(135deg,#172554,#2563eb); color: white; }
 .school-setup-hero p { margin: 0 0 7px; color: #bfdbfe; font-size: 12px; font-weight: 800; letter-spacing: 1.4px; }.school-setup-hero h1 { margin: 0 0 7px; }.school-setup-hero span { color: #dbeafe; }
 .school-message { padding: 13px 16px; margin-top: 16px; border-radius: 10px; }.school-message.error { background: #fef2f2; color: #991b1b; }.school-message.success { background: #ecfdf5; color: #065f46; }
