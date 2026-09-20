@@ -145,6 +145,9 @@ class QuizStatisticsTests(unittest.TestCase):
             CREATE TABLE predictions(id INTEGER PRIMARY KEY, student_id INTEGER,
                 prediction TEXT, attendance REAL, assignment_score REAL,
                 quiz_score REAL, study_hours REAL);
+            CREATE TABLE chat_history(id INTEGER PRIMARY KEY, user_id INTEGER,
+                question TEXT, answer TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE notes(id INTEGER PRIMARY KEY, title TEXT, subject TEXT,
                 chapter TEXT, content TEXT, created_at TEXT, uploaded_by INTEGER);
             INSERT INTO users VALUES(1,'Student','s@example.test','hash','student','2026-01-01');
@@ -205,6 +208,33 @@ class QuizStatisticsTests(unittest.TestCase):
                 os.environ, {'SIKSHA_TEST_FLAG': value}
             ):
                 self.assertFalse(self.backend.env_flag('SIKSHA_TEST_FLAG'))
+
+    def test_student_assistant_validates_question_payload(self):
+        for payload in ([], {'question': 4}, {'question': '   '}):
+            with self.subTest(payload=payload):
+                response = self.client.post('/api/student/ai', json=payload)
+                self.assertEqual(response.status_code, 400)
+
+        response = self.client.post(
+            '/api/student/ai', json={'question': 'a' * 1001}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('1000', response.json['error'])
+
+    def test_student_assistant_uses_and_records_offline_fallback(self):
+        with patch.dict(os.environ, {'GEMINI_API_KEY': ''}):
+            response = self.client.post(
+                '/api/student/ai', json={'question': 'What is a cell?'}
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['mode'], 'offline')
+        self.assertEqual(response.json['subject'], 'Science')
+        stored = self.db.execute(
+            'SELECT user_id, question, answer FROM chat_history'
+        ).fetchone()
+        self.assertEqual(stored['user_id'], 1)
+        self.assertEqual(stored['question'], 'What is a cell?')
+        self.assertEqual(stored['answer'], response.json['answer'])
 
     def quiz_payload(self, **overrides):
         payload = {

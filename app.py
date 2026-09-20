@@ -144,7 +144,7 @@ def api_login():
 
     data = request.get_json(silent=True)
 
-    if not data:
+    if not isinstance(data, dict):
         return {
             "error": "Login data is required"
         }, 400
@@ -3689,7 +3689,7 @@ def student_ai_api():
 
     question = data.get("question")
 
-    if not question or not question.strip():
+    if not isinstance(question, str) or not question.strip():
 
         return {
             "error": "Question is required"
@@ -3697,11 +3697,16 @@ def student_ai_api():
 
     question = question.strip()
 
+    if len(question) > 1000:
+        return {
+            "error": "Question must be at most 1000 characters"
+        }, 400
+
     try:
 
         from assistant import generate_answer
 
-        subject, answer = generate_answer(question)
+        subject, answer, mode = generate_answer(question)
 
         cur = mysql.connection.cursor()
 
@@ -3738,7 +3743,8 @@ def student_ai_api():
         return {
             "subject": subject,
             "question": question,
-            "answer": answer
+            "answer": answer,
+            "mode": mode
         }, 200
 
     except Exception as e:

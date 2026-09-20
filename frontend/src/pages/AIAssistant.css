@@ -157,6 +157,23 @@
   font-weight: bold;
 }
 
+.assistant-mode {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.assistant-mode.gemini {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.assistant-mode.offline {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .answer-text {
   color: #334155;
   font-size: 16px;

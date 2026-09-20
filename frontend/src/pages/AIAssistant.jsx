@@ -7,6 +7,7 @@ function AIAssistant() {
   const [answer, setAnswer] = useState('')
   const [fullAnswer, setFullAnswer] = useState('')
   const [subject, setSubject] = useState('')
+  const [mode, setMode] = useState('')
   const [loading, setLoading] = useState(false)
   const [typing, setTyping] = useState(false)
   const [error, setError] = useState('')
@@ -44,6 +45,7 @@ function AIAssistant() {
     setAnswer('')
     setFullAnswer('')
     setSubject('')
+    setMode('')
 
     try {
       const response = await api.post('/student/ai', {
@@ -51,6 +53,7 @@ function AIAssistant() {
       })
 
       setSubject(response.data.subject || '')
+      setMode(response.data.mode || 'offline')
       setFullAnswer(response.data.answer || '')
     } catch (err) {
       console.error(err)
@@ -82,7 +85,7 @@ function AIAssistant() {
 
           <div className="online-status">
             <span></span>
-            Online
+            Ready
           </div>
         </section>
 
@@ -94,8 +97,8 @@ function AIAssistant() {
             <h2>How can I help you today?</h2>
 
             <p>
-              Ask me anything about Mathematics, Science, English,
-              Nepali or Social Studies.
+              Ask about Mathematics, Science, English, Nepali or Social Studies.
+              Gemini is used when configured; limited offline help remains available.
             </p>
 
             <div className="suggestions">
@@ -162,6 +165,10 @@ function AIAssistant() {
                       {subject}
                     </span>
                   )}
+
+                  <span className={`assistant-mode ${mode}`}>
+                    {mode === 'gemini' ? 'Gemini response' : 'Offline helper'}
+                  </span>
                 </div>
 
                 <div className="answer-text">
@@ -196,6 +203,7 @@ function AIAssistant() {
             placeholder="Ask your question..."
             rows="3"
             disabled={loading}
+            maxLength={1000}
           />
 
           <div className="input-footer">
@@ -203,7 +211,7 @@ function AIAssistant() {
             <span>
               {loading
                 ? 'AI is preparing your answer...'
-                : 'Press Ask AI to get help'}
+                : `${question.length}/1000 characters`}
             </span>
 
             <button

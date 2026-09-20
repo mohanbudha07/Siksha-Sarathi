@@ -12,7 +12,7 @@ It helps students track their academic performance using Machine Learning, take 
 - Learning Notes
 - Interactive Quizzes
 - Evidence-based practice plans from quiz activity
-- AI Study Assistant
+- Gemini-powered Study Assistant with an automatic offline fallback
 
 ### Teacher
 - Teacher Dashboard
@@ -56,6 +56,17 @@ python -c "import secrets; print(secrets.token_hex(32))"
 Copy the generated value into `SECRET_KEY` in `.env`, then enter the local
 MySQL password in `MYSQL_PASSWORD`. The `.env` file is ignored by Git and must
 never be committed.
+
+The Study Assistant works in limited offline mode without an external key. To
+enable Gemini answers, create a Gemini API key and add it only to your private
+`.env` file:
+
+```bash
+GEMINI_API_KEY=your_private_key
+GEMINI_MODEL=gemini-flash-latest
+```
+
+Never put the real API key in `.env.example`, source code, screenshots or Git.
 
 Install and run the backend:
 
