@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
+import './StudentRegister.css'
 
 function StudentRegister() {
   const navigate = useNavigate()
@@ -9,13 +10,20 @@ function StudentRegister() {
     username: '',
     full_name: '',
     email: '',
-    grade: '',
+    class_id: '',
     password: '',
     confirm_password: '',
   })
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [classes, setClasses] = useState([])
+
+  useEffect(() => {
+    api.get('/public/classes')
+      .then((response) => setClasses(response.data.classes || []))
+      .catch(() => setError('Unable to load available classes.'))
+  }, [])
 
   const handleChange = (event) => {
     setForm({
@@ -40,12 +48,12 @@ function StudentRegister() {
         username: form.username,
         full_name: form.full_name,
         email: form.email,
-        grade: form.grade,
+        class_id: Number(form.class_id),
         password: form.password,
         role: 'student',
       })
 
-      navigate('/login')
+      navigate('/login', { state: { notice: 'Student account created. You can sign in now.' } })
     } catch (error) {
       setError(
         error.response?.data?.error ||
@@ -57,10 +65,12 @@ function StudentRegister() {
   }
 
   return (
-    <div>
-      <h1>Student Registration</h1>
+    <div className="student-register-page">
+      <section className="student-register-card">
+      <div><p>SIKSHA SARATHI</p><h1>Create Student Account</h1><span>Select your school class so your teacher can see your learning records.</span></div>
 
       <form onSubmit={handleSubmit}>
+        <label>Full name
         <input
           name="full_name"
           placeholder="Full Name"
@@ -68,7 +78,9 @@ function StudentRegister() {
           onChange={handleChange}
           required
         />
+        </label>
 
+        <label>Username
         <input
           name="username"
           placeholder="Username"
@@ -76,7 +88,9 @@ function StudentRegister() {
           onChange={handleChange}
           required
         />
+        </label>
 
+        <label>Email
         <input
           name="email"
           type="email"
@@ -85,32 +99,38 @@ function StudentRegister() {
           onChange={handleChange}
           required
         />
+        </label>
 
-        <input
-          name="grade"
-          placeholder="Grade"
-          value={form.grade}
-          onChange={handleChange}
-          required
-        />
+        <label>Class
+          <select name="class_id" value={form.class_id} onChange={handleChange} required>
+            <option value="">Select your class</option>
+            {classes.map((item) => <option key={item.id} value={item.id}>{item.name} — Grade {item.grade}{item.section && item.section !== 'Default' ? ` (${item.section})` : ''}</option>)}
+          </select>
+        </label>
 
+        <label>Password
         <input
           name="password"
           type="password"
           placeholder="Password"
           value={form.password}
           onChange={handleChange}
+          minLength="8"
           required
         />
+        </label>
 
+        <label>Confirm password
         <input
           name="confirm_password"
           type="password"
           placeholder="Confirm Password"
           value={form.confirm_password}
           onChange={handleChange}
+          minLength="8"
           required
         />
+        </label>
 
         {error && <p>{error}</p>}
 
@@ -125,6 +145,7 @@ function StudentRegister() {
           Sign In
         </button>
       </p>
+      </section>
     </div>
   )
 }

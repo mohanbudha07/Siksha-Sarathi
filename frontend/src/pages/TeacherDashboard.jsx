@@ -46,10 +46,10 @@ function TeacherDashboard() {
       </section>
 
       <section className="teacher-overview-stats">
-        <article><span>Students</span><strong>{statistics.total_students ?? 0}</strong><small>Across the school records</small></article>
-        <article><span>Quiz attempts</span><strong>{statistics.total_quiz_attempts ?? 0}</strong><small>Recorded online attempts</small></article>
-        <article><span>Average quiz score</span><strong>{statistics.average_quiz_score ?? 0}%</strong><small>Online activity only</small></article>
-        <article className="attention"><span>Needs follow-up</span><strong>{statistics.students_needing_improvement ?? 0}</strong><small>Open insights for evidence</small></article>
+        <article><span>Students</span><strong>{statistics.total_students ?? 0}</strong><small>In your assigned classes</small></article>
+        <article><span>Quiz attempts</span><strong>{statistics.total_quiz_attempts ?? 0}</strong><small>In your assigned subjects</small></article>
+        <article><span>Average quiz score</span><strong>{statistics.average_quiz_score ?? 0}%</strong><small>Assigned subjects only</small></article>
+        <article className="attention"><span>Quiz needs attention</span><strong>{statistics.students_needing_quiz_support ?? 0}</strong><small>From recorded quiz answers</small></article>
       </section>
 
       <section className="teacher-overview-section">

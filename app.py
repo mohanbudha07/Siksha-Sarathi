@@ -209,6 +209,19 @@ def api_login():
     }, 200
 
 
+@app.route("/api/public/classes", methods=["GET"])
+def public_classes_api():
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute(
+            """SELECT id, name, grade, section FROM classes
+               ORDER BY grade, section, name"""
+        )
+        return {"classes": cur.fetchall()}, 200
+    finally:
+        cur.close()
+
+
 @app.route("/api/register", methods=["POST"])
 def api_register():
 
@@ -223,7 +236,6 @@ def api_register():
     email = data.get("email")
     password = data.get("password")
     full_name = data.get("full_name")
-    grade = data.get("grade")
     role = data.get("role")
 
     if not username or not email or not password or not role:
@@ -231,21 +243,30 @@ def api_register():
             "error": "Username, email, password, and role are required"
         }, 400
 
-    if role not in [STUDENT, TEACHER]:
+    if role != STUDENT:
         return {
-            "error": "Invalid role"
-        }, 400
-
-    if role == STUDENT:
-
-        if not full_name or not grade:
-            return {
-                "error": "Full name and grade are required for students"
-            }, 400
+            "error": "Public registration is available only for students; teachers are created by an administrator"
+        }, 403
+    if not full_name:
+        return {"error": "Full name is required for students"}, 400
+    if len(str(password)) < 8:
+        return {"error": "Password must contain at least 8 characters"}, 400
+    try:
+        class_id = int(data.get("class_id"))
+    except (TypeError, ValueError):
+        return {"error": "Select a class"}, 400
 
     cur = mysql.connection.cursor()
 
     try:
+
+        cur.execute(
+            "SELECT id, grade FROM classes WHERE id = %s",
+            (class_id,)
+        )
+        selected_class = cur.fetchone()
+        if not selected_class:
+            return {"error": "Selected class was not found"}, 404
 
         # Check duplicate email
         cur.execute(
@@ -295,30 +316,17 @@ def api_register():
 
         user_id = cur.lastrowid
 
-        # Create student profile
-        if role == STUDENT:
-
-            cur.execute(
-                """
-                INSERT INTO students
-                (
-                    user_id,
-                    full_name,
-                    grade
-                )
-                VALUES
-                (
-                    %s,
-                    %s,
-                    %s
-                )
-                """,
-                (
-                    user_id,
-                    full_name,
-                    grade
-                )
-            )
+        cur.execute(
+            """INSERT INTO students (user_id, full_name, grade)
+               VALUES (%s, %s, %s)""",
+            (user_id, str(full_name).strip(), selected_class["grade"])
+        )
+        student_id = cur.lastrowid
+        cur.execute(
+            """INSERT INTO student_class_enrollments (student_id, class_id)
+               VALUES (%s, %s)""",
+            (student_id, class_id)
+        )
 
         mysql.connection.commit()
 
@@ -900,9 +908,12 @@ def teacher_dashboard_api():
 
         cur.execute(
             """
-            SELECT COUNT(*) AS total_students
-            FROM students
-            """
+            SELECT COUNT(DISTINCT sce.student_id) AS total_students
+            FROM teacher_class_subjects tcs
+            INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+            WHERE tcs.teacher_user_id = %s
+            """,
+            (session["user_id"],)
         )
 
         total_students = cur.fetchone()["total_students"]
@@ -916,8 +927,17 @@ def teacher_dashboard_api():
             SELECT
                 COUNT(*) AS total_quiz_attempts,
                 COALESCE(AVG(100.0 * score / NULLIF(total_questions, 0)), 0) AS average_quiz_score
-            FROM quiz_results
-            """
+            FROM quiz_results qr
+            INNER JOIN quizzes q ON q.id = qr.quiz_id
+            WHERE EXISTS (
+                SELECT 1 FROM teacher_class_subjects tcs
+                INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+                WHERE tcs.teacher_user_id = %s
+                  AND sce.student_id = qr.student_id
+                  AND LOWER(tcs.subject) = LOWER(q.subject)
+            )
+            """,
+            (session["user_id"],)
         )
 
         quiz_stats = cur.fetchone()
@@ -932,45 +952,33 @@ def teacher_dashboard_api():
         )
 
         # ----------------------------------------------------
-        # Students needing improvement
+        # Quiz support is based on recorded answers for assigned subjects.
         # ----------------------------------------------------
 
         cur.execute(
             """
-            SELECT COUNT(DISTINCT student_id)
-            AS students_needing_improvement
-            FROM predictions p
-            WHERE p.prediction = 'Needs Improvement'
-              AND p.id = (
-                  SELECT MAX(latest.id)
-                  FROM predictions latest
-                  WHERE latest.student_id = p.student_id
-              )
-            """
+            SELECT qr.student_id,
+                   COUNT(qar.id) AS total_questions,
+                   COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
+                   COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
+            FROM quiz_results qr
+            INNER JOIN quizzes q ON q.id = qr.quiz_id
+            LEFT JOIN quiz_answer_results qar ON qar.quiz_result_id = qr.id
+            WHERE EXISTS (
+                SELECT 1 FROM teacher_class_subjects tcs
+                INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+                WHERE tcs.teacher_user_id = %s
+                  AND sce.student_id = qr.student_id
+                  AND LOWER(tcs.subject) = LOWER(q.subject)
+            )
+            GROUP BY qr.student_id, LOWER(q.subject)
+            """,
+            (session["user_id"],)
         )
-
-        improvement_data = cur.fetchone()
-
-        students_needing_improvement = (
-            improvement_data[
-                "students_needing_improvement"
-            ]
-        )
-
-        # ----------------------------------------------------
-        # Total predictions
-        # ----------------------------------------------------
-
-        cur.execute(
-            """
-            SELECT COUNT(*) AS total_predictions
-            FROM predictions
-            """
-        )
-
-        total_predictions = (
-            cur.fetchone()["total_predictions"]
-        )
+        students_needing_quiz_support = len({
+            row["student_id"] for row in cur.fetchall()
+            if build_learning_metrics({"attempts": 0, **row})["status"] == "Needs attention"
+        })
 
         # ----------------------------------------------------
         # Individual student performance
@@ -983,46 +991,40 @@ def teacher_dashboard_api():
                 s.full_name,
                 s.grade,
 
-                COUNT(DISTINCT qr.id)
+                COUNT(qr.id)
                 AS quiz_attempts,
 
                 COALESCE(
                     AVG(100.0 * qr.score / NULLIF(qr.total_questions, 0)),
                     0
-                ) AS average_quiz_score,
-
-                p.prediction,
-                p.attendance,
-                p.assignment_score,
-                p.quiz_score,
-                p.study_hours
+                ) AS average_quiz_score
 
             FROM students s
-
-            LEFT JOIN quiz_results qr
-                ON s.id = qr.student_id
-
-            LEFT JOIN predictions p
-                ON s.id = p.student_id
-
-            AND p.id = (
-                SELECT MAX(p2.id)
-                FROM predictions p2
-                WHERE p2.student_id = s.id
+            LEFT JOIN quiz_results qr ON s.id = qr.student_id
+                AND EXISTS (
+                    SELECT 1 FROM quizzes q
+                    INNER JOIN teacher_class_subjects tcs
+                        ON LOWER(q.subject) = LOWER(tcs.subject)
+                    INNER JOIN student_class_enrollments sce
+                        ON sce.class_id = tcs.class_id
+                    WHERE q.id = qr.quiz_id
+                      AND sce.student_id = s.id
+                      AND tcs.teacher_user_id = %s
+                )
+            WHERE EXISTS (
+                SELECT 1 FROM teacher_class_subjects tcs
+                INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+                WHERE sce.student_id = s.id AND tcs.teacher_user_id = %s
             )
 
             GROUP BY
                 s.id,
                 s.full_name,
-                s.grade,
-                p.prediction,
-                p.attendance,
-                p.assignment_score,
-                p.quiz_score,
-                p.study_hours
+                s.grade
 
             ORDER BY s.full_name
-            """
+            """,
+            (session["user_id"], session["user_id"])
         )
 
         student_performance = cur.fetchall()
@@ -1050,9 +1052,8 @@ def teacher_dashboard_api():
                 "total_students": total_students,
                 "total_quiz_attempts": total_quiz_attempts,
                 "average_quiz_score": average_quiz_score,
-                "students_needing_improvement":
-                    students_needing_improvement,
-                "total_predictions": total_predictions
+                "students_needing_quiz_support":
+                    students_needing_quiz_support
             },
 
             "recent_notes": recent_notes,
@@ -2785,6 +2786,9 @@ def teacher_paper_assessment_scores_api(assessment_id):
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or not isinstance(data.get("scores"), list):
         return {"error": "Scores must be provided as a list"}, 400
+    publish = data.get("is_published")
+    if publish is not None and not isinstance(publish, bool):
+        return {"error": "Publish status must be true or false"}, 400
 
     cur = mysql.connection.cursor()
     try:
@@ -2839,6 +2843,9 @@ def teacher_paper_assessment_scores_api(assessment_id):
                 return {"error": "Remarks must be at most 500 characters"}, 400
             normalized.append((student_id, marks, is_absent, remarks))
 
+        if publish is True and (not enrolled_ids or seen_ids != enrolled_ids):
+            return {"error": "Record marks or absence for every enrolled student before publishing"}, 400
+
         cur.execute(
             "DELETE FROM paper_assessment_scores WHERE assessment_id = %s",
             (assessment_id,)
@@ -2851,6 +2858,12 @@ def teacher_paper_assessment_scores_api(assessment_id):
                 VALUES (%s, %s, %s, %s, %s)
                 """,
                 (assessment_id, student_id, marks, is_absent, remarks)
+            )
+        if publish is not None:
+            cur.execute(
+                """UPDATE paper_assessments SET is_published = %s
+                   WHERE id = %s AND teacher_user_id = %s""",
+                (publish, assessment_id, session["user_id"])
             )
         mysql.connection.commit()
         return {
@@ -3673,7 +3686,252 @@ def submit_student_quiz():
         cur.close()
 
 
-        # ============================================================
+# ============================================================
+# ADMIN SCHOOL SETUP
+# ============================================================
+
+@app.route("/api/admin/school-setup", methods=["GET"])
+@login_required
+@role_required(ADMIN)
+def admin_school_setup_api():
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("SELECT id, name, grade, section FROM classes ORDER BY grade, section")
+        classes = cur.fetchall()
+        cur.execute(
+            """SELECT id, username, email FROM users
+               WHERE role = 'teacher' ORDER BY username"""
+        )
+        teachers = cur.fetchall()
+        cur.execute(
+            """SELECT s.id AS student_id, s.full_name, s.grade, u.email,
+                      c.id AS class_id, c.name AS class_name
+               FROM students s
+               INNER JOIN users u ON u.id = s.user_id
+               LEFT JOIN student_class_enrollments sce ON sce.student_id = s.id
+               LEFT JOIN classes c ON c.id = sce.class_id
+               ORDER BY s.full_name, c.name"""
+        )
+        students = cur.fetchall()
+        cur.execute(
+            """SELECT tcs.id, tcs.teacher_user_id, u.username AS teacher_name,
+                      tcs.class_id, c.name AS class_name, tcs.subject,
+                      CASE WHEN cta.teacher_user_id IS NULL THEN 0 ELSE 1 END
+                          AS is_class_teacher
+               FROM teacher_class_subjects tcs
+               INNER JOIN users u ON u.id = tcs.teacher_user_id
+               INNER JOIN classes c ON c.id = tcs.class_id
+               LEFT JOIN class_teacher_assignments cta
+                 ON cta.class_id = tcs.class_id
+                AND cta.teacher_user_id = tcs.teacher_user_id
+               ORDER BY c.name, tcs.subject, u.username"""
+        )
+        assignments = cur.fetchall()
+        for assignment in assignments:
+            assignment["is_class_teacher"] = bool(assignment["is_class_teacher"])
+        return {
+            "classes": classes, "teachers": teachers,
+            "students": students, "assignments": assignments
+        }, 200
+    finally:
+        cur.close()
+
+
+@app.route("/api/admin/classes", methods=["POST"])
+@login_required
+@role_required(ADMIN)
+def admin_create_class_api():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return {"error": "Class data is required"}, 400
+    name = str(data.get("name") or "").strip()
+    grade = str(data.get("grade") or "").strip()
+    section = str(data.get("section") or "Default").strip()
+    if not name or not grade or not section:
+        return {"error": "Class name, grade and section are required"}, 400
+    if len(name) > 100 or len(grade) > 20 or len(section) > 50:
+        return {"error": "Class information is too long"}, 400
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute(
+            "SELECT id FROM classes WHERE grade = %s AND section = %s",
+            (grade, section)
+        )
+        if cur.fetchone():
+            return {"error": "This grade and section already exist"}, 409
+        cur.execute(
+            "INSERT INTO classes (name, grade, section) VALUES (%s, %s, %s)",
+            (name, grade, section)
+        )
+        class_id = cur.lastrowid
+        mysql.connection.commit()
+        return {"message": "Class created", "class_id": class_id}, 201
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Admin class creation error:", error)
+        return {"error": "Unable to create class"}, 500
+    finally:
+        cur.close()
+
+
+@app.route("/api/admin/teachers", methods=["POST"])
+@login_required
+@role_required(ADMIN)
+def admin_create_teacher_api():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return {"error": "Teacher data is required"}, 400
+    username = str(data.get("username") or "").strip()
+    email = str(data.get("email") or "").strip().lower()
+    password = str(data.get("password") or "")
+    if not username or not email or "@" not in email:
+        return {"error": "Teacher name and a valid email are required"}, 400
+    if len(password) < 8:
+        return {"error": "Password must contain at least 8 characters"}, 400
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+        if cur.fetchone():
+            return {"error": "Email already registered"}, 409
+        cur.execute(
+            """INSERT INTO users (username, email, password, role)
+               VALUES (%s, %s, %s, 'teacher')""",
+            (username, email, generate_password_hash(password))
+        )
+        teacher_id = cur.lastrowid
+        mysql.connection.commit()
+        return {"message": "Teacher account created", "teacher_id": teacher_id}, 201
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Admin teacher creation error:", error)
+        return {"error": "Unable to create teacher"}, 500
+    finally:
+        cur.close()
+
+
+@app.route("/api/admin/students/<int:student_id>/class", methods=["PUT"])
+@login_required
+@role_required(ADMIN)
+def admin_enroll_student_api(student_id):
+    data = request.get_json(silent=True)
+    try:
+        class_id = int(data.get("class_id")) if isinstance(data, dict) else 0
+    except (TypeError, ValueError):
+        class_id = 0
+    if not class_id:
+        return {"error": "Class is required"}, 400
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("SELECT id FROM students WHERE id = %s", (student_id,))
+        if not cur.fetchone():
+            return {"error": "Student not found"}, 404
+        cur.execute("SELECT id, grade FROM classes WHERE id = %s", (class_id,))
+        selected_class = cur.fetchone()
+        if not selected_class:
+            return {"error": "Class not found"}, 404
+        cur.execute("DELETE FROM student_class_enrollments WHERE student_id = %s", (student_id,))
+        cur.execute(
+            "INSERT INTO student_class_enrollments (student_id, class_id) VALUES (%s, %s)",
+            (student_id, class_id)
+        )
+        cur.execute("UPDATE students SET grade = %s WHERE id = %s",
+                    (selected_class["grade"], student_id))
+        mysql.connection.commit()
+        return {"message": "Student enrolled in class"}, 200
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Admin enrollment error:", error)
+        return {"error": "Unable to enroll student"}, 500
+    finally:
+        cur.close()
+
+
+@app.route("/api/admin/teacher-assignments", methods=["POST"])
+@login_required
+@role_required(ADMIN)
+def admin_create_teacher_assignment_api():
+    data = request.get_json(silent=True)
+    try:
+        teacher_id = int(data.get("teacher_user_id"))
+        class_id = int(data.get("class_id"))
+    except (AttributeError, TypeError, ValueError):
+        return {"error": "Teacher and class are required"}, 400
+    subject = str(data.get("subject") or "").strip()
+    is_class_teacher = data.get("is_class_teacher", False)
+    if not subject or len(subject) > 100:
+        return {"error": "Subject is required and must be at most 100 characters"}, 400
+    if not isinstance(is_class_teacher, bool):
+        return {"error": "Class teacher status must be true or false"}, 400
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute("SELECT id FROM users WHERE id = %s AND role = 'teacher'", (teacher_id,))
+        if not cur.fetchone():
+            return {"error": "Teacher not found"}, 404
+        cur.execute("SELECT id FROM classes WHERE id = %s", (class_id,))
+        if not cur.fetchone():
+            return {"error": "Class not found"}, 404
+        cur.execute(
+            """SELECT id FROM teacher_class_subjects
+               WHERE teacher_user_id = %s AND class_id = %s
+                 AND LOWER(subject) = LOWER(%s)""",
+            (teacher_id, class_id, subject)
+        )
+        if cur.fetchone():
+            return {"error": "Teacher already has this class-subject assignment"}, 409
+        cur.execute(
+            """INSERT INTO teacher_class_subjects
+               (teacher_user_id, class_id, subject) VALUES (%s, %s, %s)""",
+            (teacher_id, class_id, subject)
+        )
+        assignment_id = cur.lastrowid
+        if is_class_teacher:
+            cur.execute("DELETE FROM class_teacher_assignments WHERE class_id = %s", (class_id,))
+            cur.execute(
+                """INSERT INTO class_teacher_assignments (teacher_user_id, class_id)
+                   VALUES (%s, %s)""", (teacher_id, class_id)
+            )
+        mysql.connection.commit()
+        return {"message": "Teacher assignment created", "assignment_id": assignment_id}, 201
+    except Exception as error:
+        mysql.connection.rollback()
+        print("Admin assignment error:", error)
+        return {"error": "Unable to assign teacher"}, 500
+    finally:
+        cur.close()
+
+
+@app.route("/api/admin/teacher-assignments/<int:assignment_id>", methods=["DELETE"])
+@login_required
+@role_required(ADMIN)
+def admin_delete_teacher_assignment_api(assignment_id):
+    cur = mysql.connection.cursor()
+    try:
+        cur.execute(
+            "SELECT teacher_user_id, class_id FROM teacher_class_subjects WHERE id = %s",
+            (assignment_id,)
+        )
+        assignment = cur.fetchone()
+        if not assignment:
+            return {"error": "Teacher assignment not found"}, 404
+        cur.execute("DELETE FROM teacher_class_subjects WHERE id = %s", (assignment_id,))
+        cur.execute(
+            """SELECT id FROM teacher_class_subjects
+               WHERE teacher_user_id = %s AND class_id = %s LIMIT 1""",
+            (assignment["teacher_user_id"], assignment["class_id"])
+        )
+        if not cur.fetchone():
+            cur.execute(
+                """DELETE FROM class_teacher_assignments
+                   WHERE teacher_user_id = %s AND class_id = %s""",
+                (assignment["teacher_user_id"], assignment["class_id"])
+            )
+        mysql.connection.commit()
+        return {"message": "Teacher assignment removed"}, 200
+    finally:
+        cur.close()
+
+
+# ============================================================
 # ADMIN DASHBOARD
 # ============================================================
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../api'
 import './TeacherAssessments.css'
 
@@ -23,7 +23,9 @@ const formatDate = (value) => {
 }
 
 function TeacherAssessments() {
+  const location = useLocation()
   const navigate = useNavigate()
+  const notice = location.state?.notice
   const [assignments, setAssignments] = useState([])
   const [assessments, setAssessments] = useState([])
   const [assignmentKey, setAssignmentKey] = useState('')
@@ -113,6 +115,7 @@ function TeacherAssessments() {
       </section>
 
       {error && <div className="paper-assessment-error">⚠️ {error}</div>}
+      {notice && <div className="paper-assessment-success" role="status">✓ {notice}</div>}
 
       {showForm && (
         <form className="paper-assessment-form" onSubmit={createAssessment}>

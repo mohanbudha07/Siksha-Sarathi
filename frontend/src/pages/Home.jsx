@@ -94,11 +94,7 @@ function Home() {
                 support students through a smart teaching platform.
               </p>
 
-              <button
-                onClick={() => navigate('/teacher/register')}
-              >
-                Register as Teacher →
-              </button>
+              <button onClick={() => navigate('/login')}>Teacher Sign In →</button>
 
               <span
                 className="role-login"
@@ -152,4 +148,3 @@ function Home() {
 }
 
 export default Home
-

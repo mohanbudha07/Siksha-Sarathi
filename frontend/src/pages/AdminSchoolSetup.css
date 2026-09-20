@@ -1,0 +1,11 @@
+.school-setup-page { min-height: 100vh; padding: 30px 38px 60px; background: #f6f8fc; color: #172033; }
+.school-setup-page > * { max-width: 1180px; margin-left: auto; margin-right: auto; }
+.school-back { margin-bottom: 14px; border: 0; background: transparent; color: #2563eb; font-weight: 800; cursor: pointer; }
+.school-setup-hero { padding: 28px 32px; border-radius: 18px; background: linear-gradient(135deg,#172554,#2563eb); color: white; }
+.school-setup-hero p { margin: 0 0 7px; color: #bfdbfe; font-size: 12px; font-weight: 800; letter-spacing: 1.4px; }.school-setup-hero h1 { margin: 0 0 7px; }.school-setup-hero span { color: #dbeafe; }
+.school-message { padding: 13px 16px; margin-top: 16px; border-radius: 10px; }.school-message.error { background: #fef2f2; color: #991b1b; }.school-message.success { background: #ecfdf5; color: #065f46; }
+.school-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin-top: 20px; }
+.school-form-grid form,.school-list { padding: 22px; border: 1px solid #dce5ef; border-radius: 15px; background: white; }.school-form-grid h2,.school-list h2 { margin: 0 0 16px; }
+.school-form-grid label { display: grid; gap: 6px; margin-bottom: 12px; color: #334155; font-size: 13px; font-weight: 700; }.school-form-grid input,.school-form-grid select { padding: 10px 11px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }.school-form-grid button { padding: 10px 14px; border: 0; border-radius: 8px; background: #2563eb; color: white; font-weight: 700; cursor: pointer; }.school-check { grid-template-columns: auto 1fr!important; align-items: center; }
+.school-list { margin-top: 20px; }.school-table-wrap { overflow-x: auto; }.school-list table { width: 100%; border-collapse: collapse; }.school-list th,.school-list td { padding: 11px; border-bottom: 1px solid #e2e8f0; text-align: left; }.school-list button { border: 0; background: transparent; color: #b91c1c; font-weight: 700; cursor: pointer; }
+@media(max-width:720px){.school-setup-page{padding:20px 15px 45px}.school-form-grid{grid-template-columns:1fr}}

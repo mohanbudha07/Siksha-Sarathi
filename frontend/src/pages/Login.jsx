@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../api'
 import './Login.css'
 
@@ -10,6 +10,7 @@ function Login() {
   const [loading, setLoading] = useState(false)
 
   const navigate = useNavigate()
+  const location = useLocation()
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -104,6 +105,9 @@ if (role === 'teacher') {
                 ⚠️ {error}
               </div>
             )}
+            {location.state?.notice && !error && (
+              <div className="login-success" role="status">✓ {location.state.notice}</div>
+            )}
 
             <button
               type="submit"
@@ -132,13 +136,8 @@ if (role === 'teacher') {
       👨‍🎓 Register as Student
     </button>
 
-    <button
-      type="button"
-      onClick={() => navigate('/teacher/register')}
-    >
-      👨‍🏫 Register as Teacher
-    </button>
   </div>
+  <small>Teacher accounts are created by the school administrator.</small>
 </div>
 
           <div className="login-footer">

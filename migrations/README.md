@@ -107,3 +107,14 @@ Migration 006 adds teacher-managed paper assessments and student marks.
 Teachers can create assessments only for assigned classes and subjects. Marks,
 absence status, and teacher remarks are recorded separately for each student.
 Draft results can be reviewed before being published.
+
+## Admin school setup migration
+
+Migration 008 prevents multiple student profiles from being attached to one
+login account. It supports the admin-managed class enrollment workflow.
+
+    sudo mysql siksha_sarathi < migrations/008_admin_school_setup.sql
+
+The first query must return no duplicate `user_id` rows. Public registration
+creates student accounts only; administrators create teacher accounts and
+manage class enrollment and teacher subject assignments in the application.

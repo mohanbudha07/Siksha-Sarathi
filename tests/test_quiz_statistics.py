@@ -69,7 +69,7 @@ class QuizStatisticsTests(unittest.TestCase):
         self.db.row_factory = sqlite3.Row
         self.db.executescript('''
             CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT, email TEXT,
-                role TEXT, created_at TEXT);
+                password TEXT, role TEXT, created_at TEXT);
             CREATE TABLE students(id INTEGER PRIMARY KEY, user_id INTEGER,
                 full_name TEXT, grade TEXT);
             CREATE TABLE classes(id INTEGER PRIMARY KEY, name TEXT, grade TEXT,
@@ -123,11 +123,11 @@ class QuizStatisticsTests(unittest.TestCase):
                 quiz_score REAL, study_hours REAL);
             CREATE TABLE notes(id INTEGER PRIMARY KEY, title TEXT, subject TEXT,
                 chapter TEXT, content TEXT, created_at TEXT, uploaded_by INTEGER);
-            INSERT INTO users VALUES(1,'Student','s@example.test','student','2026-01-01');
-            INSERT INTO users VALUES(2,'Teacher','t@example.test','teacher','2026-01-01');
-            INSERT INTO users VALUES(3,'Admin','a@example.test','admin','2026-01-01');
-            INSERT INTO users VALUES(4,'Other Teacher','other@example.test','teacher','2026-01-01');
-            INSERT INTO users VALUES(5,'Student Two','s2@example.test','student','2026-01-01');
+            INSERT INTO users VALUES(1,'Student','s@example.test','hash','student','2026-01-01');
+            INSERT INTO users VALUES(2,'Teacher','t@example.test','hash','teacher','2026-01-01');
+            INSERT INTO users VALUES(3,'Admin','a@example.test','hash','admin','2026-01-01');
+            INSERT INTO users VALUES(4,'Other Teacher','other@example.test','hash','teacher','2026-01-01');
+            INSERT INTO users VALUES(5,'Student Two','s2@example.test','hash','student','2026-01-01');
             INSERT INTO students VALUES(1,1,'Student One','10');
             INSERT INTO students VALUES(2,5,'Student Two','9');
             INSERT INTO classes VALUES(1,'Grade 10','10','Default','2026-01-01');
@@ -186,6 +186,73 @@ class QuizStatisticsTests(unittest.TestCase):
         }
         payload.update(overrides)
         return payload
+
+    def test_public_registration_is_student_only_and_enrolls_selected_class(self):
+        teacher = self.client.post('/api/register', json={
+            'username': 'Unapproved', 'email': 'unapproved@example.test',
+            'password': 'Password123', 'role': 'teacher'
+        })
+        self.assertEqual(teacher.status_code, 403)
+        self.assertIsNone(self.db.execute(
+            "SELECT id FROM users WHERE email='unapproved@example.test'"
+        ).fetchone())
+
+        classes = self.client.get('/api/public/classes')
+        self.assertEqual(classes.status_code, 200)
+        self.assertEqual(classes.json['classes'][0]['name'], 'Grade 10')
+        response = self.client.post('/api/register', json={
+            'username': 'New Student', 'full_name': 'New Student',
+            'email': 'new.student@example.test', 'password': 'Password123',
+            'role': 'student', 'class_id': 1
+        })
+        self.assertEqual(response.status_code, 201)
+        enrolled = self.db.execute(
+            '''SELECT s.grade, sce.class_id FROM students s
+               JOIN student_class_enrollments sce ON sce.student_id=s.id
+               WHERE s.user_id=?''', (response.json['user']['id'],)
+        ).fetchone()
+        self.assertEqual(tuple(enrolled), ('10', 1))
+
+    def test_admin_manages_classes_enrollment_and_teacher_assignments(self):
+        self.login('admin')
+        created_class = self.client.post('/api/admin/classes', json={
+            'name': 'Grade 8 A', 'grade': '8', 'section': 'A'
+        })
+        self.assertEqual(created_class.status_code, 201)
+        class_id = created_class.json['class_id']
+        teacher = self.client.post('/api/admin/teachers', json={
+            'username': 'Science Teacher', 'email': 'science@example.test',
+            'password': 'Password123'
+        })
+        self.assertEqual(teacher.status_code, 201)
+        teacher_id = teacher.json['teacher_id']
+        self.assertEqual(self.client.put('/api/admin/students/2/class', json={
+            'class_id': class_id
+        }).status_code, 200)
+        assignment = self.client.post('/api/admin/teacher-assignments', json={
+            'teacher_user_id': teacher_id, 'class_id': class_id,
+            'subject': 'Science', 'is_class_teacher': True
+        })
+        self.assertEqual(assignment.status_code, 201)
+
+        setup = self.client.get('/api/admin/school-setup')
+        self.assertEqual(setup.status_code, 200)
+        self.assertTrue(any(item['email'] == 'science@example.test'
+                            for item in setup.json['teachers']))
+        self.assertTrue(any(item['student_id'] == 2 and item['class_id'] == class_id
+                            for item in setup.json['students']))
+        self.assertTrue(setup.json['assignments'][-1]['is_class_teacher'])
+        self.assertEqual(self.client.delete(
+            f"/api/admin/teacher-assignments/{assignment.json['assignment_id']}"
+        ).status_code, 200)
+
+    def test_school_setup_requires_admin_role(self):
+        for role in ('student', 'teacher'):
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(
+                    self.client.get('/api/admin/school-setup').status_code, 403
+                )
 
     def test_quiz_response_contains_only_public_fields(self):
         response = self.client.get('/api/student/quiz')
@@ -362,16 +429,45 @@ class QuizStatisticsTests(unittest.TestCase):
         self.db.executemany('INSERT INTO predictions(id,student_id,prediction) VALUES(?,?,?)',
                             [(1, 1, 'Needs Improvement'), (2, 1, 'Good'),
                              (3, 2, 'Good'), (4, 2, 'Needs Improvement')])
-        for role in ['teacher', 'admin']:
-            with self.subTest(role=role):
-                self.login(role)
-                response = self.client.get('/api/' + role + '/dashboard')
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json['statistics']['students_needing_improvement'], 1)
-                self.db.execute("UPDATE predictions SET prediction='Good' WHERE id=4")
-                response = self.client.get('/api/' + role + '/dashboard')
-                self.assertEqual(response.json['statistics']['students_needing_improvement'], 0)
-                self.db.execute("UPDATE predictions SET prediction='Needs Improvement' WHERE id=4")
+        self.login('admin')
+        response = self.client.get('/api/admin/dashboard')
+        self.assertEqual(response.json['statistics']['students_needing_improvement'], 1)
+        self.db.execute("UPDATE predictions SET prediction='Good' WHERE id=4")
+        response = self.client.get('/api/admin/dashboard')
+        self.assertEqual(response.json['statistics']['students_needing_improvement'], 0)
+
+    def test_teacher_dashboard_only_shows_assigned_students_and_quiz_evidence(self):
+        self.assertEqual(self.submit({'0': 'B', '1': 'C'}).status_code, 200)
+        self.db.execute('''INSERT INTO quizzes(id,title,subject,questions,is_published)
+                           VALUES(2,'Math','Math','[]',1)''')
+        self.db.executemany('''INSERT INTO quiz_results(id,student_id,quiz_id,score,total_questions)
+                               VALUES(?,?,?,?,?)''',
+                            [(50, 1, 2, 10, 10), (51, 2, 1, 10, 10)])
+        self.db.execute('''INSERT INTO quiz_answer_results(quiz_result_id,
+                           question_index,question_text,topic,difficulty,is_correct,is_skipped)
+                           VALUES(51,0,'Other student','Force','easy',1,0)''')
+        self.db.execute("INSERT INTO predictions(student_id,prediction) VALUES(2,'Needs Improvement')")
+        self.db.execute("INSERT INTO classes VALUES(3,'Grade 10 B','10','B','2026-01-01')")
+        self.db.execute("INSERT INTO student_class_enrollments VALUES(3,1,3,'2026-01-01')")
+        self.db.execute("INSERT INTO teacher_class_subjects VALUES(2,2,3,'Science','2026-01-01')")
+
+        self.login('teacher')
+        result = self.client.get('/api/teacher/dashboard')
+        self.assertEqual(result.status_code, 200)
+        stats = result.json['statistics']
+        self.assertEqual(stats['total_students'], 1)
+        self.assertEqual(stats['total_quiz_attempts'], 1)
+        self.assertEqual(stats['average_quiz_score'], 0)
+        self.assertEqual(stats['students_needing_quiz_support'], 1)
+        self.assertEqual(len(result.json['student_performance']), 1)
+        self.assertEqual(result.json['student_performance'][0]['quiz_attempts'], 1)
+
+        self.login('other_teacher')
+        other = self.client.get('/api/teacher/dashboard')
+        self.assertEqual(other.status_code, 200)
+        self.assertEqual(other.json['statistics']['total_students'], 0)
+        self.assertEqual(other.json['statistics']['students_needing_quiz_support'], 0)
+        self.assertEqual(other.json['student_performance'], [])
 
     def test_quiz_routes_still_require_student_role(self):
         self.login('teacher')
@@ -1094,6 +1190,41 @@ class QuizStatisticsTests(unittest.TestCase):
             'SELECT marks_obtained,is_absent FROM paper_assessment_scores'
         ).fetchone()
         self.assertEqual(tuple(row), (None, 1))
+
+    def test_paper_assessment_publishes_scores_together_and_rejects_over_max(self):
+        self.login('teacher')
+        assessment_id = self.client.post(
+            '/api/teacher/paper-assessments',
+            json=self.paper_assessment_payload()
+        ).json['assessment_id']
+        url = f'/api/teacher/paper-assessments/{assessment_id}/scores'
+
+        invalid = self.client.put(url, json={
+            'is_published': True,
+            'scores': [{'student_id': 1, 'marks_obtained': 60}]
+        })
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(self.db.execute(
+            'SELECT is_published FROM paper_assessments WHERE id=?',
+            (assessment_id,)
+        ).fetchone()[0], 0)
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM paper_assessment_scores WHERE assessment_id=?',
+            (assessment_id,)
+        ).fetchone()[0], 0)
+
+        published = self.client.put(url, json={
+            'is_published': True,
+            'scores': [{'student_id': 1, 'marks_obtained': 45}]
+        })
+        self.assertEqual(published.status_code, 200)
+        detail = self.client.get(f'/api/teacher/paper-assessments/{assessment_id}')
+        self.assertTrue(detail.json['assessment']['is_published'])
+        self.assertEqual(detail.json['students'][0]['percentage'], 90)
+
+        self.assertEqual(self.client.put(url, json={
+            'is_published': 'yes', 'scores': []
+        }).status_code, 400)
 
     def test_paper_assessment_is_scoped_to_assigned_teacher(self):
         self.login('other_teacher')

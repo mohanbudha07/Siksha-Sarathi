@@ -124,6 +124,7 @@
   font-size: 14px;
   line-height: 1.4;
 }
+.login-success { margin-bottom: 14px; padding: 11px 13px; border: 1px solid #a7f3d0; border-radius: 9px; background: #ecfdf5; color: #065f46; font-size: 13px; }
 
 /* Button */
 

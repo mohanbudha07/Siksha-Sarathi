@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS students (
     user_id INT NOT NULL,
     full_name VARCHAR(100),
     grade VARCHAR(20),
+    UNIQUE KEY uq_students_user (user_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 

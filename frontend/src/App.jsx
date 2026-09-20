@@ -5,7 +5,6 @@ import api from './api'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import StudentRegister from './pages/StudentRegister'
-import TeacherRegister from './pages/TeacherRegister'
 
 import StudentLayout from './components/StudentLayout'
 import TeacherLayout from './components/TeacherLayout'
@@ -18,6 +17,7 @@ import AIAssistant from './pages/AIAssistant'
 import TeacherDashboard from './pages/TeacherDashboard'
 import TeacherNotes from './pages/TeacherNotes'
 import AdminDashboard from './pages/AdminDashboard'
+import AdminSchoolSetup from './pages/AdminSchoolSetup'
 import TeacherUploadNote from './pages/TeacherUploadNote'
 import TeacherEditNote from './pages/TeacherEditNote'
 import TeacherQuizzes from './pages/TeacherQuizzes'
@@ -37,7 +37,7 @@ function useAuthCheck() {
 
   useEffect(() => {
     // Only check auth if we are not on public pages
-    const publicPaths = ['/', '/login', '/student/register', '/teacher/register']
+    const publicPaths = ['/', '/login', '/student/register']
     if (publicPaths.includes(window.location.pathname)) {
       setLoading(false)
       return
@@ -119,7 +119,6 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/student/register" element={<StudentRegister />} />
-        <Route path="/teacher/register" element={<TeacherRegister />} />
 
         {/* Student routes */}
         <Route path="/student/dashboard" element={
@@ -200,6 +199,9 @@ function App() {
         {/* Admin */}
         <Route path="/admin/dashboard" element={
           <AdminPage><AdminDashboard /></AdminPage>
+        } />
+        <Route path="/admin/school-setup" element={
+          <AdminPage><AdminSchoolSetup /></AdminPage>
         } />
 
         {/* Fallback */}

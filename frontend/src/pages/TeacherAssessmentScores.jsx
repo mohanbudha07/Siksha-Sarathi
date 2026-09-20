@@ -3,13 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api'
 import './TeacherAssessments.css'
 
-const normalizeDate = (value) => {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10)
-  return date.toISOString().slice(0, 10)
-}
-
 function TeacherAssessmentScores() {
   const { assessmentId } = useParams()
   const navigate = useNavigate()
@@ -43,14 +36,21 @@ function TeacherAssessmentScores() {
   }, [assessmentId])
 
   const statistics = useMemo(() => {
-    const presentRows = rows.filter((row) => !row.is_absent && row.marks_obtained !== '')
+    const presentRows = rows.filter((row) => !row.is_absent && row.marks_obtained !== ''
+      && Number.isFinite(Number(row.marks_obtained))
+      && Number(row.marks_obtained) >= 0
+      && Number(row.marks_obtained) <= assessment?.max_marks)
+    const hasInvalidMarks = rows.some((row) => !row.is_absent && row.marks_obtained !== ''
+      && (!Number.isFinite(Number(row.marks_obtained))
+        || Number(row.marks_obtained) < 0 || Number(row.marks_obtained) > assessment?.max_marks))
     const average = presentRows.length && assessment
       ? presentRows.reduce((sum, row) => sum + Number(row.marks_obtained), 0) / presentRows.length
       : 0
     return {
       recorded: rows.filter((row) => row.is_absent || row.marks_obtained !== '').length,
       absent: rows.filter((row) => row.is_absent).length,
-      averagePercent: assessment ? Math.round(1000 * average / assessment.max_marks) / 10 : 0,
+      averagePercent: hasInvalidMarks ? null : assessment
+        ? Math.round(1000 * average / assessment.max_marks) / 10 : 0,
     }
   }, [assessment, rows])
 
@@ -60,12 +60,18 @@ function TeacherAssessmentScores() {
       : row))
     setError('')
     setSuccess('')
+    if (field === 'marks_obtained' && value !== '' && assessment
+      && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > assessment.max_marks)) {
+      setError(`Marks must be between 0 and ${assessment.max_marks}. Correct this before saving.`)
+    }
   }
 
   const toggleAbsent = (studentId, checked) => {
     setRows((current) => current.map((row) => row.student_id === studentId
       ? { ...row, is_absent: checked, marks_obtained: checked ? '' : row.marks_obtained }
       : row))
+    setError('')
+    setSuccess('')
   }
 
   const saveScores = async () => {
@@ -75,7 +81,8 @@ function TeacherAssessmentScores() {
       return
     }
     const invalid = rows.find((row) => !row.is_absent && (
-      Number(row.marks_obtained) < 0 || Number(row.marks_obtained) > assessment.max_marks
+      !Number.isFinite(Number(row.marks_obtained))
+      || Number(row.marks_obtained) < 0 || Number(row.marks_obtained) > assessment.max_marks
     ))
     if (invalid) {
       setError(`${invalid.full_name}'s marks must be between 0 and ${assessment.max_marks}.`)
@@ -87,6 +94,7 @@ function TeacherAssessmentScores() {
       setError('')
       setSuccess('')
       await api.put(`/teacher/paper-assessments/${assessmentId}/scores`, {
+        is_published: published,
         scores: rows.map((row) => ({
           student_id: row.student_id,
           marks_obtained: row.is_absent ? null : Number(row.marks_obtained),
@@ -94,19 +102,14 @@ function TeacherAssessmentScores() {
           remarks: row.remarks,
         })),
       })
-      await api.put(`/teacher/paper-assessments/${assessmentId}`, {
-        class_id: assessment.class_id,
-        subject: assessment.subject,
-        title: assessment.title,
-        assessment_type: assessment.assessment_type,
-        assessment_date: normalizeDate(assessment.assessment_date),
-        max_marks: assessment.max_marks,
-        academic_year: assessment.academic_year,
-        term: assessment.term,
-        is_published: published,
-      })
-      setAssessment((current) => ({ ...current, is_published: published }))
-      setSuccess(published ? 'Marks saved and published successfully.' : 'Draft marks saved successfully.')
+      if (published) {
+        navigate('/teacher/assessments', {
+          state: { notice: `${assessment.title}: marks saved and results published.` },
+        })
+      } else {
+        setAssessment((current) => ({ ...current, is_published: false }))
+        setSuccess('Draft marks saved. You can publish them when ready.')
+      }
     } catch (err) {
       setError(err.response?.data?.error || 'Unable to save assessment marks.')
     } finally {
@@ -129,7 +132,7 @@ function TeacherAssessmentScores() {
         <article><span>Students</span><strong>{rows.length}</strong></article>
         <article><span>Recorded</span><strong>{statistics.recorded}</strong></article>
         <article><span>Absent</span><strong>{statistics.absent}</strong></article>
-        <article><span>Class average</span><strong>{statistics.averagePercent}%</strong></article>
+        <article><span>Class average</span><strong>{statistics.averagePercent === null ? '—' : `${statistics.averagePercent}%`}</strong></article>
       </section>
 
       {error && <div className="paper-assessment-error">⚠️ {error}</div>}
@@ -142,14 +145,17 @@ function TeacherAssessmentScores() {
             <table className="paper-marks-table">
               <thead><tr><th>#</th><th>Student</th><th>Marks / {assessment.max_marks}</th><th>Absent</th><th>Percentage</th><th>Teacher remarks</th></tr></thead>
               <tbody>{rows.map((row, index) => {
-                const percentage = !row.is_absent && row.marks_obtained !== ''
+                const invalidMarks = !row.is_absent && row.marks_obtained !== ''
+                  && (!Number.isFinite(Number(row.marks_obtained))
+                    || Number(row.marks_obtained) < 0 || Number(row.marks_obtained) > assessment.max_marks)
+                const percentage = !invalidMarks && !row.is_absent && row.marks_obtained !== ''
                   ? Math.round(1000 * Number(row.marks_obtained) / assessment.max_marks) / 10
                   : null
                 return <tr key={row.student_id} className={row.is_absent ? 'paper-absent-row' : ''}>
                   <td>{index + 1}</td><td><strong>{row.full_name}</strong><small>Grade {row.grade}</small></td>
-                  <td><input className="paper-mark-input" type="number" min="0" max={assessment.max_marks} step="0.01" disabled={row.is_absent} value={row.marks_obtained} onChange={(event) => updateRow(row.student_id, 'marks_obtained', event.target.value)} placeholder={row.is_absent ? 'Absent' : 'Marks'} /></td>
+                  <td><input className="paper-mark-input" type="number" min="0" max={assessment.max_marks} step="0.01" disabled={row.is_absent} aria-invalid={invalidMarks} value={row.marks_obtained} onChange={(event) => updateRow(row.student_id, 'marks_obtained', event.target.value)} placeholder={row.is_absent ? 'Absent' : 'Marks'} /></td>
                   <td><label className="paper-absent-check"><input type="checkbox" checked={row.is_absent} onChange={(event) => toggleAbsent(row.student_id, event.target.checked)} /><span>{row.is_absent ? 'Absent' : 'Present'}</span></label></td>
-                  <td><span className={percentage === null ? 'paper-percent empty' : percentage < 40 ? 'paper-percent low' : percentage < 60 ? 'paper-percent developing' : 'paper-percent good'}>{percentage === null ? '—' : `${percentage}%`}</span></td>
+                  <td><span className={invalidMarks ? 'paper-percent low' : percentage === null ? 'paper-percent empty' : percentage < 40 ? 'paper-percent low' : percentage < 60 ? 'paper-percent developing' : 'paper-percent good'}>{invalidMarks ? 'Check marks' : percentage === null ? '—' : `${percentage}%`}</span></td>
                   <td><input className="paper-remark-input" maxLength="500" value={row.remarks} onChange={(event) => updateRow(row.student_id, 'remarks', event.target.value)} placeholder="Optional observation" /></td>
                 </tr>
               })}</tbody>
