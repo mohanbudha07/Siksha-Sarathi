@@ -5,6 +5,9 @@
 .attendance-hero h1, .attendance-register-hero h1 { margin: 0 0 8px; font-size: 32px; }
 .attendance-hero span, .attendance-register-hero span { color: #f0fdfa; line-height: 1.5; }
 .attendance-hero button, .attendance-register-hero button { flex: 0 0 auto; padding: 12px 17px; border: 0; border-radius: 10px; background: white; color: #065f46; font-weight: 800; cursor: pointer; }
+.attendance-register-actions { display: flex; align-items: flex-end; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
+.attendance-register-actions label { display: grid; gap: 5px; color: #ccfbf1; font-size: 12px; font-weight: 800; }
+.attendance-register-actions input { width: 92px; padding: 10px; border: 1px solid rgba(255,255,255,.5); border-radius: 9px; background: rgba(255,255,255,.96); color: #134e4a; font: inherit; }
 .attendance-message { padding: 14px 18px; margin-bottom: 18px; border-radius: 12px; }
 .attendance-message.error { border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
 .attendance-message.success { border: 1px solid #a7f3d0; background: #ecfdf5; color: #065f46; }

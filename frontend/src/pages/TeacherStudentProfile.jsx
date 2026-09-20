@@ -124,9 +124,9 @@ function TeacherStudentProfile() {
           <small>{paper.recorded_assessments || 0} recorded entries</small>
         </article>
         <article>
-          <span>Daily attendance</span>
+          <span>Attendance</span>
           <strong>{attendance.recorded_days ? `${attendance.attendance_percent}%` : '—'}</strong>
-          <small>{attendance.recorded_days || 0} school days tracked</small>
+          <small>{attendance.recorded_days || 0} school days across {attendance.recorded_months || 0} months</small>
         </article>
         <article>
           <span>Skipped answers</span>
@@ -156,7 +156,7 @@ function TeacherStudentProfile() {
             ))}
           </div>
         ) : (
-          <p className="tla-muted">No focused suggestion yet. Record more tagged quiz answers, published paper marks, or daily attendance and review this profile again.</p>
+          <p className="tla-muted">No focused suggestion yet. Record more tagged quiz answers, published paper marks, or monthly attendance and review this profile again.</p>
         )}
       </section>
 
@@ -233,11 +233,11 @@ function TeacherStudentProfile() {
         </section>
 
         <section className="tla-panel">
-          <div className="tla-section-heading"><div><h2>Attendance evidence</h2><p>Daily class attendance, separate from subject scores.</p></div></div>
+          <div className="tla-section-heading"><div><h2>Attendance evidence</h2><p>Monthly totals copied from the paper register, separate from subject scores.</p></div></div>
           <div className="tla-attendance-counts">
-            <span><strong>{attendance.present_days || 0}</strong>Present</span><span><strong>{attendance.absent_days || 0}</strong>Absent</span><span><strong>{attendance.late_days || 0}</strong>Late</span><span><strong>{attendance.excused_days || 0}</strong>Excused</span>
+            <span><strong>{attendance.recorded_months || 0}</strong>Months</span><span><strong>{attendance.recorded_days || 0}</strong>School days</span><span><strong>{attendance.present_days || 0}</strong>Present</span><span><strong>{attendance.absent_days || 0}</strong>Absent</span>
           </div>
-          {attendanceHistory.length > 0 && <div className="tla-attendance-recent">{attendanceHistory.slice(0, 7).map((item) => <span key={item.attendance_session_id} className={`status-${item.status}`}><strong>{item.attendance_date}</strong>{item.status}</span>)}</div>}
+          {attendanceHistory.length > 0 && <div className="tla-attendance-recent">{attendanceHistory.slice(0, 12).map((item) => <span key={item.attendance_summary_id}><strong>{String(item.attendance_month).slice(0, 7)}</strong>{item.present_days}/{item.total_school_days} days</span>)}</div>}
         </section>
       </div>
 

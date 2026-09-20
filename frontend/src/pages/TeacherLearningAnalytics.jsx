@@ -149,7 +149,7 @@ function TeacherLearningAnalytics() {
           <p className="tla-eyebrow">LEARNING EVIDENCE</p>
           <h1>Learning Insights</h1>
           <p>
-            Compare online quiz evidence, paper marks and daily attendance
+            Compare online quiz evidence, paper marks and monthly attendance
             without hiding them inside one unclear score.
           </p>
         </div>

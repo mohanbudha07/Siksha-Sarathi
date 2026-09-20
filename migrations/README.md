@@ -118,3 +118,12 @@ login account. It supports the admin-managed class enrollment workflow.
 The first query must return no duplicate `user_id` rows. Public registration
 creates student accounts only; administrators create teacher accounts and
 manage class enrollment and teacher subject assignments in the application.
+
+## Monthly attendance migration
+
+Migration 009 adds one paper-register summary per class and calendar month.
+Teachers enter total school days and each student's present days; absences and
+percentages are calculated automatically. Existing daily attendance is converted
+into monthly totals, while the original daily tables remain available as history.
+
+    sudo mysql siksha_sarathi < migrations/009_monthly_attendance_summaries.sql

@@ -118,6 +118,16 @@ class QuizStatisticsTests(unittest.TestCase):
                 note TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(attendance_session_id,student_id));
+            CREATE TABLE monthly_attendance_summaries(id INTEGER PRIMARY KEY,
+                teacher_user_id INTEGER, class_id INTEGER, attendance_month TEXT,
+                total_school_days INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(class_id,attendance_month));
+            CREATE TABLE monthly_attendance_records(id INTEGER PRIMARY KEY,
+                summary_id INTEGER, student_id INTEGER, present_days INTEGER,
+                note TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(summary_id,student_id));
             CREATE TABLE predictions(id INTEGER PRIMARY KEY, student_id INTEGER,
                 prediction TEXT, attendance REAL, assignment_score REAL,
                 quiz_score REAL, study_hours REAL);
@@ -1376,6 +1386,105 @@ class QuizStatisticsTests(unittest.TestCase):
                     ).status_code,
                     403
                 )
+
+    def monthly_attendance_payload(self, **overrides):
+        payload = {
+            'class_id': 1,
+            'attendance_month': '2026-09',
+            'total_school_days': 20,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_teacher_can_manage_monthly_paper_register_totals(self):
+        self.login('teacher')
+        created = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        )
+        self.assertEqual(created.status_code, 201)
+        summary_id = created.json['attendance_summary_id']
+
+        detail_url = f'/api/teacher/monthly-attendance/{summary_id}'
+        detail = self.client.get(detail_url)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json['summary']['total_school_days'], 20)
+        self.assertEqual(detail.json['students'][0]['student_id'], 1)
+
+        saved = self.client.put(f'{detail_url}/records', json={'records': [{
+            'student_id': 1,
+            'present_days': 18,
+            'note': 'Two days absent',
+        }]})
+        self.assertEqual(saved.status_code, 200)
+
+        listing = self.client.get('/api/teacher/monthly-attendance')
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.json['summaries'][0]['present_days'], 18)
+        self.assertEqual(listing.json['summaries'][0]['absent_days'], 2)
+
+        analytics = self.client.get('/api/teacher/learning-analytics')
+        attendance = analytics.json['students'][0]['attendance']
+        self.assertEqual(attendance['recorded_months'], 1)
+        self.assertEqual(attendance['recorded_days'], 20)
+        self.assertEqual(attendance['attendance_percent'], 90)
+        self.assertEqual(self.client.put(detail_url, json={
+            'total_school_days': 17
+        }).status_code, 400)
+        updated = self.client.put(detail_url, json={'total_school_days': 22})
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json['total_school_days'], 22)
+        self.assertEqual(self.client.delete(detail_url).status_code, 200)
+
+    def test_monthly_attendance_rejects_impossible_or_incomplete_totals(self):
+        self.login('teacher')
+        for total_days in (0, 32, 'many'):
+            with self.subTest(total_days=total_days):
+                response = self.client.post(
+                    '/api/teacher/monthly-attendance',
+                    json=self.monthly_attendance_payload(
+                        total_school_days=total_days
+                    )
+                )
+                self.assertEqual(response.status_code, 400)
+
+        summary_id = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).json['attendance_summary_id']
+        records_url = f'/api/teacher/monthly-attendance/{summary_id}/records'
+        self.assertEqual(self.client.put(records_url, json={'records': [{
+            'student_id': 1, 'present_days': 21
+        }]}).status_code, 400)
+        self.assertEqual(
+            self.client.put(records_url, json={'records': []}).status_code,
+            400
+        )
+
+    def test_monthly_attendance_is_unique_and_teacher_scoped(self):
+        self.login('teacher')
+        first = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        )
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).status_code, 409)
+
+        summary_id = first.json['attendance_summary_id']
+        self.login('other_teacher')
+        self.assertEqual(self.client.get(
+            f'/api/teacher/monthly-attendance/{summary_id}'
+        ).status_code, 404)
+
+        for role in ['student', 'admin']:
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(self.client.get(
+                    '/api/teacher/monthly-attendance'
+                ).status_code, 403)
 
     def test_teacher_can_read_update_and_delete_own_note(self):
         self.db.execute(

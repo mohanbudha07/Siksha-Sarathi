@@ -3,169 +3,87 @@ import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import './TeacherAttendance.css'
 
-const localToday = () => {
-  const now = new Date()
-  return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-    .toISOString().slice(0, 10)
-}
-
-const formatDate = (value) => {
-  if (!value) return 'No date'
-  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? `${value}T00:00:00`
-    : value
-  const date = new Date(normalized)
-  if (Number.isNaN(date.getTime())) return String(value)
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
-    .format(date)
-}
+const currentMonth = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+  .toISOString().slice(0, 7)
+const monthLabel = (value) => new Intl.DateTimeFormat(undefined, {
+  month: 'long', year: 'numeric',
+}).format(new Date(`${String(value).slice(0, 7)}-01T00:00:00`))
 
 function TeacherAttendance() {
   const navigate = useNavigate()
   const [classes, setClasses] = useState([])
-  const [sessions, setSessions] = useState([])
+  const [summaries, setSummaries] = useState([])
   const [classId, setClassId] = useState('')
-  const [attendanceDate, setAttendanceDate] = useState(localToday())
+  const [month, setMonth] = useState(currentMonth())
+  const [schoolDays, setSchoolDays] = useState('22')
+  const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
-  const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState('')
 
   const loadAttendance = async () => {
     try {
-      setLoading(true)
-      setError('')
-      const response = await api.get('/teacher/attendance-sessions')
-      const assignedClasses = response.data.assigned_classes || []
-      setClasses(assignedClasses)
-      setSessions(response.data.sessions || [])
-      setClassId((current) => current || String(assignedClasses[0]?.class_id || ''))
+      setLoading(true); setError('')
+      const response = await api.get('/teacher/monthly-attendance')
+      const assigned = response.data.assigned_classes || []
+      setClasses(assigned); setSummaries(response.data.summaries || [])
+      setClassId((value) => value || String(assigned[0]?.class_id || ''))
     } catch (err) {
-      console.error('Load attendance error:', err)
-      setError(err.response?.data?.error || 'Unable to load daily attendance.')
-    } finally {
-      setLoading(false)
-    }
+      setError(err.response?.data?.error || 'Unable to load monthly attendance.')
+    } finally { setLoading(false) }
   }
-
   useEffect(() => { loadAttendance() }, [])
 
-  const existingForSelection = useMemo(
-    () => sessions.find((item) => (
-      String(item.class_id) === classId && item.attendance_date === attendanceDate
-    )),
-    [attendanceDate, classId, sessions]
-  )
+  const existing = useMemo(() => summaries.find((item) =>
+    String(item.class_id) === classId
+      && String(item.attendance_month).slice(0, 7) === month
+  ), [classId, month, summaries])
 
-  const createRegister = async (event) => {
+  const openMonth = async (event) => {
     event.preventDefault()
-    if (existingForSelection) {
-      navigate(`/teacher/attendance/${existingForSelection.id}`)
-      return
-    }
+    if (existing) return navigate(`/teacher/attendance/${existing.id}`)
     try {
-      setSaving(true)
-      setError('')
-      const response = await api.post('/teacher/attendance-sessions', {
-        class_id: Number(classId),
-        attendance_date: attendanceDate,
+      setSaving(true); setError('')
+      const response = await api.post('/teacher/monthly-attendance', {
+        class_id: Number(classId), attendance_month: month,
+        total_school_days: Number(schoolDays),
       })
-      navigate(`/teacher/attendance/${response.data.attendance_session_id}`)
+      navigate(`/teacher/attendance/${response.data.attendance_summary_id}`)
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to create the attendance register.')
-    } finally {
-      setSaving(false)
-    }
+      setError(err.response?.data?.error || 'Unable to create monthly attendance.')
+    } finally { setSaving(false) }
   }
 
-  const deleteRegister = async (item) => {
-    if (!window.confirm(`Delete attendance for ${item.class_name} on ${formatDate(item.attendance_date)}?`)) return
+  const remove = async (item) => {
+    if (!window.confirm(`Delete ${monthLabel(item.attendance_month)} attendance for ${item.class_name}?`)) return
     try {
-      setDeletingId(item.id)
-      setError('')
-      await api.delete(`/teacher/attendance-sessions/${item.id}`)
-      setSessions((current) => current.filter((session) => session.id !== item.id))
+      setDeletingId(item.id); setError('')
+      await api.delete(`/teacher/monthly-attendance/${item.id}`)
+      setSummaries((items) => items.filter((summary) => summary.id !== item.id))
     } catch (err) {
-      setError(err.response?.data?.error || 'Unable to delete this attendance register.')
-    } finally {
-      setDeletingId(null)
-    }
+      setError(err.response?.data?.error || 'Unable to delete monthly attendance.')
+    } finally { setDeletingId(null) }
   }
 
-  return (
-    <div className="attendance-page">
-      <section className="attendance-hero">
-        <div>
-          <p>DAILY PAPER REGISTER</p>
-          <h1>Class Attendance</h1>
-          <span>Digitize the class teacher&apos;s daily paper attendance—once per class and date.</span>
-        </div>
-        <button onClick={() => setShowForm((current) => !current)}>
-          {showForm ? 'Close Form' : '+ Take Attendance'}
-        </button>
-      </section>
-
-      {error && <div className="attendance-message error">{error}</div>}
-
-      {showForm && (
-        <form className="attendance-create-card" onSubmit={createRegister}>
-          <div>
-            <h2>Open daily register</h2>
-            <p>Select your assigned class and the date from the paper register.</p>
-          </div>
-          <label>
-            Class
-            <select value={classId} onChange={(event) => setClassId(event.target.value)} required>
-              <option value="">Select class</option>
-              {classes.map((item) => (
-                <option key={item.class_id} value={item.class_id}>{item.class_name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Attendance date
-            <input type="date" value={attendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} required />
-          </label>
-          <button className="attendance-primary" disabled={saving || !classId}>
-            {saving ? 'Opening...' : existingForSelection ? 'Open Existing Register' : 'Create Register'}
-          </button>
-          {!classes.length && <span className="attendance-warning">You must be designated as a class teacher before recording attendance.</span>}
-        </form>
-      )}
-
-      <section className="attendance-list-card">
-        <div className="attendance-section-heading">
-          <div><h2>Daily registers</h2><p>Each class can have only one register per date.</p></div>
-          <button onClick={loadAttendance}>Refresh</button>
-        </div>
-        {loading ? (
-          <div className="attendance-empty">Loading attendance...</div>
-        ) : sessions.length === 0 ? (
-          <div className="attendance-empty"><strong>No attendance recorded yet</strong><span>Open the first daily register from the paper record.</span></div>
-        ) : (
-          <div className="attendance-card-grid">
-            {sessions.map((item) => (
-              <article className="attendance-card" key={item.id}>
-                <div className="attendance-card-date"><span>{item.class_name}</span><strong>{formatDate(item.attendance_date)}</strong></div>
-                <div className="attendance-count-grid">
-                  <span><strong>{item.present_count}</strong>Present</span>
-                  <span><strong>{item.absent_count}</strong>Absent</span>
-                  <span><strong>{item.late_count}</strong>Late</span>
-                  <span><strong>{item.excused_count}</strong>Excused</span>
-                </div>
-                <p>{item.recorded_students ? `${item.recorded_students} students recorded` : 'Register not completed'}</p>
-                <div className="attendance-card-actions">
-                  <button onClick={() => navigate(`/teacher/attendance/${item.id}`)}>Open Register</button>
-                  <button className="attendance-delete" onClick={() => deleteRegister(item)} disabled={deletingId === item.id}>{deletingId === item.id ? 'Deleting...' : 'Delete'}</button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  )
+  return <div className="attendance-page">
+    <section className="attendance-hero"><div><p>MONTHLY PAPER REGISTER</p><h1>Class Attendance</h1><span>Copy one monthly total from the paper register instead of entering attendance every day.</span></div><button onClick={() => setShowForm((value) => !value)}>{showForm ? 'Close Form' : '+ Add Monthly Attendance'}</button></section>
+    {error && <div className="attendance-message error">{error}</div>}
+    {showForm && <form className="attendance-create-card" onSubmit={openMonth}>
+      <div><h2>Open monthly register</h2><p>Enter the month and actual school days from the paper register.</p></div>
+      <label>Class<select value={classId} onChange={(event) => setClassId(event.target.value)} required><option value="">Select class</option>{classes.map((item) => <option key={item.class_id} value={item.class_id}>{item.class_name}</option>)}</select></label>
+      <label>Month<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} required /></label>
+      <label>Total school days<input type="number" min="1" max="31" step="1" value={schoolDays} onChange={(event) => setSchoolDays(event.target.value)} required /></label>
+      <button className="attendance-primary" disabled={saving || !classId}>{saving ? 'Opening...' : existing ? 'Open Existing Month' : 'Create Monthly Register'}</button>
+    </form>}
+    <section className="attendance-list-card"><div className="attendance-section-heading"><div><h2>Monthly registers</h2><p>One summary per class and month.</p></div><button onClick={loadAttendance}>Refresh</button></div>
+      {loading ? <div className="attendance-empty">Loading attendance...</div> : summaries.length === 0 ? <div className="attendance-empty"><strong>No monthly attendance yet</strong><span>Add the first month from the paper register.</span></div> : <div className="attendance-card-grid">{summaries.map((item) => {
+        const possible = item.total_school_days * item.recorded_students
+        const rate = possible ? Math.round(1000 * item.present_days / possible) / 10 : 0
+        return <article className="attendance-card" key={item.id}><div className="attendance-card-date"><span>{item.class_name}</span><strong>{monthLabel(item.attendance_month)}</strong></div><div className="attendance-count-grid"><span><strong>{item.total_school_days}</strong>School days</span><span><strong>{item.recorded_students}</strong>Students</span><span><strong>{item.absent_days}</strong>Absences</span><span><strong>{rate}%</strong>Attendance</span></div><p>{item.recorded_students ? 'Monthly totals recorded' : 'Register not completed'}</p><div className="attendance-card-actions"><button onClick={() => navigate(`/teacher/attendance/${item.id}`)}>Open Month</button><button className="attendance-delete" onClick={() => remove(item)} disabled={deletingId === item.id}>{deletingId === item.id ? 'Deleting...' : 'Delete'}</button></div></article>
+      })}</div>}
+    </section>
+  </div>
 }
 
 export default TeacherAttendance

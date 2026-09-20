@@ -195,6 +195,34 @@ CREATE TABLE IF NOT EXISTS attendance_records (
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS monthly_attendance_summaries (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    teacher_user_id INT NOT NULL,
+    class_id INT NOT NULL,
+    attendance_month DATE NOT NULL,
+    total_school_days INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_monthly_class_attendance (class_id, attendance_month),
+    INDEX idx_monthly_attendance_class_month (class_id, attendance_month),
+    FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS monthly_attendance_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    summary_id INT NOT NULL,
+    student_id INT NOT NULL,
+    present_days INT NOT NULL,
+    note VARCHAR(255) NOT NULL DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_monthly_attendance_student (summary_id, student_id),
+    FOREIGN KEY (summary_id)
+        REFERENCES monthly_attendance_summaries(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS chat_history (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT,
