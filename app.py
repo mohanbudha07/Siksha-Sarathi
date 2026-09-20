@@ -3,6 +3,8 @@ from flask_mysqldb import MySQL
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 import os
 import json
@@ -68,6 +70,23 @@ app.config["MYSQL_DB"] = os.getenv("MYSQL_DB", "siksha_sarathi")
 app.config["MYSQL_CURSORCLASS"] = "DictCursor"
 
 mysql = MySQL(app)
+
+
+def login_rate_limit_key():
+    """Limit repeated attempts against one account without blocking a whole lab."""
+    data = request.get_json(silent=True)
+    email = "unknown"
+    if isinstance(data, dict) and isinstance(data.get("email"), str):
+        email = data["email"].strip().lower() or "unknown"
+    return f"{get_remote_address()}:{email}"
+
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    app=app,
+    default_limits=[],
+    storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://")
+)
 
 
 # ============================================================
@@ -140,6 +159,10 @@ def health_check():
 # ============================================================
 
 @app.route("/api/login", methods=["POST"])
+@limiter.limit(
+    lambda: os.getenv("LOGIN_RATE_LIMIT", "10 per minute"),
+    key_func=login_rate_limit_key
+)
 def api_login():
 
     data = request.get_json(silent=True)
@@ -208,6 +231,13 @@ def api_login():
             "role": user["role"]
         }
     }, 200
+
+
+@app.errorhandler(429)
+def login_rate_limit_exceeded(_error):
+    return {
+        "error": "Too many login attempts. Please wait before trying again."
+    }, 429
 
 
 @app.route("/api/public/classes", methods=["GET"])

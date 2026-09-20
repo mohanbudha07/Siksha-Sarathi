@@ -12,6 +12,7 @@ eventlet==0.36.1
 Flask==3.0.3
 Flask-Cors==6.0.5
 Flask-Login==0.6.3
+Flask-Limiter==4.1.1
 Flask-MySQLdb==2.0.0
 Flask-SocketIO==5.3.6
 google-ai-generativelanguage==0.6.15

@@ -68,6 +68,10 @@ GEMINI_MODEL=gemini-flash-latest
 
 Never put the real API key in `.env.example`, source code, screenshots or Git.
 
+Login attempts are rate-limited per client IP and email. The default in-memory
+storage is appropriate for this single-process prototype. A multi-worker
+deployment should set `RATELIMIT_STORAGE_URI` to a shared backend such as Redis.
+
 Install and run the backend:
 
 ```bash

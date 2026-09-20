@@ -177,6 +177,7 @@ class QuizStatisticsTests(unittest.TestCase):
         )
         self.db.commit()
         self.backend.mysql.connection = ConnectionAdapter(self.db)
+        self.backend.limiter.reset()
         self.client = self.backend.app.test_client()
         self.login('student')
 
@@ -208,6 +209,29 @@ class QuizStatisticsTests(unittest.TestCase):
                 os.environ, {'SIKSHA_TEST_FLAG': value}
             ):
                 self.assertFalse(self.backend.env_flag('SIKSHA_TEST_FLAG'))
+
+    def test_login_rate_limit_is_scoped_to_email_and_returns_json(self):
+        self.db.execute(
+            'UPDATE users SET password=? WHERE id=1',
+            (self.backend.generate_password_hash('correct-password'),)
+        )
+        self.db.commit()
+        for _ in range(10):
+            response = self.client.post('/api/login', json={
+                'email': 's@example.test', 'password': 'wrong-password'
+            })
+            self.assertEqual(response.status_code, 401)
+
+        blocked = self.client.post('/api/login', json={
+            'email': 's@example.test', 'password': 'wrong-password'
+        })
+        self.assertEqual(blocked.status_code, 429)
+        self.assertIn('Too many login attempts', blocked.json['error'])
+
+        other_account = self.client.post('/api/login', json={
+            'email': 'different@example.test', 'password': 'wrong-password'
+        })
+        self.assertEqual(other_account.status_code, 401)
 
     def test_student_assistant_validates_question_payload(self):
         for payload in ([], {'question': 4}, {'question': '   '}):
