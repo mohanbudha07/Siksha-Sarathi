@@ -20,6 +20,12 @@ const emptyPlan = (subject) => ({
   outcome_note: '',
 })
 
+const metricRows = () => [
+  { key: 'quiz_accuracy', label: 'Quiz accuracy', count: 'quiz_questions' },
+  { key: 'paper_average', label: 'Paper average', count: 'paper_assessments' },
+  { key: 'attendance_percent', label: 'Attendance', count: 'attendance_days' },
+]
+
 function TeacherInterventions({ studentId, subject, suggestions }) {
   const [plans, setPlans] = useState([])
   const [draft, setDraft] = useState(() => emptyPlan(subject))
@@ -144,6 +150,17 @@ function TeacherInterventions({ studentId, subject, suggestions }) {
           {plan.evidence && <p><strong>Evidence:</strong> {plan.evidence}</p>}
           <p><strong>Action:</strong> {plan.action_plan}</p>
           {plan.success_criteria && <p><strong>Success:</strong> {plan.success_criteria}</p>}
+          <div className="intervention-effectiveness">
+            <div><strong>Observed change</strong><small>{plan.effectiveness?.note || 'Effectiveness evidence is unavailable.'}</small></div>
+            {plan.effectiveness?.available && <div className="intervention-metric-grid">
+              {metricRows(plan.effectiveness).map((metric) => {
+                const before = plan.effectiveness.baseline[metric.key]
+                const current = plan.effectiveness.current[metric.key]
+                const delta = plan.effectiveness.delta[metric.key]
+                return <article key={metric.key}><span>{metric.label}</span><strong>{before === null ? '—' : `${before}%`} → {current === null ? '—' : `${current}%`}</strong><small className={delta > 0 ? 'positive' : delta < 0 ? 'negative' : ''}>{delta === null ? 'Not comparable' : `${delta > 0 ? '+' : ''}${delta} percentage points`} · {plan.effectiveness.current[metric.count]} current records</small></article>
+              })}
+            </div>}
+          </div>
           <div className="intervention-edit-row"><label>Review date<input type="date" value={plan.review_date || ''} onChange={(event) => changePlan(plan.id, 'review_date', event.target.value)} /></label><label>Outcome / progress note<textarea value={plan.outcome_note || ''} maxLength="1000" onChange={(event) => changePlan(plan.id, 'outcome_note', event.target.value)} placeholder={plan.status === 'completed' ? 'Required before completion' : 'Add progress observed by the teacher'} /></label></div>
           <div className="intervention-card-actions"><button onClick={() => savePlan(plan)} disabled={saving}>Save progress</button><button className="danger" onClick={() => deletePlan(plan)} disabled={saving}>Delete</button></div>
         </article>)}

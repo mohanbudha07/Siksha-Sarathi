@@ -134,6 +134,11 @@ class QuizStatisticsTests(unittest.TestCase):
                 evidence TEXT DEFAULT '', action_plan TEXT,
                 success_criteria TEXT DEFAULT '', status TEXT DEFAULT 'planned',
                 review_date TEXT, outcome_note TEXT DEFAULT '', completed_at TEXT,
+                baseline_quiz_accuracy REAL, baseline_quiz_questions INTEGER DEFAULT 0,
+                baseline_paper_average REAL, baseline_paper_assessments INTEGER DEFAULT 0,
+                baseline_attendance_percent REAL,
+                baseline_attendance_days INTEGER DEFAULT 0,
+                baseline_captured_at TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE predictions(id INTEGER PRIMARY KEY, student_id INTEGER,
@@ -1510,6 +1515,28 @@ class QuizStatisticsTests(unittest.TestCase):
         return payload
 
     def test_teacher_tracks_support_plan_and_student_can_read_it(self):
+        self.assertEqual(self.submit({'0': 'A', '1': 'D'}).status_code, 200)
+        self.db.execute(
+            '''INSERT INTO paper_assessments
+               (id,teacher_user_id,class_id,subject,title,assessment_type,
+                assessment_date,max_marks,is_published)
+               VALUES(1,2,1,'Science','Baseline','unit_test','2026-09-01',100,1)'''
+        )
+        self.db.execute(
+            '''INSERT INTO paper_assessment_scores
+               (assessment_id,student_id,marks_obtained,is_absent)
+               VALUES(1,1,40,0)'''
+        )
+        self.db.execute(
+            '''INSERT INTO monthly_attendance_summaries
+               (id,teacher_user_id,class_id,attendance_month,total_school_days)
+               VALUES(1,2,1,'2026-09-01',20)'''
+        )
+        self.db.execute(
+            '''INSERT INTO monthly_attendance_records
+               (summary_id,student_id,present_days) VALUES(1,1,16)'''
+        )
+        self.db.commit()
         self.login('teacher')
         created = self.client.post(
             '/api/teacher/students/1/interventions',
@@ -1524,6 +1551,38 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(listing.status_code, 200)
         self.assertEqual(listing.json['interventions'][0]['focus_area'],
                          'Force concepts')
+        effectiveness = listing.json['interventions'][0]['effectiveness']
+        self.assertTrue(effectiveness['available'])
+        self.assertEqual(effectiveness['baseline']['quiz_accuracy'], 100)
+        self.assertEqual(effectiveness['baseline']['paper_average'], 40)
+        self.assertEqual(effectiveness['baseline']['attendance_percent'], 80)
+
+        self.login('student')
+        self.assertEqual(self.submit({'0': 'B', '1': 'C'}).status_code, 200)
+        self.db.execute(
+            '''INSERT INTO paper_assessments
+               (id,teacher_user_id,class_id,subject,title,assessment_type,
+                assessment_date,max_marks,is_published)
+               VALUES(2,2,1,'Science','Follow-up','unit_test','2026-09-20',100,1)'''
+        )
+        self.db.execute(
+            '''INSERT INTO paper_assessment_scores
+               (assessment_id,student_id,marks_obtained,is_absent)
+               VALUES(2,1,80,0)'''
+        )
+        self.db.execute(
+            '''UPDATE monthly_attendance_records SET present_days=18
+               WHERE summary_id=1 AND student_id=1'''
+        )
+        self.db.commit()
+        self.login('teacher')
+        listing = self.client.get(
+            '/api/teacher/students/1/interventions?subject=Science'
+        )
+        change = listing.json['interventions'][0]['effectiveness']['delta']
+        self.assertEqual(change['quiz_accuracy'], -50)
+        self.assertEqual(change['paper_average'], 20)
+        self.assertEqual(change['attendance_percent'], 10)
 
         self.assertEqual(self.client.put(
             f'/api/teacher/interventions/{intervention_id}',

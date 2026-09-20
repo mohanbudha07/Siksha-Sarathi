@@ -31,6 +31,15 @@
 .intervention-card-heading small { color: #64748b; }
 .intervention-card select { width: 150px; }
 .intervention-card p { color: #475569; line-height: 1.55; }
+.intervention-effectiveness { margin: 14px 0; padding: 14px; border-radius: 11px; background: #f8fafc; }
+.intervention-effectiveness > div:first-child { display: flex; justify-content: space-between; gap: 12px; }
+.intervention-effectiveness > div:first-child small { max-width: 620px; color: #64748b; text-align: right; }
+.intervention-metric-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; margin-top: 11px; }
+.intervention-metric-grid article { padding: 11px; border: 1px solid #e2e8f0; border-radius: 9px; background: white; }
+.intervention-metric-grid span, .intervention-metric-grid small { display: block; color: #64748b; font-size: 11px; }
+.intervention-metric-grid strong { display: block; margin: 5px 0; font-size: 14px; }
+.intervention-metric-grid small.positive { color: #047857; }
+.intervention-metric-grid small.negative { color: #be123c; }
 .intervention-edit-row { display: grid; grid-template-columns: minmax(150px,.4fr) 1fr; gap: 12px; }
 .intervention-edit-row textarea { min-height: 68px; resize: vertical; }
 .intervention-card-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 13px; }
@@ -38,6 +47,9 @@
 @media (max-width: 720px) {
   .intervention-heading, .intervention-suggestions article, .intervention-card-heading { align-items: stretch; grid-template-columns: 1fr; flex-direction: column; }
   .intervention-form, .intervention-edit-row { grid-template-columns: 1fr; }
+  .intervention-metric-grid { grid-template-columns: 1fr; }
+  .intervention-effectiveness > div:first-child { flex-direction: column; }
+  .intervention-effectiveness > div:first-child small { text-align: left; }
   .intervention-form label { grid-column: 1/-1; }
   .intervention-card select { width: 100%; }
 }

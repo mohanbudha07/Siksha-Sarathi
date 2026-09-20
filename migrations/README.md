@@ -136,3 +136,12 @@ and outcome note. Students can read their plans, but only the assigned teacher
 can create or update them.
 
     sudo mysql siksha_sarathi < migrations/010_teacher_interventions.sql
+
+## Intervention effectiveness migration
+
+Migration 011 adds the learning baseline captured when a teacher creates a
+support plan. The application compares later quiz accuracy, published paper
+marks, and attendance with that baseline. The result describes observed change
+and must not be presented as proof that the intervention caused the change.
+
+    sudo mysql siksha_sarathi < migrations/011_intervention_effectiveness.sql

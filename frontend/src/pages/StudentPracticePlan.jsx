@@ -53,6 +53,14 @@ function StudentPracticePlan() {
                 <p>{item.action_plan}</p>
                 {item.success_criteria && <p><strong>Goal:</strong> {item.success_criteria}</p>}
                 <small>Review date: {item.review_date || 'To be decided'} · Teacher: {item.teacher_name}</small>
+                {item.effectiveness?.available && <div className="student-plan-change">
+                  <strong>Progress since plan started</strong>
+                  {[['quiz_accuracy', 'Quiz'], ['paper_average', 'Paper'], ['attendance_percent', 'Attendance']].map(([key, label]) => {
+                    const delta = item.effectiveness.delta[key]
+                    return <span key={key} className={delta > 0 ? 'positive' : delta < 0 ? 'negative' : ''}>{label}: {delta === null ? 'not comparable yet' : `${delta > 0 ? '+' : ''}${delta} points`}</span>
+                  })}
+                  <small>Change over time does not prove the plan caused the result.</small>
+                </div>}
                 {item.outcome_note && <blockquote>{item.outcome_note}</blockquote>}
               </article>)}
             </div>}

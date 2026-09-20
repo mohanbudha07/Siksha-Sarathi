@@ -2014,10 +2014,10 @@ INTERVENTION_SOURCES = {"topic", "paper", "attendance", "manual"}
 INTERVENTION_STATUSES = {"planned", "in_progress", "completed", "cancelled"}
 
 
-def teacher_can_support_student(cur, teacher_id, student_id, subject):
+def fetch_teacher_support_class_id(cur, teacher_id, student_id, subject):
     cur.execute(
         """
-        SELECT s.id
+        SELECT tcs.class_id
         FROM teacher_class_subjects tcs
         INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
         INNER JOIN students s ON s.id = sce.student_id
@@ -2028,7 +2028,89 @@ def teacher_can_support_student(cur, teacher_id, student_id, subject):
         """,
         (teacher_id, student_id, subject)
     )
-    return cur.fetchone() is not None
+    row = cur.fetchone()
+    return int(row["class_id"]) if row else None
+
+
+def teacher_can_support_student(cur, teacher_id, student_id, subject):
+    return fetch_teacher_support_class_id(
+        cur, teacher_id, student_id, subject
+    ) is not None
+
+
+def capture_intervention_snapshot(
+    cur, teacher_id, student_id, class_id, subject
+):
+    quiz = fetch_student_subject_metrics(cur, student_id, subject)
+    paper = fetch_student_paper_metrics(
+        cur, teacher_id, student_id, class_id, subject
+    )
+    attendance = fetch_student_attendance_metrics(cur, student_id, class_id)
+    return {
+        "quiz_accuracy": (
+            float(quiz["accuracy_percent"])
+            if int(quiz["total_questions"] or 0) else None
+        ),
+        "quiz_questions": int(quiz["total_questions"] or 0),
+        "paper_average": (
+            float(paper["average_percent"])
+            if int(paper["graded_assessments"] or 0) else None
+        ),
+        "paper_assessments": int(paper["graded_assessments"] or 0),
+        "attendance_percent": (
+            float(attendance["attendance_percent"])
+            if int(attendance["recorded_days"] or 0) else None
+        ),
+        "attendance_days": int(attendance["recorded_days"] or 0)
+    }
+
+
+def intervention_effectiveness(cur, row):
+    class_id = fetch_teacher_support_class_id(
+        cur, row["teacher_user_id"], row["student_id"], row["subject"]
+    )
+    if class_id is None:
+        return {"available": False, "reason": "Student assignment changed"}
+    current = capture_intervention_snapshot(
+        cur, row["teacher_user_id"], row["student_id"], class_id,
+        row["subject"]
+    )
+    baseline = {
+        "quiz_accuracy": (
+            float(row["baseline_quiz_accuracy"])
+            if row.get("baseline_quiz_accuracy") is not None else None
+        ),
+        "quiz_questions": int(row.get("baseline_quiz_questions") or 0),
+        "paper_average": (
+            float(row["baseline_paper_average"])
+            if row.get("baseline_paper_average") is not None else None
+        ),
+        "paper_assessments": int(row.get("baseline_paper_assessments") or 0),
+        "attendance_percent": (
+            float(row["baseline_attendance_percent"])
+            if row.get("baseline_attendance_percent") is not None else None
+        ),
+        "attendance_days": int(row.get("baseline_attendance_days") or 0)
+    }
+    deltas = {}
+    for name in ("quiz_accuracy", "paper_average", "attendance_percent"):
+        before = baseline[name]
+        after = current[name]
+        deltas[name] = (
+            round(after - before, 2)
+            if before is not None and after is not None else None
+        )
+    available = row.get("baseline_captured_at") is not None
+    return {
+        "available": available,
+        "baseline": baseline,
+        "current": current,
+        "delta": deltas,
+        "note": (
+            "Observed change after the plan was created; this does not prove causation."
+            if available else "No baseline is available for this older plan."
+        )
+    }
 
 
 def normalize_intervention_payload(data, existing=None):
@@ -2095,12 +2177,17 @@ def normalize_intervention_payload(data, existing=None):
     }
 
 
-def serialize_intervention(row):
+def serialize_intervention(row, cur=None):
     if not row:
         return row
-    for field in ("review_date", "completed_at", "created_at", "updated_at"):
+    for field in (
+        "review_date", "completed_at", "created_at", "updated_at",
+        "baseline_captured_at"
+    ):
         if field in row:
             row[field] = serialize_api_date(row[field])
+    if cur is not None:
+        row["effectiveness"] = intervention_effectiveness(cur, row)
     return row
 
 
@@ -2130,9 +2217,10 @@ def teacher_student_interventions_api(student_id):
         return {"error": "Subject is required"}, 400
     cur = mysql.connection.cursor()
     try:
-        if not teacher_can_support_student(
+        class_id = fetch_teacher_support_class_id(
             cur, session["user_id"], student_id, subject
-        ):
+        )
+        if class_id is None:
             return {"error": "Student support profile not found"}, 404
         if request.method == "GET":
             cur.execute(
@@ -2152,27 +2240,39 @@ def teacher_student_interventions_api(student_id):
                 """,
                 (session["user_id"], student_id, subject)
             )
+            rows = cur.fetchall()
             return {
                 "interventions": [
-                    serialize_intervention(row) for row in cur.fetchall()
+                    serialize_intervention(row, cur) for row in rows
                 ]
             }, 200
         try:
             plan = normalize_intervention_payload(data)
         except ValueError as error:
             return {"error": str(error)}, 400
+        baseline = capture_intervention_snapshot(
+            cur, session["user_id"], student_id, class_id, plan["subject"]
+        )
         cur.execute(
             """
             INSERT INTO teacher_interventions
                 (teacher_user_id, student_id, subject, source_kind,
                  focus_area, evidence, action_plan, success_criteria,
-                 status, review_date, outcome_note)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 status, review_date, outcome_note,
+                 baseline_quiz_accuracy, baseline_quiz_questions,
+                 baseline_paper_average, baseline_paper_assessments,
+                 baseline_attendance_percent, baseline_attendance_days,
+                 baseline_captured_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             """,
             (session["user_id"], student_id, plan["subject"],
              plan["source_kind"], plan["focus_area"], plan["evidence"],
              plan["action_plan"], plan["success_criteria"], plan["status"],
-             plan["review_date"], plan["outcome_note"])
+             plan["review_date"], plan["outcome_note"],
+             baseline["quiz_accuracy"], baseline["quiz_questions"],
+             baseline["paper_average"], baseline["paper_assessments"],
+             baseline["attendance_percent"], baseline["attendance_days"])
         )
         intervention_id = cur.lastrowid
         mysql.connection.commit()
@@ -2254,6 +2354,11 @@ def student_interventions_api():
             SELECT i.id, i.subject, i.source_kind, i.focus_area, i.evidence,
                    i.action_plan, i.success_criteria, i.status, i.review_date,
                    i.outcome_note, i.completed_at, i.created_at, i.updated_at,
+                   i.teacher_user_id, i.student_id,
+                   i.baseline_quiz_accuracy, i.baseline_quiz_questions,
+                   i.baseline_paper_average, i.baseline_paper_assessments,
+                   i.baseline_attendance_percent, i.baseline_attendance_days,
+                   i.baseline_captured_at,
                    u.username AS teacher_name
             FROM students s
             INNER JOIN teacher_interventions i ON i.student_id = s.id
@@ -2267,9 +2372,10 @@ def student_interventions_api():
             """,
             (session["user_id"],)
         )
+        rows = cur.fetchall()
         return {
             "interventions": [
-                serialize_intervention(row) for row in cur.fetchall()
+                serialize_intervention(row, cur) for row in rows
             ]
         }, 200
     finally:
