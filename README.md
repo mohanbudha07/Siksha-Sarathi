@@ -1,5 +1,7 @@
 # Siksha Sarathi
 
+[![CI](https://github.com/mohanbudha07/Siksha-Sarathi/actions/workflows/ci.yml/badge.svg)](https://github.com/mohanbudha07/Siksha-Sarathi/actions/workflows/ci.yml)
+
 **Siksha Sarathi** is a smart education platform designed for secondary-level students and teachers.  
 It helps students track their academic performance using Machine Learning, take quizzes, access learning notes, and get help from an AI assistant.
 
