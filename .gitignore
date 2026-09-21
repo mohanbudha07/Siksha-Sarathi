@@ -10,3 +10,5 @@ frontend/dist/
 uploads/
 *.pkl
 .DS_Store
+structure.txt
+*.zip_old
