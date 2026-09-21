@@ -6,6 +6,7 @@ from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from routes.auth import create_auth_blueprint
+from routes.chatbot import create_chatbot_blueprint
 from routes.notes import create_notes_blueprint
 
 import os
@@ -167,6 +168,13 @@ app.register_blueprint(create_notes_blueprint(
     role_required=role_required,
     student_role=STUDENT,
     teacher_role=TEACHER
+))
+
+app.register_blueprint(create_chatbot_blueprint(
+    mysql=mysql,
+    login_required=login_required,
+    role_required=role_required,
+    student_role=STUDENT
 ))
 
 
@@ -3126,93 +3134,6 @@ def teacher_attendance_records_api(attendance_session_id):
         return {"error": "Failed to save attendance"}, 500
     finally:
         cur.close()
-
-
-# ============================================================
-# STUDENT AI ASSISTANT
-# ============================================================
-
-@app.route("/api/student/ai", methods=["POST"])
-@login_required
-@role_required(STUDENT)
-def student_ai_api():
-
-    data = request.get_json(silent=True)
-
-    if not data:
-        return {
-            "error": "Question is required"
-        }, 400
-
-    question = data.get("question")
-
-    if not isinstance(question, str) or not question.strip():
-
-        return {
-            "error": "Question is required"
-        }, 400
-
-    question = question.strip()
-
-    if len(question) > 1000:
-        return {
-            "error": "Question must be at most 1000 characters"
-        }, 400
-
-    try:
-
-        from assistant import generate_answer
-
-        subject, answer, mode = generate_answer(question)
-
-        cur = mysql.connection.cursor()
-
-        try:
-
-            cur.execute(
-                """
-                INSERT INTO chat_history
-                (
-                    user_id,
-                    question,
-                    answer
-                )
-                VALUES
-                (
-                    %s,
-                    %s,
-                    %s
-                )
-                """,
-                (
-                    session["user_id"],
-                    question,
-                    answer
-                )
-            )
-
-            mysql.connection.commit()
-
-        finally:
-
-            cur.close()
-
-        return {
-            "subject": subject,
-            "question": question,
-            "answer": answer,
-            "mode": mode
-        }, 200
-
-    except Exception as e:
-
-        mysql.connection.rollback()
-
-        print("AI assistant error:", e)
-
-        return {
-            "error": "AI assistant failed to generate a response"
-        }, 500
 
 
 # ============================================================
