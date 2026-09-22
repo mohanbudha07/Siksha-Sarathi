@@ -109,16 +109,6 @@ class QuizStatisticsTests(unittest.TestCase):
             CREATE TABLE class_teacher_assignments(id INTEGER PRIMARY KEY,
                 teacher_user_id INTEGER, class_id INTEGER UNIQUE,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-            CREATE TABLE attendance_sessions(id INTEGER PRIMARY KEY,
-                teacher_user_id INTEGER, class_id INTEGER,
-                attendance_date TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(class_id,attendance_date));
-            CREATE TABLE attendance_records(id INTEGER PRIMARY KEY,
-                attendance_session_id INTEGER, student_id INTEGER, status TEXT,
-                note TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(attendance_session_id,student_id));
             CREATE TABLE monthly_attendance_summaries(id INTEGER PRIMARY KEY,
                 teacher_user_id INTEGER, class_id INTEGER, attendance_month TEXT,
                 total_school_days INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -661,25 +651,15 @@ class QuizStatisticsTests(unittest.TestCase):
                 (2, 2, 1, None, 1, 'Medical leave'),
             ]
         )
-        self.db.executemany(
-            '''INSERT INTO attendance_sessions
-               (id,teacher_user_id,class_id,attendance_date)
-               VALUES(?,?,?,?)''',
-            [
-                (1, 2, 1, '2026-09-13'),
-                (2, 2, 1, '2026-09-14'),
-                (3, 2, 1, '2026-09-15'),
-            ]
+        self.db.execute(
+            '''INSERT INTO monthly_attendance_summaries
+               (id,teacher_user_id,class_id,attendance_month,total_school_days)
+               VALUES(1,2,1,'2026-09-01',3)'''
         )
-        self.db.executemany(
-            '''INSERT INTO attendance_records
-               (id,attendance_session_id,student_id,status,note)
-               VALUES(?,?,?,?,?)''',
-            [
-                (1, 1, 1, 'present', ''),
-                (2, 2, 1, 'late', 'Bus delay'),
-                (3, 3, 1, 'absent', 'Unwell'),
-            ]
+        self.db.execute(
+            '''INSERT INTO monthly_attendance_records
+               (id,summary_id,student_id,present_days,note)
+               VALUES(1,1,1,2,'One absence')'''
         )
         self.db.commit()
         self.login('teacher')
@@ -691,7 +671,7 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(profile['paper_assessments']['graded_assessments'], 1)
         self.assertEqual(profile['paper_assessments']['absent_assessments'], 1)
         self.assertEqual(profile['attendance']['attendance_percent'], 66.67)
-        self.assertEqual(profile['attendance']['late_days'], 1)
+        self.assertEqual(profile['attendance']['late_days'], 0)
         self.assertEqual(profile['attendance']['absent_days'], 1)
 
         detail = self.client.get(
@@ -704,8 +684,10 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(
             detail.json['recent_paper_assessments'][1]['percentage'], 80
         )
-        self.assertEqual(len(detail.json['recent_attendance']), 3)
-        self.assertEqual(detail.json['recent_attendance'][0]['status'], 'absent')
+        self.assertEqual(len(detail.json['recent_attendance']), 1)
+        self.assertEqual(
+            detail.json['recent_attendance'][0]['absent_days'], 1
+        )
 
     def test_ungraded_paper_marks_do_not_count_as_graded_or_trigger_action(self):
         self.db.executemany(
@@ -787,15 +769,15 @@ class QuizStatisticsTests(unittest.TestCase):
                (assessment_id,student_id,marks_obtained,is_absent)
                VALUES(?,1,40,0)''', [(1,), (2,)]
         )
-        self.db.executemany(
-            '''INSERT INTO attendance_sessions
-               (id,teacher_user_id,class_id,attendance_date) VALUES(?,2,1,?)''',
-            [(i, f'2026-09-{i + 10}') for i in range(1, 6)]
+        self.db.execute(
+            '''INSERT INTO monthly_attendance_summaries
+               (id,teacher_user_id,class_id,attendance_month,total_school_days)
+               VALUES(1,2,1,'2026-09-01',5)'''
         )
-        self.db.executemany(
-            '''INSERT INTO attendance_records
-               (attendance_session_id,student_id,status) VALUES(?,1,?)''',
-            [(i, 'absent' if i <= 2 else 'present') for i in range(1, 6)]
+        self.db.execute(
+            '''INSERT INTO monthly_attendance_records
+               (summary_id,student_id,present_days,note)
+               VALUES(1,1,3,'Two absences')'''
         )
         self.db.commit()
 
@@ -1418,14 +1400,6 @@ class QuizStatisticsTests(unittest.TestCase):
                     403
                 )
 
-    def attendance_payload(self, **overrides):
-        payload = {
-            'class_id': 1,
-            'attendance_date': '2026-09-16',
-        }
-        payload.update(overrides)
-        return payload
-
     def test_attendance_dates_are_serialized_for_the_browser(self):
         self.assertEqual(
             self.backend.serialize_api_date(date(2026, 9, 16)),
@@ -1436,112 +1410,19 @@ class QuizStatisticsTests(unittest.TestCase):
             '2026-09-16'
         )
 
-    def test_teacher_can_create_record_list_and_delete_attendance(self):
+    def test_daily_attendance_routes_are_removed(self):
         self.login('teacher')
-        created = self.client.post(
-            '/api/teacher/attendance-sessions',
-            json=self.attendance_payload()
-        )
-        self.assertEqual(created.status_code, 201)
-        attendance_id = created.json['attendance_session_id']
-
-        detail = self.client.get(
-            f'/api/teacher/attendance-sessions/{attendance_id}'
-        )
-        self.assertEqual(detail.status_code, 200)
-        self.assertEqual(detail.json['session']['class_name'], 'Grade 10')
-        self.assertEqual(detail.json['students'][0]['student_id'], 1)
-        self.assertIsNone(detail.json['students'][0]['status'])
-
-        saved = self.client.put(
-            f'/api/teacher/attendance-sessions/{attendance_id}/records',
-            json={'records': [{
-                'student_id': 1,
-                'status': 'present',
-                'note': 'On time',
-            }]}
-        )
-        self.assertEqual(saved.status_code, 200)
-        detail = self.client.get(
-            f'/api/teacher/attendance-sessions/{attendance_id}'
-        )
-        self.assertEqual(detail.json['students'][0]['status'], 'present')
-        self.assertEqual(detail.json['students'][0]['note'], 'On time')
-
-        listing = self.client.get('/api/teacher/attendance-sessions')
-        self.assertEqual(listing.status_code, 200)
         self.assertEqual(
-            listing.json['assigned_classes'][0]['class_name'],
-            'Grade 10'
+            self.client.get('/api/teacher/attendance-sessions').status_code,
+            404
         )
-        self.assertEqual(listing.json['sessions'][0]['recorded_students'], 1)
-        self.assertEqual(listing.json['sessions'][0]['present_count'], 1)
         self.assertEqual(
-            self.client.delete(
-                f'/api/teacher/attendance-sessions/{attendance_id}'
+            self.client.post(
+                '/api/teacher/attendance-sessions',
+                json={'class_id': 1, 'attendance_date': '2026-09-16'}
             ).status_code,
-            200
+            404
         )
-
-    def test_attendance_requires_valid_status_and_complete_class_roster(self):
-        self.login('teacher')
-        attendance_id = self.client.post(
-            '/api/teacher/attendance-sessions',
-            json=self.attendance_payload()
-        ).json['attendance_session_id']
-        records_url = (
-            f'/api/teacher/attendance-sessions/{attendance_id}/records'
-        )
-        self.assertEqual(self.client.put(records_url, json={'records': [{
-            'student_id': 1, 'status': 'missing'
-        }]}).status_code, 400)
-        self.assertEqual(self.client.put(records_url, json={'records': [{
-            'student_id': 2, 'status': 'present'
-        }]}).status_code, 400)
-        self.assertEqual(
-            self.client.put(records_url, json={'records': []}).status_code,
-            400
-        )
-
-    def test_duplicate_attendance_session_is_rejected(self):
-        self.login('teacher')
-        first = self.client.post(
-            '/api/teacher/attendance-sessions',
-            json=self.attendance_payload()
-        )
-        self.assertEqual(first.status_code, 201)
-        duplicate = self.client.post(
-            '/api/teacher/attendance-sessions',
-            json=self.attendance_payload()
-        )
-        self.assertEqual(duplicate.status_code, 409)
-
-    def test_attendance_is_teacher_scoped_and_requires_teacher_role(self):
-        self.login('other_teacher')
-        self.assertEqual(self.client.post(
-            '/api/teacher/attendance-sessions',
-            json=self.attendance_payload()
-        ).status_code, 404)
-
-        self.login('teacher')
-        attendance_id = self.client.post(
-            '/api/teacher/attendance-sessions',
-            json=self.attendance_payload()
-        ).json['attendance_session_id']
-        self.login('other_teacher')
-        self.assertEqual(self.client.get(
-            f'/api/teacher/attendance-sessions/{attendance_id}'
-        ).status_code, 404)
-
-        for role in ['student', 'admin']:
-            with self.subTest(role=role):
-                self.login(role)
-                self.assertEqual(
-                    self.client.get(
-                        '/api/teacher/attendance-sessions'
-                    ).status_code,
-                    403
-                )
 
     def monthly_attendance_payload(self, **overrides):
         payload = {

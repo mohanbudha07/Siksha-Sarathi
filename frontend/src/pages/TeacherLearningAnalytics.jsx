@@ -194,7 +194,7 @@ function TeacherLearningAnalytics() {
             <article>
               <span>Attendance tracked</span>
               <strong>{filteredStatistics.attendance}</strong>
-              <small>Students with daily records</small>
+              <small>Students with monthly records</small>
             </article>
           </section>
 
