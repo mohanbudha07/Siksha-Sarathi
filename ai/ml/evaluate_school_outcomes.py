@@ -166,7 +166,8 @@ def main():
     import MySQLdb
     from MySQLdb.cursors import DictCursor
 
-    load_dotenv()
+    repository_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    load_dotenv(os.path.join(repository_root, ".env"))
     connection = MySQLdb.connect(host=os.getenv("MYSQL_HOST", "localhost"),
                                  user=os.getenv("MYSQL_USER", "siksha_user"),
                                  passwd=os.getenv("MYSQL_PASSWORD", ""),

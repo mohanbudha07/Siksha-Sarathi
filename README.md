@@ -80,7 +80,7 @@ Install and run the backend:
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-python app.py
+python -m backend.app
 ```
 
 Run the React frontend in a second terminal:
@@ -96,3 +96,19 @@ For production, set `APP_ENV=production`, configure the deployed frontend in
 refuses to start in production without `SECRET_KEY`.
 
 ## Project Structure
+
+```text
+frontend/       React application
+backend/        Flask application, routes, schema, migrations, scripts and tests
+ai/             Study assistant and machine-learning code and data
+requirements.txt
+```
+
+Backend tests:
+
+```bash
+python -m unittest discover -s backend/tests -q
+```
+
+Database schema and migrations are in `backend/setup_db.sql` and
+`backend/migrations/`. AI and ML code are in `ai/` and `ai/ml/`.

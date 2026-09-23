@@ -2,7 +2,7 @@
 
 from flask import Blueprint, request, session
 
-from assistant import generate_answer
+from ai.assistant import generate_answer
 
 
 def create_chatbot_blueprint(

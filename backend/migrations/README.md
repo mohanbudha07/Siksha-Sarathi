@@ -29,7 +29,7 @@ student guidance or administrator statistics.
 Run the regression tests with the backend environment activated:
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s backend/tests -v
 ```
 
 Tests use Flask's test client with an in-memory SQLite database adapter and model

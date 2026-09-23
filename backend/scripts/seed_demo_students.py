@@ -1,7 +1,7 @@
 """Create ten clearly labeled Grade 10 demo students for local UI testing.
 
 Run from the repository root with the project's virtual environment active:
-    python scripts/seed_demo_students.py
+    python backend/scripts/seed_demo_students.py
 
 This script adds no quiz answers, exam marks, attendance or ML predictions.
 """
@@ -22,7 +22,8 @@ DEMO_DOMAIN = "example.invalid"
 
 
 def main():
-    load_dotenv(Path.cwd() / ".env")
+    repository_root = Path(__file__).resolve().parents[2]
+    load_dotenv(repository_root / ".env")
     connection = MySQLdb.connect(
         host=os.getenv("MYSQL_HOST", "localhost"),
         user=os.getenv("MYSQL_USER", "siksha_user"),

@@ -1,14 +1,15 @@
 import pandas as pd
+import os
 
 from sklearn.ensemble import GradientBoostingRegressor
-from sklearn.model_selection import KFold, cross_validate
+from sklearn.model_selection import KFold, GridSearchCV
 
 
 # --------------------------------------------------
 # 1. Load UCI Mathematics dataset
 # --------------------------------------------------
 
-DATA_PATH = "ml/student-mat.csv"
+DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "student-mat.csv")
 
 data = pd.read_csv(DATA_PATH, sep=";")
 
@@ -31,19 +32,27 @@ y = data[target]
 
 
 # --------------------------------------------------
-# 3. Define tuned Gradient Boosting model
+# 3. Define baseline Gradient Boosting model
 # --------------------------------------------------
 
 model = GradientBoostingRegressor(
-    n_estimators=100,
-    learning_rate=0.05,
-    max_depth=3,
     random_state=42
 )
 
 
 # --------------------------------------------------
-# 4. Define 5-fold cross-validation
+# 4. Define hyperparameter search space
+# --------------------------------------------------
+
+param_grid = {
+    "n_estimators": [50, 100, 150, 200],
+    "learning_rate": [0.01, 0.05, 0.1],
+    "max_depth": [1, 2, 3]
+}
+
+
+# --------------------------------------------------
+# 5. Define 5-fold cross-validation
 # --------------------------------------------------
 
 cv = KFold(
@@ -54,40 +63,35 @@ cv = KFold(
 
 
 # --------------------------------------------------
-# 5. Evaluate model
+# 6. Grid Search
 # --------------------------------------------------
 
-scoring = {
-    "MAE": "neg_mean_absolute_error",
-    "RMSE": "neg_root_mean_squared_error",
-    "R2": "r2"
-}
-
-scores = cross_validate(
-    model,
-    X,
-    y,
+grid_search = GridSearchCV(
+    estimator=model,
+    param_grid=param_grid,
     cv=cv,
-    scoring=scoring
+    scoring="neg_mean_squared_error",
+    n_jobs=-1
 )
 
-
-# --------------------------------------------------
-# 6. Calculate average scores
-# --------------------------------------------------
-
-mae = -scores["test_MAE"].mean()
-rmse = -scores["test_RMSE"].mean()
-r2 = scores["test_R2"].mean()
+grid_search.fit(X, y)
 
 
 # --------------------------------------------------
-# 7. Display results
+# 7. Display best parameters
 # --------------------------------------------------
 
-print("\nTuned Gradient Boosting Results")
+print("\nBest Gradient Boosting Parameters")
 print("=" * 50)
 
-print(f"MAE  : {mae:.4f}")
-print(f"RMSE : {rmse:.4f}")
-print(f"R2   : {r2:.4f}")
+print(grid_search.best_params_)
+
+
+# --------------------------------------------------
+# 8. Display best CV RMSE
+# --------------------------------------------------
+
+best_rmse = (-grid_search.best_score_) ** 0.5
+
+print("\nBest Cross-Validation RMSE:")
+print(f"{best_rmse:.4f}")

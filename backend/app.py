@@ -5,14 +5,14 @@ from functools import wraps
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from routes.admin import create_admin_blueprint
-from routes.assessments import create_assessments_blueprint
-from routes.attendance import create_attendance_blueprint
-from routes.auth import create_auth_blueprint
-from routes.chatbot import create_chatbot_blueprint
-from routes.lab_quiz import create_lab_quiz_blueprint
-from routes.notes import create_notes_blueprint
-from routes.quiz import (
+from backend.routes.admin import create_admin_blueprint
+from backend.routes.assessments import create_assessments_blueprint
+from backend.routes.attendance import create_attendance_blueprint
+from backend.routes.auth import create_auth_blueprint
+from backend.routes.chatbot import create_chatbot_blueprint
+from backend.routes.lab_quiz import create_lab_quiz_blueprint
+from backend.routes.notes import create_notes_blueprint
+from backend.routes.quiz import (
     create_quiz_blueprint,
     parse_quiz_questions,
     quiz_has_open_lab_session
@@ -24,8 +24,9 @@ import secrets
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from the repository root .env file.
+repository_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(repository_root, ".env"))
 
 # ============================================================
 # APPLICATION CONFIGURATION

@@ -1,15 +1,11 @@
 """Unit tests for online and offline Study Assistant behavior."""
 
-from pathlib import Path
 import sys
 import types
 import unittest
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-
-from assistant import generate_answer
+from ai.assistant import generate_answer
 
 
 class FakeModels:

@@ -1,4 +1,5 @@
 import pandas as pd
+import os
 
 from sklearn.model_selection import KFold, cross_validate
 from sklearn.linear_model import LinearRegression
@@ -11,7 +12,7 @@ from sklearn.preprocessing import StandardScaler
 # 1. Load UCI Mathematics dataset
 # --------------------------------------------------
 
-DATA_PATH = "ml/student-mat.csv"
+DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "student-mat.csv")
 
 data = pd.read_csv(DATA_PATH, sep=";")
 
