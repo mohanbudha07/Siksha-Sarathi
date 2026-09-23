@@ -57,7 +57,7 @@ class QuizStatisticsTests(unittest.TestCase):
         mysql_module = types.ModuleType('flask_mysqldb')
         mysql_module.MySQL = lambda app: types.SimpleNamespace(connection=None)
         dotenv_module = types.ModuleType('dotenv')
-        dotenv_module.load_dotenv = lambda: None
+        dotenv_module.load_dotenv = lambda *args, **kwargs: None
         spec = importlib.util.spec_from_file_location('siksha_test_app', ROOT / 'app.py')
         cls.backend = importlib.util.module_from_spec(spec)
         with patch.dict(sys.modules, {

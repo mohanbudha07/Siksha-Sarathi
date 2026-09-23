@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from routes.quiz import (
+from backend.routes.quiz import (
     lab_session_state,
     parse_quiz_questions,
     public_quiz_payload,

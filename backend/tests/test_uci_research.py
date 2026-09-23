@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from ml.evaluate_uci_research import (
+from ai.ml.evaluate_uci_research import (
     FEATURES, grouped_holdout, load_subject_records, run_experiment,
 )
 

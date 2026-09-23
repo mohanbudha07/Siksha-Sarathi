@@ -1,11 +1,12 @@
 import pandas as pd
+import os
 from sklearn.ensemble import GradientBoostingRegressor
 
 # --------------------------------------------------
 # 1. Load dataset
 # --------------------------------------------------
 
-DATA_PATH = "ml/student-mat.csv"
+DATA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "student-mat.csv")
 
 data = pd.read_csv(DATA_PATH, sep=";")
 

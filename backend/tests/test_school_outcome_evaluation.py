@@ -6,7 +6,7 @@ import unittest
 
 import sklearn  # Load before the existing Flask tests temporarily patch module imports.
 
-from ml.evaluate_school_outcomes import build_examples, evaluate, fetch_records
+from ai.ml.evaluate_school_outcomes import build_examples, evaluate, fetch_records
 
 
 def paper(student, assessment_id, assessment_date, marks, kind="class_test", **changes):
