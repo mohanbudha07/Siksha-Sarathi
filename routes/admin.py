@@ -7,6 +7,144 @@ from werkzeug.security import generate_password_hash
 def create_admin_blueprint(mysql, login_required, role_required, admin_role):
     admin = Blueprint("admin", __name__)
 
+    @admin.get("/api/admin/users")
+    @login_required
+    @role_required(admin_role)
+    def admin_list_users_api():
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                """SELECT id, username, email, role, created_at
+                   FROM users WHERE role IN ('admin', 'teacher')
+                   ORDER BY role, username"""
+            )
+            staff = cur.fetchall()
+            cur.execute(
+                """SELECT u.id AS user_id, s.id AS student_id,
+                          s.full_name, u.email, u.role, s.grade,
+                          (SELECT sce.class_id
+                           FROM student_class_enrollments sce
+                           WHERE sce.student_id = s.id
+                           ORDER BY sce.created_at DESC, sce.id DESC
+                           LIMIT 1) AS class_id,
+                          (SELECT c.name
+                           FROM student_class_enrollments sce
+                           INNER JOIN classes c ON c.id = sce.class_id
+                           WHERE sce.student_id = s.id
+                           ORDER BY sce.created_at DESC, sce.id DESC
+                           LIMIT 1) AS class_name
+                   FROM students s
+                   INNER JOIN users u ON u.id = s.user_id
+                   ORDER BY s.full_name"""
+            )
+            students = cur.fetchall()
+            return {
+                "admins": [user for user in staff if user["role"] == "admin"],
+                "teachers": [
+                    user for user in staff if user["role"] == "teacher"
+                ],
+                "students": students
+            }, 200
+        finally:
+            cur.close()
+
+    @admin.post("/api/admin/admins")
+    @login_required
+    @role_required(admin_role)
+    def admin_create_admin_api():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return {"error": "Admin data is required"}, 400
+        username = str(data.get("username") or "").strip()
+        email = str(data.get("email") or "").strip().lower()
+        password = str(data.get("password") or "")
+        if not username or not email or "@" not in email:
+            return {"error": "Admin name and a valid email are required"}, 400
+        if len(password) < 8:
+            return {
+                "error": "Password must contain at least 8 characters"
+            }, 400
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+            if cur.fetchone():
+                return {"error": "Email already registered"}, 409
+            cur.execute(
+                """INSERT INTO users (username, email, password, role)
+                   VALUES (%s, %s, %s, 'admin')""",
+                (username, email, generate_password_hash(password))
+            )
+            admin_id = cur.lastrowid
+            mysql.connection.commit()
+            return {"message": "Admin account created", "admin_id": admin_id}, 201
+        except Exception as error:
+            mysql.connection.rollback()
+            print("Admin account creation error:", error)
+            return {"error": "Unable to create admin"}, 500
+        finally:
+            cur.close()
+
+    @admin.post("/api/admin/students")
+    @login_required
+    @role_required(admin_role)
+    def admin_create_student_api():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return {"error": "Student data is required"}, 400
+        full_name = str(data.get("full_name") or "").strip()
+        email = str(data.get("email") or "").strip().lower()
+        password = str(data.get("password") or "")
+        try:
+            class_id = int(data.get("class_id"))
+        except (TypeError, ValueError):
+            class_id = 0
+        if not full_name or not email or "@" not in email:
+            return {"error": "Student name and a valid email are required"}, 400
+        if len(password) < 8:
+            return {
+                "error": "Password must contain at least 8 characters"
+            }, 400
+        if not class_id:
+            return {"error": "Class is required"}, 400
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute("SELECT id, grade FROM classes WHERE id = %s", (class_id,))
+            selected_class = cur.fetchone()
+            if not selected_class:
+                return {"error": "Class not found"}, 404
+            cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+            if cur.fetchone():
+                return {"error": "Email already registered"}, 409
+            cur.execute(
+                """INSERT INTO users (username, email, password, role)
+                   VALUES (%s, %s, %s, 'student')""",
+                (full_name, email, generate_password_hash(password))
+            )
+            user_id = cur.lastrowid
+            cur.execute(
+                """INSERT INTO students (user_id, full_name, grade)
+                   VALUES (%s, %s, %s)""",
+                (user_id, full_name, selected_class["grade"])
+            )
+            student_id = cur.lastrowid
+            cur.execute(
+                """INSERT INTO student_class_enrollments (student_id, class_id)
+                   VALUES (%s, %s)""",
+                (student_id, class_id)
+            )
+            mysql.connection.commit()
+            return {
+                "message": "Student account created",
+                "student_id": student_id,
+                "user_id": user_id
+            }, 201
+        except Exception as error:
+            mysql.connection.rollback()
+            print("Admin student creation error:", error)
+            return {"error": "Unable to create student"}, 500
+        finally:
+            cur.close()
+
     @admin.get("/api/admin/school-setup")
     @login_required
     @role_required(admin_role)
