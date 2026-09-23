@@ -17,6 +17,7 @@ import AIAssistant from './pages/AIAssistant'
 import TeacherDashboard from './pages/TeacherDashboard'
 import TeacherNotes from './pages/TeacherNotes'
 import AdminDashboard from './pages/AdminDashboard'
+import AdminUsers from './pages/AdminUsers'
 import AdminSchoolSetup from './pages/AdminSchoolSetup'
 import TeacherUploadNote from './pages/TeacherUploadNote'
 import TeacherEditNote from './pages/TeacherEditNote'
@@ -196,6 +197,9 @@ function App() {
         {/* Admin */}
         <Route path="/admin/dashboard" element={
           <AdminPage><AdminDashboard /></AdminPage>
+        } />
+        <Route path="/admin/users" element={
+          <AdminPage><AdminUsers /></AdminPage>
         } />
         <Route path="/admin/school-setup" element={
           <AdminPage><AdminSchoolSetup /></AdminPage>

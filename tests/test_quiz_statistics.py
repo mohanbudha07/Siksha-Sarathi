@@ -10,6 +10,7 @@ import unittest
 from datetime import date
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
+from werkzeug.security import check_password_hash
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -333,6 +334,92 @@ class QuizStatisticsTests(unittest.TestCase):
                 self.assertEqual(
                     self.client.get('/api/admin/school-setup').status_code, 403
                 )
+
+    def test_user_management_requires_admin_role(self):
+        for role in ('student', 'teacher'):
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(
+                    self.client.get('/api/admin/users').status_code, 403
+                )
+                self.assertEqual(
+                    self.client.post('/api/admin/admins', json={}).status_code,
+                    403
+                )
+                self.assertEqual(
+                    self.client.post('/api/admin/students', json={}).status_code,
+                    403
+                )
+
+    def test_admin_can_create_admin_and_duplicate_email_is_rejected(self):
+        self.login('admin')
+        response = self.client.post('/api/admin/admins', json={
+            'username': 'Second Admin', 'email': 'ADMIN2@EXAMPLE.TEST',
+            'password': 'Password123'
+        })
+        self.assertEqual(response.status_code, 201)
+        created = self.db.execute(
+            'SELECT username, email, role, password FROM users WHERE id=?',
+            (response.json['admin_id'],)
+        ).fetchone()
+        self.assertEqual(tuple(created[:3]),
+                         ('Second Admin', 'admin2@example.test', 'admin'))
+        self.assertTrue(check_password_hash(
+            created['password'], 'Password123'
+        ))
+        duplicate = self.client.post('/api/admin/admins', json={
+            'username': 'Another Admin', 'email': 'ADMIN2@EXAMPLE.TEST',
+            'password': 'Password123'
+        })
+        self.assertEqual(duplicate.status_code, 409)
+
+    def test_admin_can_create_student_with_class_records(self):
+        self.login('admin')
+        response = self.client.post('/api/admin/students', json={
+            'full_name': 'New Student', 'email': 'NEW@EXAMPLE.TEST',
+            'password': 'Password123', 'class_id': 1
+        })
+        self.assertEqual(response.status_code, 201)
+        stored = self.db.execute(
+            '''SELECT u.email, u.role, s.full_name, s.grade, sce.class_id
+               FROM users u JOIN students s ON s.user_id=u.id
+               JOIN student_class_enrollments sce ON sce.student_id=s.id
+               WHERE u.id=?''', (response.json['user_id'],)
+        ).fetchone()
+        self.assertEqual(tuple(stored),
+                         ('new@example.test', 'student', 'New Student', '10', 1))
+
+    def test_admin_student_creation_validates_class_and_duplicate_email(self):
+        self.login('admin')
+        missing_class = self.client.post('/api/admin/students', json={
+            'full_name': 'No Class', 'email': 'noclass@example.test',
+            'password': 'Password123'
+        })
+        self.assertEqual(missing_class.status_code, 400)
+        unknown_class = self.client.post('/api/admin/students', json={
+            'full_name': 'Unknown Class', 'email': 'unknown@example.test',
+            'password': 'Password123', 'class_id': 999
+        })
+        self.assertEqual(unknown_class.status_code, 404)
+        duplicate = self.client.post('/api/admin/students', json={
+            'full_name': 'Existing Email', 'email': 'S@EXAMPLE.TEST',
+            'password': 'Password123', 'class_id': 1
+        })
+        self.assertEqual(duplicate.status_code, 409)
+        self.assertIsNone(self.db.execute(
+            "SELECT id FROM students WHERE full_name='Existing Email'"
+        ).fetchone())
+
+    def test_admin_user_list_groups_users_without_password_hashes(self):
+        self.login('admin')
+        response = self.client.get('/api/admin/users')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json['admins'])
+        self.assertTrue(response.json['teachers'])
+        self.assertTrue(response.json['students'])
+        serialized = response.get_data(as_text=True)
+        self.assertNotIn('password', serialized.lower())
+        self.assertEqual(response.json['students'][0]['class_id'], 1)
 
     def test_quiz_response_contains_only_public_fields(self):
         response = self.client.get('/api/student/quiz')
