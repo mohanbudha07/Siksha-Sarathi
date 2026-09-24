@@ -125,21 +125,6 @@ if (role === 'teacher') {
             </button>
 
           </form>
-           <div className="register-links">
-  <p>Don't have an account?</p>
-
-  <div className="register-buttons">
-    <button
-      type="button"
-      onClick={() => navigate('/student/register')}
-    >
-      👨‍🎓 Register as Student
-    </button>
-
-  </div>
-  <small>Teacher accounts are created by the school administrator.</small>
-</div>
-
           <div className="login-footer">
             <span>📚</span>
             <p>

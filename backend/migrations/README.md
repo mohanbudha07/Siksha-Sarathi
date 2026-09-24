@@ -121,9 +121,9 @@ login account. It supports the admin-managed class enrollment workflow.
 
     sudo mysql siksha_sarathi < migrations/008_admin_school_setup.sql
 
-The first query must return no duplicate `user_id` rows. Public registration
-creates student accounts only; administrators create teacher accounts and
-manage class enrollment and teacher subject assignments in the application.
+The first query must return no duplicate `user_id` rows. Administrators create
+all school accounts and manage class enrollment and teacher subject assignments
+in the application.
 
 ## Monthly attendance migration
 

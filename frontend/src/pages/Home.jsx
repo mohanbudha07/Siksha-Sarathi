@@ -48,7 +48,7 @@ function Home() {
           <h2>How would you like to continue?</h2>
 
           <p className="role-subtitle">
-            Choose your role to create an account
+            Sign in with an account issued by your school
           </p>
 
           <div className="role-cards">
@@ -66,17 +66,13 @@ function Home() {
                 track your performance and improve your skills.
               </p>
 
-              <button
-                onClick={() => navigate('/student/register')}
-              >
-                Register as Student →
-              </button>
+              <button onClick={() => navigate('/login')}>Student Sign In →</button>
 
               <span
                 className="role-login"
                 onClick={() => navigate('/login')}
               >
-                Already a student? Sign in
+                Student accounts are created by the school administrator.
               </span>
 
             </div>

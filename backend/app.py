@@ -168,8 +168,7 @@ def login_rate_limit_exceeded(_error):
 app.register_blueprint(create_auth_blueprint(
     mysql=mysql,
     limiter=limiter,
-    login_required=login_required,
-    student_role=STUDENT
+    login_required=login_required
 ))
 
 app.register_blueprint(create_notes_blueprint(
