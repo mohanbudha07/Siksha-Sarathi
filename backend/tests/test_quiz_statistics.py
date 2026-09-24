@@ -700,6 +700,36 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(other.json['statistics']['students_needing_quiz_support'], 0)
         self.assertEqual(other.json['student_performance'], [])
 
+    def test_teacher_dashboard_counts_class_teacher_scope_even_without_subject_assignment(self):
+        self.db.execute("DELETE FROM teacher_class_subjects WHERE id = 1")
+        self.db.execute("DELETE FROM class_teacher_assignments WHERE id = 1")
+        self.db.execute("INSERT INTO class_teacher_assignments VALUES(2,2,2,'2026-01-01')")
+        self.db.execute("INSERT INTO student_class_enrollments VALUES(3,2,2,'2026-01-01')")
+
+        self.login('teacher')
+        response = self.client.get('/api/teacher/dashboard')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['statistics']['total_students'], 1)
+        self.assertEqual(response.json['assignment_summary']['total_classes'], 1)
+        self.assertEqual(response.json['assignment_summary']['total_subjects'], 0)
+        self.assertEqual(response.json['assignment_summary']['class_teacher_classes'], 1)
+        self.assertEqual(len(response.json['student_performance']), 1)
+
+    def test_teacher_dashboard_returns_structured_assignment_rows_for_logged_in_teacher(self):
+        self.login('teacher')
+        response = self.client.get('/api/teacher/dashboard')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json['assignments']), 1)
+        assignment = response.json['assignments'][0]
+        self.assertEqual(assignment['class_id'], 1)
+        self.assertEqual(assignment['class_name'], 'Grade 10')
+        self.assertEqual(assignment['grade'], '10')
+        self.assertEqual(assignment['section'], 'Default')
+        self.assertEqual(assignment['subject_id'], 1)
+        self.assertEqual(assignment['subject'], 'Science')
+        self.assertTrue(assignment['is_class_teacher'])
+        self.assertEqual(assignment['student_count'], 1)
+
     def test_quiz_routes_still_require_student_role(self):
         self.login('teacher')
         self.assertEqual(self.client.get('/api/student/quiz').status_code, 403)

@@ -482,10 +482,123 @@ def teacher_dashboard_api():
     cur = mysql.connection.cursor()
 
     try:
+        teacher_user_id = session["user_id"]
 
-        # ----------------------------------------------------
-        # Teacher notes
-        # ----------------------------------------------------
+        cur.execute(
+            """
+            SELECT DISTINCT
+                c.id,
+                c.name,
+                c.grade,
+                c.section,
+                COUNT(DISTINCT tcs.subject_id) AS subject_count,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM class_teacher_assignments cta
+                        WHERE cta.teacher_user_id = %s
+                          AND cta.class_id = c.id
+                    ) THEN 1 ELSE 0
+                END AS is_class_teacher
+            FROM (
+                SELECT class_id FROM teacher_class_subjects WHERE teacher_user_id = %s
+                UNION
+                SELECT class_id FROM class_teacher_assignments WHERE teacher_user_id = %s
+            ) assigned_classes
+            INNER JOIN classes c ON c.id = assigned_classes.class_id
+            LEFT JOIN teacher_class_subjects tcs
+                ON tcs.class_id = assigned_classes.class_id
+               AND tcs.teacher_user_id = %s
+            GROUP BY c.id, c.name, c.grade, c.section
+            ORDER BY c.grade, c.section, c.name
+            """,
+            (teacher_user_id, teacher_user_id, teacher_user_id, teacher_user_id)
+        )
+        assigned_classes = cur.fetchall()
+
+        class_ids = [row["id"] for row in assigned_classes]
+        class_teacher_classes = sum(
+            1 for row in assigned_classes if int(row.get("is_class_teacher") or 0)
+        )
+
+        cur.execute(
+            """
+            SELECT COUNT(DISTINCT subject_id) AS total_subjects
+            FROM teacher_class_subjects
+            WHERE teacher_user_id = %s
+            """,
+            (teacher_user_id,)
+        )
+        total_subjects = int(cur.fetchone()["total_subjects"] or 0)
+
+        cur.execute(
+            """
+            SELECT COUNT(DISTINCT sce.student_id) AS total_students
+            FROM student_class_enrollments sce
+            WHERE EXISTS (
+                SELECT 1
+                FROM (
+                    SELECT class_id FROM teacher_class_subjects WHERE teacher_user_id = %s
+                    UNION
+                    SELECT class_id FROM class_teacher_assignments WHERE teacher_user_id = %s
+                ) assigned_classes
+                WHERE assigned_classes.class_id = sce.class_id
+            )
+            """,
+            (teacher_user_id, teacher_user_id)
+        )
+        total_students = int(cur.fetchone()["total_students"] or 0)
+
+        cur.execute(
+            """
+            SELECT
+                a.class_id,
+                c.name AS class_name,
+                c.grade,
+                c.section,
+                a.subject_id,
+                sub.name AS subject,
+                CASE WHEN cta.teacher_user_id IS NOT NULL THEN 1 ELSE 0 END AS is_class_teacher,
+                COUNT(DISTINCT sce.student_id) AS student_count
+            FROM (
+                SELECT tcs.class_id, tcs.subject_id, tcs.teacher_user_id
+                FROM teacher_class_subjects tcs
+                WHERE tcs.teacher_user_id = %s
+
+                UNION ALL
+
+                SELECT cta.class_id, NULL AS subject_id, cta.teacher_user_id
+                FROM class_teacher_assignments cta
+                WHERE cta.teacher_user_id = %s
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM teacher_class_subjects tcs
+                      WHERE tcs.teacher_user_id = %s
+                        AND tcs.class_id = cta.class_id
+                  )
+            ) a
+            INNER JOIN classes c ON c.id = a.class_id
+            LEFT JOIN subjects sub ON sub.id = a.subject_id
+            LEFT JOIN class_teacher_assignments cta
+                ON cta.class_id = a.class_id
+               AND cta.teacher_user_id = a.teacher_user_id
+            LEFT JOIN student_class_enrollments sce ON sce.class_id = a.class_id
+            GROUP BY
+                a.class_id,
+                c.name,
+                c.grade,
+                c.section,
+                a.subject_id,
+                sub.name,
+                cta.teacher_user_id
+            ORDER BY c.grade, c.section, c.name, COALESCE(sub.name, '')
+            """,
+            (teacher_user_id, teacher_user_id, teacher_user_id)
+        )
+        assignments = cur.fetchall()
+        for assignment in assignments:
+            assignment["is_class_teacher"] = bool(assignment["is_class_teacher"])
+            assignment["student_count"] = int(assignment["student_count"] or 0)
 
         cur.execute(
             """
@@ -493,14 +606,9 @@ def teacher_dashboard_api():
             FROM notes
             WHERE uploaded_by = %s
             """,
-            (session["user_id"],)
+            (teacher_user_id,)
         )
-
         total_notes = cur.fetchone()["total_notes"]
-
-        # ----------------------------------------------------
-        # Recent teacher notes
-        # ----------------------------------------------------
 
         cur.execute(
             """
@@ -515,30 +623,9 @@ def teacher_dashboard_api():
             ORDER BY created_at DESC
             LIMIT 5
             """,
-            (session["user_id"],)
+            (teacher_user_id,)
         )
-
         recent_notes = cur.fetchall()
-
-        # ----------------------------------------------------
-        # Total students
-        # ----------------------------------------------------
-
-        cur.execute(
-            """
-            SELECT COUNT(DISTINCT sce.student_id) AS total_students
-            FROM teacher_class_subjects tcs
-            INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
-            WHERE tcs.teacher_user_id = %s
-            """,
-            (session["user_id"],)
-        )
-
-        total_students = cur.fetchone()["total_students"]
-
-        # ----------------------------------------------------
-        # Quiz statistics
-        # ----------------------------------------------------
 
         cur.execute(
             """
@@ -548,7 +635,8 @@ def teacher_dashboard_api():
             FROM quiz_results qr
             INNER JOIN quizzes q ON q.id = qr.quiz_id
             WHERE EXISTS (
-                SELECT 1 FROM teacher_class_subjects tcs
+                SELECT 1
+                FROM teacher_class_subjects tcs
                 INNER JOIN subjects sub ON sub.id = tcs.subject_id
                 INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
                 WHERE tcs.teacher_user_id = %s
@@ -556,23 +644,11 @@ def teacher_dashboard_api():
                   AND LOWER(sub.name) = LOWER(q.subject)
             )
             """,
-            (session["user_id"],)
+            (teacher_user_id,)
         )
-
         quiz_stats = cur.fetchone()
-
-        total_quiz_attempts = (
-            quiz_stats["total_quiz_attempts"]
-        )
-
-        average_quiz_score = round(
-            float(quiz_stats["average_quiz_score"]),
-            2
-        )
-
-        # ----------------------------------------------------
-        # Quiz support is based on recorded answers for assigned subjects.
-        # ----------------------------------------------------
+        total_quiz_attempts = int(quiz_stats["total_quiz_attempts"] or 0)
+        average_quiz_score = round(float(quiz_stats["average_quiz_score"] or 0), 2)
 
         cur.execute(
             """
@@ -593,95 +669,91 @@ def teacher_dashboard_api():
             )
             GROUP BY qr.student_id, LOWER(q.subject)
             """,
-            (session["user_id"],)
+            (teacher_user_id,)
         )
         students_needing_quiz_support = len({
             row["student_id"] for row in cur.fetchall()
             if build_learning_metrics({"attempts": 0, **row})["status"] == "Needs attention"
         })
 
-        # ----------------------------------------------------
-        # Individual student performance
-        # ----------------------------------------------------
-
-        cur.execute(
-            """
-            SELECT
-                s.id AS student_id,
-                s.full_name,
-                s.grade,
-
-                COUNT(qr.id)
-                AS quiz_attempts,
-
-                COALESCE(
-                    AVG(100.0 * qr.score / NULLIF(qr.total_questions, 0)),
-                    0
-                ) AS average_quiz_score
-
-            FROM students s
-            LEFT JOIN quiz_results qr ON s.id = qr.student_id
-                AND EXISTS (
-                    SELECT 1 FROM quizzes q
-                    INNER JOIN teacher_class_subjects tcs
-                        ON TRUE
-                    INNER JOIN subjects sub ON sub.id = tcs.subject_id
-                    INNER JOIN student_class_enrollments sce
-                        ON sce.class_id = tcs.class_id
-                    WHERE q.id = qr.quiz_id
-                                            AND LOWER(q.subject) = LOWER(sub.name)
-                      AND sce.student_id = s.id
-                      AND tcs.teacher_user_id = %s
-                )
-            WHERE EXISTS (
-                SELECT 1 FROM teacher_class_subjects tcs
-                INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
-                WHERE sce.student_id = s.id AND tcs.teacher_user_id = %s
+        if class_ids:
+            class_placeholders = ', '.join(['%s'] * len(class_ids))
+            cur.execute(
+                f"""
+                SELECT
+                    s.id AS student_id,
+                    s.full_name,
+                    s.grade,
+                    COUNT(qr.id) AS quiz_attempts,
+                    COALESCE(
+                        AVG(100.0 * qr.score / NULLIF(qr.total_questions, 0)),
+                        0
+                    ) AS average_quiz_score
+                FROM students s
+                INNER JOIN (
+                    SELECT DISTINCT sce.student_id
+                    FROM student_class_enrollments sce
+                    WHERE sce.class_id IN ({class_placeholders})
+                ) assigned_students ON assigned_students.student_id = s.id
+                LEFT JOIN quiz_results qr ON s.id = qr.student_id
+                    AND EXISTS (
+                        SELECT 1
+                        FROM quizzes q
+                        INNER JOIN teacher_class_subjects tcs
+                            ON TRUE
+                        INNER JOIN subjects sub ON sub.id = tcs.subject_id
+                        WHERE q.id = qr.quiz_id
+                          AND LOWER(q.subject) = LOWER(sub.name)
+                          AND tcs.teacher_user_id = %s
+                          AND tcs.class_id IN ({class_placeholders})
+                    )
+                GROUP BY s.id, s.full_name, s.grade
+                ORDER BY s.full_name
+                """,
+                (*class_ids, teacher_user_id, *class_ids)
+            )
+        else:
+            cur.execute(
+                """
+                SELECT
+                    s.id AS student_id,
+                    s.full_name,
+                    s.grade,
+                    0 AS quiz_attempts,
+                    0 AS average_quiz_score
+                FROM students s
+                WHERE 1 = 0
+                """
             )
 
-            GROUP BY
-                s.id,
-                s.full_name,
-                s.grade
-
-            ORDER BY s.full_name
-            """,
-            (session["user_id"], session["user_id"])
-        )
-
         student_performance = cur.fetchall()
-
-        # ----------------------------------------------------
-        # Convert Decimal values if necessary
-        # ----------------------------------------------------
-
         for student in student_performance:
-
             if student["average_quiz_score"] is not None:
-
-                student["average_quiz_score"] = round(
-                    float(student["average_quiz_score"]),
-                    2
-                )
+                student["average_quiz_score"] = round(float(student["average_quiz_score"]), 2)
 
         return {
-            "teacher": {
-                "name": session.get("username")
+            "teacher": {"name": session.get("username")},
+            "assignments": assignments,
+            "assignment_summary": {
+                "total_classes": len(assigned_classes),
+                "total_subjects": total_subjects,
+                "class_teacher_classes": class_teacher_classes,
+                "assigned_class_ids": class_ids,
             },
-
             "statistics": {
+                "assigned_class_count": len(assigned_classes),
+                "assigned_subject_count": total_subjects,
+                "distinct_student_count": total_students,
+                "teacher_scoped_quiz_attempts": total_quiz_attempts,
+                "teacher_scoped_average_quiz_score": average_quiz_score,
                 "total_notes": total_notes,
                 "total_students": total_students,
                 "total_quiz_attempts": total_quiz_attempts,
                 "average_quiz_score": average_quiz_score,
-                "students_needing_quiz_support":
-                    students_needing_quiz_support
+                "students_needing_quiz_support": students_needing_quiz_support,
             },
-
             "recent_notes": recent_notes,
-
-            "student_performance":
-                student_performance
+            "student_performance": student_performance,
         }, 200
 
     finally:
