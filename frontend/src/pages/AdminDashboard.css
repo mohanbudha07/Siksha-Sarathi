@@ -16,6 +16,7 @@
   margin: 0;
   opacity: 0.7;
 }
+
 .admin-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -50,6 +51,7 @@
   border-radius: 14px;
   padding: 25px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  margin-bottom: 24px;
 }
 
 .section-header {
@@ -58,6 +60,35 @@
 
 .section-header h2 {
   margin: 0;
+}
+
+.admin-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.admin-health-card {
+  padding: 18px 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.admin-health-card.warning {
+  border-left: 5px solid #f59e0b;
+  background: #fff7ed;
+}
+
+.admin-health-card span {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 10px;
+  opacity: 0.75;
+}
+
+.admin-health-card strong {
+  font-size: 28px;
 }
 
 .admin-table-wrapper {

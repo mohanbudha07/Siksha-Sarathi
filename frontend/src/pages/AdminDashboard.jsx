@@ -51,37 +51,47 @@ function AdminDashboard() {
   }
 
   const stats = data?.statistics || {}
+  const setupHealth = data?.setup_health || {}
+  const classOverview = data?.class_overview || []
 
   return (
     <div className="admin-dashboard">
-
       <div className="admin-header">
         <div>
           <h1>Admin Dashboard</h1>
-          <p>System overview and platform statistics</p>
+          <p>School operations overview</p>
         </div>
       </div>
 
       <div className="admin-stats">
-
         <div className="admin-card">
-          <span>Total Users</span>
-          <strong>{stats.total_users ?? 0}</strong>
-        </div>
-
-        <div className="admin-card">
-          <span>Students</span>
+          <span>Total Students</span>
           <strong>{stats.total_students ?? 0}</strong>
         </div>
 
         <div className="admin-card">
-          <span>Teachers</span>
+          <span>Total Teachers</span>
           <strong>{stats.total_teachers ?? 0}</strong>
         </div>
 
         <div className="admin-card">
-          <span>Admins</span>
-          <strong>{stats.total_admins ?? 0}</strong>
+          <span>Total Classes</span>
+          <strong>{stats.total_classes ?? 0}</strong>
+        </div>
+
+        <div className="admin-card">
+          <span>Total Subjects</span>
+          <strong>{stats.total_subjects ?? 0}</strong>
+        </div>
+
+        <div className="admin-card">
+          <span>Teacher Assignments</span>
+          <strong>{stats.total_teacher_assignments ?? 0}</strong>
+        </div>
+
+        <div className="admin-card">
+          <span>Total Users</span>
+          <strong>{stats.total_users ?? 0}</strong>
         </div>
 
         <div className="admin-card">
@@ -93,13 +103,73 @@ function AdminDashboard() {
           <span>Quizzes</span>
           <strong>{stats.total_quizzes ?? 0}</strong>
         </div>
+      </div>
 
-        <div className="admin-card">
-          <span>Quiz Attempts</span>
-          <strong>{stats.total_quiz_attempts ?? 0}</strong>
+      <section className="admin-section">
+        <div className="section-header">
+          <h2>Setup health</h2>
         </div>
 
-      </div>
+        <div className="admin-mini-grid">
+          <div className={`admin-health-card ${setupHealth.students_without_class ? 'warning' : ''}`}>
+            <span>Students without class</span>
+            <strong>{setupHealth.students_without_class ?? 0}</strong>
+          </div>
+
+          <div className={`admin-health-card ${setupHealth.teachers_without_assignments ? 'warning' : ''}`}>
+            <span>Teachers without assignments</span>
+            <strong>{setupHealth.teachers_without_assignments ?? 0}</strong>
+          </div>
+
+          <div className={`admin-health-card ${setupHealth.classes_without_class_teacher ? 'warning' : ''}`}>
+            <span>Classes without class teacher</span>
+            <strong>{setupHealth.classes_without_class_teacher ?? 0}</strong>
+          </div>
+
+          <div className={`admin-health-card ${setupHealth.classes_without_subject_assignments ? 'warning' : ''}`}>
+            <span>Classes without subject assignments</span>
+            <strong>{setupHealth.classes_without_subject_assignments ?? 0}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="admin-section">
+        <div className="section-header">
+          <h2>Class overview</h2>
+        </div>
+
+        {classOverview.length ? (
+          <div className="admin-table-wrapper">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Class</th>
+                  <th>Grade</th>
+                  <th>Students</th>
+                  <th>Teachers</th>
+                  <th>Subjects</th>
+                  <th>Class Teacher</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {classOverview.map((classItem) => (
+                  <tr key={classItem.id}>
+                    <td>{classItem.name}</td>
+                    <td>{classItem.grade}</td>
+                    <td>{classItem.student_count ?? 0}</td>
+                    <td>{classItem.assigned_teacher_count ?? 0}</td>
+                    <td>{classItem.subject_count ?? 0}</td>
+                    <td>{classItem.class_teacher_name || 'Unassigned'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="empty-state">No classes registered yet.</p>
+        )}
+      </section>
 
       <section className="admin-section">
         <div className="section-header">
@@ -139,12 +209,9 @@ function AdminDashboard() {
             </table>
           </div>
         ) : (
-          <p className="empty-state">
-            No users found.
-          </p>
+          <p className="empty-state">No users found.</p>
         )}
       </section>
-
     </div>
   )
 }

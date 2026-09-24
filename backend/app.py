@@ -1679,54 +1679,105 @@ def admin_dashboard_api():
     cur = mysql.connection.cursor()
 
     try:
-        # ----------------------------------------------------
-        # User statistics
-        # ----------------------------------------------------
-        cur.execute("""
+        cur.execute(
+            """
             SELECT
                 COUNT(*) AS total_users,
-                SUM(role = 'student') AS total_students,
-                SUM(role = 'teacher') AS total_teachers,
-                SUM(role = 'admin') AS total_admins
+                COALESCE(SUM(role = 'student'), 0) AS total_students,
+                COALESCE(SUM(role = 'teacher'), 0) AS total_teachers,
+                COALESCE(SUM(role = 'admin'), 0) AS total_admins
             FROM users
-        """)
-
+            """
+        )
         user_stats = cur.fetchone()
 
-        # ----------------------------------------------------
-        # Notes
-        # ----------------------------------------------------
-        cur.execute("""
-            SELECT COUNT(*) AS total_notes
-            FROM notes
-        """)
+        cur.execute("SELECT COUNT(*) AS total_classes FROM classes")
+        total_classes = cur.fetchone()["total_classes"]
 
+        cur.execute("SELECT COUNT(*) AS total_subjects FROM subjects")
+        total_subjects = cur.fetchone()["total_subjects"]
+
+        cur.execute(
+            "SELECT COUNT(*) AS total_teacher_assignments FROM teacher_class_subjects"
+        )
+        total_teacher_assignments = cur.fetchone()["total_teacher_assignments"]
+
+        cur.execute("SELECT COUNT(*) AS total_notes FROM notes")
         total_notes = cur.fetchone()["total_notes"]
 
-        # ----------------------------------------------------
-        # Quizzes
-        # ----------------------------------------------------
-        cur.execute("""
-            SELECT COUNT(*) AS total_quizzes
-            FROM quizzes
-        """)
-
+        cur.execute("SELECT COUNT(*) AS total_quizzes FROM quizzes")
         total_quizzes = cur.fetchone()["total_quizzes"]
 
-        # ----------------------------------------------------
-        # Quiz attempts
-        # ----------------------------------------------------
-        cur.execute("""
-            SELECT COUNT(*) AS total_quiz_attempts
-            FROM quiz_results
-        """)
-
+        cur.execute("SELECT COUNT(*) AS total_quiz_attempts FROM quiz_results")
         total_quiz_attempts = cur.fetchone()["total_quiz_attempts"]
 
-        # ----------------------------------------------------
-        # Recent users
-        # ----------------------------------------------------
-        cur.execute("""
+        cur.execute(
+            """SELECT COUNT(*) AS students_without_class
+                 FROM students s
+                 LEFT JOIN student_class_enrollments sce
+                     ON sce.student_id = s.id
+                 WHERE sce.id IS NULL"""
+        )
+        students_without_class = cur.fetchone()["students_without_class"]
+
+        cur.execute(
+            """SELECT COUNT(*) AS teachers_without_assignments
+                 FROM users u
+                 LEFT JOIN teacher_class_subjects tcs
+                     ON tcs.teacher_user_id = u.id
+                 WHERE u.role = 'teacher' AND tcs.id IS NULL"""
+        )
+        teachers_without_assignments = cur.fetchone()["teachers_without_assignments"]
+
+        cur.execute(
+            """SELECT COUNT(*) AS classes_without_class_teacher
+                 FROM classes c
+                 LEFT JOIN class_teacher_assignments cta
+                     ON cta.class_id = c.id
+                 WHERE cta.id IS NULL"""
+        )
+        classes_without_class_teacher = cur.fetchone()["classes_without_class_teacher"]
+
+        cur.execute(
+            """SELECT COUNT(*) AS classes_without_subject_assignments
+                 FROM classes c
+                 LEFT JOIN teacher_class_subjects tcs
+                     ON tcs.class_id = c.id
+                 WHERE tcs.id IS NULL"""
+        )
+        classes_without_subject_assignments = cur.fetchone()[
+            "classes_without_subject_assignments"
+        ]
+
+        cur.execute(
+            """
+            SELECT
+                c.id,
+                c.name,
+                c.grade,
+                c.section,
+                COUNT(DISTINCT sce.student_id) AS student_count,
+                COUNT(DISTINCT tcs.teacher_user_id) AS assigned_teacher_count,
+                COUNT(DISTINCT tcs.subject_id) AS subject_count,
+                MAX(CASE WHEN cta.id IS NOT NULL THEN u.username END) AS class_teacher_name
+            FROM classes c
+            LEFT JOIN student_class_enrollments sce
+                ON sce.class_id = c.id
+            LEFT JOIN teacher_class_subjects tcs
+                ON tcs.class_id = c.id
+            LEFT JOIN class_teacher_assignments cta
+                ON cta.class_id = c.id
+                AND cta.teacher_user_id = tcs.teacher_user_id
+            LEFT JOIN users u
+                ON u.id = cta.teacher_user_id
+            GROUP BY c.id, c.name, c.grade, c.section
+            ORDER BY c.grade, c.section, c.name
+            """
+        )
+        class_overview = cur.fetchall()
+
+        cur.execute(
+            """
             SELECT
                 id,
                 username,
@@ -1736,8 +1787,8 @@ def admin_dashboard_api():
             FROM users
             ORDER BY created_at DESC
             LIMIT 10
-        """)
-
+            """
+        )
         recent_users = cur.fetchall()
 
         return {
@@ -1746,11 +1797,23 @@ def admin_dashboard_api():
                 "total_students": int(user_stats["total_students"] or 0),
                 "total_teachers": int(user_stats["total_teachers"] or 0),
                 "total_admins": int(user_stats["total_admins"] or 0),
+                "total_classes": int(total_classes or 0),
+                "total_subjects": int(total_subjects or 0),
+                "total_teacher_assignments": int(total_teacher_assignments or 0),
                 "total_notes": int(total_notes or 0),
                 "total_quizzes": int(total_quizzes or 0),
-                "total_quiz_attempts": int(total_quiz_attempts or 0)
+                "total_quiz_attempts": int(total_quiz_attempts or 0),
             },
-            "recent_users": recent_users
+            "setup_health": {
+                "students_without_class": int(students_without_class or 0),
+                "teachers_without_assignments": int(teachers_without_assignments or 0),
+                "classes_without_class_teacher": int(classes_without_class_teacher or 0),
+                "classes_without_subject_assignments": int(
+                    classes_without_subject_assignments or 0
+                ),
+            },
+            "class_overview": class_overview,
+            "recent_users": recent_users,
         }, 200
 
     finally:

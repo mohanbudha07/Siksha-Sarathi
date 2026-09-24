@@ -394,10 +394,26 @@ class AuthAndCoreRouteTests(unittest.TestCase):
             'total_students': 2,
             'total_teachers': 2,
             'total_admins': 1,
+            'total_classes': 2,
+            'total_subjects': 1,
+            'total_teacher_assignments': 1,
             'total_notes': 1,
             'total_quizzes': 1,
             'total_quiz_attempts': 1,
         })
+        self.assertEqual(response.json['setup_health'], {
+            'students_without_class': 0,
+            'teachers_without_assignments': 1,
+            'classes_without_class_teacher': 1,
+            'classes_without_subject_assignments': 1,
+        })
+        self.assertEqual(len(response.json['class_overview']), 2)
+        self.assertEqual(response.json['class_overview'][0]['name'], 'Grade 10')
+        self.assertEqual(response.json['class_overview'][0]['student_count'], 1)
+        self.assertEqual(response.json['class_overview'][0]['assigned_teacher_count'], 1)
+        self.assertEqual(response.json['class_overview'][0]['subject_count'], 1)
+        self.assertEqual(response.json['class_overview'][0]['class_teacher_name'], 'Teacher')
+        self.assertEqual(response.json['class_overview'][1]['class_teacher_name'], None)
         self.assertTrue(response.json['recent_users'])
 
     def test_admin_dashboard_rejects_student_teacher_and_anonymous_users(self):
