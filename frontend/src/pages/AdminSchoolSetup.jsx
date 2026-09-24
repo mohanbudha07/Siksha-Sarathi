@@ -5,7 +5,6 @@ import './AdminSchoolSetup.css'
 function AdminSchoolSetup() {
   const [data, setData] = useState({ classes: [], teachers: [], students: [], assignments: [] })
   const [classForm, setClassForm] = useState({ name: '', grade: '', section: 'Default' })
-  const [teacherForm, setTeacherForm] = useState({ username: '', email: '', password: '' })
   const [assignment, setAssignment] = useState({ teacher_user_id: '', class_id: '', subject: '', is_class_teacher: false })
   const [enrollment, setEnrollment] = useState({ student_id: '', class_id: '' })
   const [busy, setBusy] = useState(false)
@@ -35,9 +34,6 @@ function AdminSchoolSetup() {
     <div className="school-form-grid">
       <form onSubmit={(event) => { event.preventDefault(); run(() => api.post('/admin/classes', classForm), 'Class created.', () => setClassForm({ name: '', grade: '', section: 'Default' })) }}>
         <h2>Create class</h2><label>Class name<input value={classForm.name} onChange={(event) => setClassForm({ ...classForm, name: event.target.value })} placeholder="Grade 10 A" required /></label><label>Grade<input value={classForm.grade} onChange={(event) => setClassForm({ ...classForm, grade: event.target.value })} placeholder="10" required /></label><label>Section<input value={classForm.section} onChange={(event) => setClassForm({ ...classForm, section: event.target.value })} required /></label><button disabled={busy}>Create Class</button>
-      </form>
-      <form onSubmit={(event) => { event.preventDefault(); run(() => api.post('/admin/teachers', teacherForm), 'Teacher account created.', () => setTeacherForm({ username: '', email: '', password: '' })) }}>
-        <h2>Create teacher</h2><label>Name<input value={teacherForm.username} onChange={(event) => setTeacherForm({ ...teacherForm, username: event.target.value })} required /></label><label>Email<input type="email" value={teacherForm.email} onChange={(event) => setTeacherForm({ ...teacherForm, email: event.target.value })} required /></label><label>Temporary password<input type="password" minLength="8" value={teacherForm.password} onChange={(event) => setTeacherForm({ ...teacherForm, password: event.target.value })} required /></label><button disabled={busy}>Create Teacher</button>
       </form>
       <form onSubmit={(event) => { event.preventDefault(); run(() => api.put(`/admin/students/${enrollment.student_id}/class`, { class_id: Number(enrollment.class_id) }), 'Student enrollment updated.') }}>
         <h2>Enroll student</h2><label>Student<select value={enrollment.student_id} onChange={(event) => setEnrollment({ ...enrollment, student_id: event.target.value })} required><option value="">Select student</option>{data.students.map((item) => <option key={`${item.student_id}-${item.class_id || 0}`} value={item.student_id}>{item.full_name}{item.class_name ? ` — ${item.class_name}` : ' — Unassigned'}</option>)}</select></label><label>Class<select value={enrollment.class_id} onChange={(event) => setEnrollment({ ...enrollment, class_id: event.target.value })} required><option value="">Select class</option>{data.classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><button disabled={busy}>Save Enrollment</button>

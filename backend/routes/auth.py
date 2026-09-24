@@ -1,10 +1,10 @@
-"""Authentication and public registration API routes."""
+"""Authentication API routes."""
 
 import os
 
 from flask import Blueprint, request, session
 from flask_limiter.util import get_remote_address
-from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.security import check_password_hash
 
 
 def _login_rate_limit_key():
@@ -16,7 +16,7 @@ def _login_rate_limit_key():
     return f"{get_remote_address()}:{email}"
 
 
-def create_auth_blueprint(mysql, limiter, login_required, student_role):
+def create_auth_blueprint(mysql, limiter, login_required):
     auth = Blueprint("auth", __name__)
 
     @auth.post("/api/login")
@@ -61,94 +61,6 @@ def create_auth_blueprint(mysql, limiter, login_required, student_role):
                 "role": user["role"]
             }
         }, 200
-
-    @auth.get("/api/public/classes")
-    def public_classes_api():
-        cur = mysql.connection.cursor()
-        try:
-            cur.execute(
-                """SELECT id, name, grade, section FROM classes
-                   ORDER BY grade, section, name"""
-            )
-            return {"classes": cur.fetchall()}, 200
-        finally:
-            cur.close()
-
-    @auth.post("/api/register")
-    def api_register():
-        data = request.get_json(silent=True)
-        if not data:
-            return {"error": "Registration data is required"}, 400
-
-        username = data.get("username")
-        email = data.get("email")
-        password = data.get("password")
-        full_name = data.get("full_name")
-        role = data.get("role")
-        if not username or not email or not password or not role:
-            return {
-                "error": "Username, email, password, and role are required"
-            }, 400
-        if role != student_role:
-            return {
-                "error": "Public registration is available only for students; teachers are created by an administrator"
-            }, 403
-        if not full_name:
-            return {"error": "Full name is required for students"}, 400
-        if len(str(password)) < 8:
-            return {"error": "Password must contain at least 8 characters"}, 400
-
-        try:
-            class_id = int(data.get("class_id"))
-        except (TypeError, ValueError):
-            return {"error": "Select a class"}, 400
-
-        cur = mysql.connection.cursor()
-        try:
-            cur.execute(
-                "SELECT id, grade FROM classes WHERE id = %s", (class_id,)
-            )
-            selected_class = cur.fetchone()
-            if not selected_class:
-                return {"error": "Selected class was not found"}, 404
-
-            cur.execute("SELECT id FROM users WHERE email = %s", (email,))
-            if cur.fetchone():
-                return {"error": "Email already registered"}, 409
-
-            cur.execute(
-                """INSERT INTO users (username, email, password, role)
-                   VALUES (%s, %s, %s, %s)""",
-                (username, email, generate_password_hash(password), role)
-            )
-            user_id = cur.lastrowid
-            cur.execute(
-                """INSERT INTO students (user_id, full_name, grade)
-                   VALUES (%s, %s, %s)""",
-                (user_id, str(full_name).strip(), selected_class["grade"])
-            )
-            student_id = cur.lastrowid
-            cur.execute(
-                """INSERT INTO student_class_enrollments (student_id, class_id)
-                   VALUES (%s, %s)""",
-                (student_id, class_id)
-            )
-            mysql.connection.commit()
-            return {
-                "message": "Registration successful",
-                "user": {
-                    "id": user_id,
-                    "username": username,
-                    "email": email,
-                    "role": role
-                }
-            }, 201
-        except Exception as error:
-            mysql.connection.rollback()
-            print("Registration error:", error)
-            return {"error": "Registration failed"}, 500
-        finally:
-            cur.close()
 
     @auth.post("/api/logout")
     @login_required

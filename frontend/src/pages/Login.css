@@ -8,7 +8,6 @@
   box-sizing: border-box;
   font-family: Arial, sans-serif;
 }
-
 .login-container {
   width: 100%;
   max-width: 430px;
@@ -217,35 +216,4 @@
   .login-brand h1 {
     font-size: 26px;
   }
-}
-
-.register-links {
-  margin-top: 24px;
-  text-align: center;
-}
-
-.register-links p {
-  margin-bottom: 12px;
-  color: #666;
-  font-size: 14px;
-}
-
-.register-buttons {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.register-buttons button {
-  border: none;
-  background: transparent;
-  color: #2563eb;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.register-buttons button:hover {
-  text-decoration: underline;
 }

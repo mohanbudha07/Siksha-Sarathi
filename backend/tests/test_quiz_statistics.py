@@ -268,31 +268,22 @@ class QuizStatisticsTests(unittest.TestCase):
         payload.update(overrides)
         return payload
 
-    def test_public_registration_is_student_only_and_enrolls_selected_class(self):
-        teacher = self.client.post('/api/register', json={
-            'username': 'Unapproved', 'email': 'unapproved@example.test',
-            'password': 'Password123', 'role': 'teacher'
-        })
-        self.assertEqual(teacher.status_code, 403)
-        self.assertIsNone(self.db.execute(
-            "SELECT id FROM users WHERE email='unapproved@example.test'"
-        ).fetchone())
-
-        classes = self.client.get('/api/public/classes')
-        self.assertEqual(classes.status_code, 200)
-        self.assertEqual(classes.json['classes'][0]['name'], 'Grade 10')
-        response = self.client.post('/api/register', json={
-            'username': 'New Student', 'full_name': 'New Student',
-            'email': 'new.student@example.test', 'password': 'Password123',
-            'role': 'student', 'class_id': 1
-        })
-        self.assertEqual(response.status_code, 201)
-        enrolled = self.db.execute(
-            '''SELECT s.grade, sce.class_id FROM students s
-               JOIN student_class_enrollments sce ON sce.student_id=s.id
-               WHERE s.user_id=?''', (response.json['user']['id'],)
-        ).fetchone()
-        self.assertEqual(tuple(enrolled), ('10', 1))
+    def test_public_account_registration_is_unavailable(self):
+        for role in ('student', 'teacher'):
+            with self.subTest(role=role):
+                response = self.client.post('/api/register', json={
+                    'username': f'Self Registered {role}',
+                    'full_name': f'Self Registered {role}',
+                    'email': f'{role}.self@example.test',
+                    'password': 'Password123',
+                    'role': role,
+                    'class_id': 1,
+                })
+                self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.client.get('/api/public/classes').status_code, 404)
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM users WHERE email LIKE "%self@example.test"'
+        ).fetchone()[0], 0)
 
     def test_admin_manages_classes_enrollment_and_teacher_assignments(self):
         self.login('admin')

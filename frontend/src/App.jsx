@@ -4,7 +4,6 @@ import api from './api'
 
 import Home from './pages/Home'
 import Login from './pages/Login'
-import StudentRegister from './pages/StudentRegister'
 
 import StudentLayout from './components/StudentLayout'
 import TeacherLayout from './components/TeacherLayout'
@@ -38,7 +37,7 @@ function useAuthCheck() {
 
   useEffect(() => {
     // Only check auth if we are not on public pages
-    const publicPaths = ['/', '/login', '/student/register']
+    const publicPaths = ['/', '/login']
     if (publicPaths.includes(window.location.pathname)) {
       setLoading(false)
       return
@@ -119,8 +118,6 @@ function App() {
         {/* Public routes */}
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/student/register" element={<StudentRegister />} />
-
         {/* Student routes */}
         <Route path="/student/dashboard" element={
           <StudentPage><StudentDashboard /></StudentPage>
