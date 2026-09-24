@@ -4,6 +4,7 @@ import api from './api'
 
 import Home from './pages/Home'
 import Login from './pages/Login'
+import ChangePassword from './pages/ChangePassword'
 
 import StudentLayout from './components/StudentLayout'
 import TeacherLayout from './components/TeacherLayout'
@@ -62,6 +63,7 @@ function useAuthCheck() {
 // ---------- Protected Route ----------
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuthCheck()
+  const location = window.location
 
   if (loading) {
     return (
@@ -73,6 +75,10 @@ function ProtectedRoute({ children, allowedRoles }) {
 
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (user.must_change_password && location.pathname !== '/change-password') {
+    return <Navigate to="/change-password" replace />
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
@@ -118,6 +124,9 @@ function App() {
         {/* Public routes */}
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/change-password" element={
+          <ProtectedRoute><ChangePassword /></ProtectedRoute>
+        } />
         {/* Student routes */}
         <Route path="/student/dashboard" element={
           <StudentPage><StudentDashboard /></StudentPage>

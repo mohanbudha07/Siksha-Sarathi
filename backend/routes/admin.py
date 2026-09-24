@@ -70,8 +70,9 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             if cur.fetchone():
                 return {"error": "Email already registered"}, 409
             cur.execute(
-                """INSERT INTO users (username, email, password, role)
-                   VALUES (%s, %s, %s, 'admin')""",
+                     """INSERT INTO users
+                         (username, email, password, role, must_change_password)
+                         VALUES (%s, %s, %s, 'admin', TRUE)""",
                 (username, email, generate_password_hash(password))
             )
             admin_id = cur.lastrowid
@@ -116,8 +117,9 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             if cur.fetchone():
                 return {"error": "Email already registered"}, 409
             cur.execute(
-                """INSERT INTO users (username, email, password, role)
-                   VALUES (%s, %s, %s, 'student')""",
+                     """INSERT INTO users
+                         (username, email, password, role, must_change_password)
+                         VALUES (%s, %s, %s, 'student', TRUE)""",
                 (full_name, email, generate_password_hash(password))
             )
             user_id = cur.lastrowid
@@ -262,8 +264,9 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             if cur.fetchone():
                 return {"error": "Email already registered"}, 409
             cur.execute(
-                """INSERT INTO users (username, email, password, role)
-                   VALUES (%s, %s, %s, 'teacher')""",
+                     """INSERT INTO users
+                         (username, email, password, role, must_change_password)
+                         VALUES (%s, %s, %s, 'teacher', TRUE)""",
                 (username, email, generate_password_hash(password))
             )
             teacher_id = cur.lastrowid

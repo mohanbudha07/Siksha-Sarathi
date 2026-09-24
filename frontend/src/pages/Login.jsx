@@ -25,7 +25,9 @@ function Login() {
 
 const role = response.data.user.role
 
-if (role === 'teacher') {
+if (response.data.user.must_change_password) {
+  navigate('/change-password')
+} else if (role === 'teacher') {
   navigate('/teacher/dashboard')
 } else if (role === 'student') {
   navigate('/student/dashboard')

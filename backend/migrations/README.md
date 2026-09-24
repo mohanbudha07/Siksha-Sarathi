@@ -153,3 +153,11 @@ marks, and attendance with that baseline. The result describes observed change
 and must not be presented as proof that the intervention caused the change.
 
     sudo mysql siksha_sarathi < migrations/011_intervention_effectiveness.sql
+
+## First-login password migration
+
+Migration 012 adds `users.must_change_password`. Existing accounts remain
+usable with the default `FALSE`; administrator-created accounts explicitly set
+it to `TRUE` and must choose a new password after signing in.
+
+    sudo mysql siksha_sarathi < migrations/012_first_login_password_change.sql
