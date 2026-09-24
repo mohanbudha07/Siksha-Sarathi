@@ -159,6 +159,11 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             )
             classes = cur.fetchall()
             cur.execute(
+                "SELECT id, name, code, created_at FROM subjects "
+                "ORDER BY name"
+            )
+            subjects = cur.fetchall()
+            cur.execute(
                 """SELECT id, username, email FROM users
                    WHERE role = 'teacher' ORDER BY username"""
             )
@@ -177,16 +182,18 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             cur.execute(
                 """SELECT tcs.id, tcs.teacher_user_id,
                           u.username AS teacher_name,
-                          tcs.class_id, c.name AS class_name, tcs.subject,
+                          tcs.class_id, c.name AS class_name,
+                          tcs.subject_id, sub.name AS subject,
                           CASE WHEN cta.teacher_user_id IS NULL THEN 0 ELSE 1 END
                               AS is_class_teacher
                    FROM teacher_class_subjects tcs
                    INNER JOIN users u ON u.id = tcs.teacher_user_id
                    INNER JOIN classes c ON c.id = tcs.class_id
+                   INNER JOIN subjects sub ON sub.id = tcs.subject_id
                    LEFT JOIN class_teacher_assignments cta
                      ON cta.class_id = tcs.class_id
                     AND cta.teacher_user_id = tcs.teacher_user_id
-                   ORDER BY c.name, tcs.subject, u.username"""
+                   ORDER BY c.name, sub.name, u.username"""
             )
             assignments = cur.fetchall()
             for assignment in assignments:
@@ -195,10 +202,53 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
                 )
             return {
                 "classes": classes,
+                "subjects": subjects,
                 "teachers": teachers,
                 "students": students,
                 "assignments": assignments
             }, 200
+        finally:
+            cur.close()
+
+    @admin.post("/api/admin/subjects")
+    @login_required
+    @role_required(admin_role)
+    def admin_create_subject_api():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return {"error": "Subject data is required"}, 400
+        name = str(data.get("name") or "").strip()
+        code = str(data.get("code") or "").strip().upper()
+        if not name:
+            return {"error": "Subject name is required"}, 400
+        if len(name) > 100 or len(code) > 30:
+            return {"error": "Subject information is too long"}, 400
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                "SELECT id FROM subjects WHERE LOWER(name) = LOWER(%s)",
+                (name,)
+            )
+            if cur.fetchone():
+                return {"error": "Subject name already exists"}, 409
+            if code:
+                cur.execute("SELECT id FROM subjects WHERE code = %s", (code,))
+                if cur.fetchone():
+                    return {"error": "Subject code already exists"}, 409
+            cur.execute(
+                "INSERT INTO subjects (name, code) VALUES (%s, %s)",
+                (name, code or None)
+            )
+            subject_id = cur.lastrowid
+            mysql.connection.commit()
+            return {
+                "message": "Subject created",
+                "subject_id": subject_id
+            }, 201
+        except Exception as error:
+            mysql.connection.rollback()
+            print("Admin subject creation error:", error)
+            return {"error": "Unable to create subject"}, 500
         finally:
             cur.close()
 
@@ -334,12 +384,11 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             class_id = int(data.get("class_id"))
         except (AttributeError, TypeError, ValueError):
             return {"error": "Teacher and class are required"}, 400
-        subject = str(data.get("subject") or "").strip()
+        try:
+            subject_id = int(data.get("subject_id"))
+        except (AttributeError, TypeError, ValueError):
+            return {"error": "Subject is required"}, 400
         is_class_teacher = data.get("is_class_teacher", False)
-        if not subject or len(subject) > 100:
-            return {
-                "error": "Subject is required and must be at most 100 characters"
-            }, 400
         if not isinstance(is_class_teacher, bool):
             return {
                 "error": "Class teacher status must be true or false"
@@ -355,11 +404,14 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             cur.execute("SELECT id FROM classes WHERE id = %s", (class_id,))
             if not cur.fetchone():
                 return {"error": "Class not found"}, 404
+            cur.execute("SELECT id FROM subjects WHERE id = %s", (subject_id,))
+            if not cur.fetchone():
+                return {"error": "Subject not found"}, 404
             cur.execute(
                 """SELECT id FROM teacher_class_subjects
                    WHERE teacher_user_id = %s AND class_id = %s
-                     AND LOWER(subject) = LOWER(%s)""",
-                (teacher_id, class_id, subject)
+                     AND subject_id = %s""",
+                (teacher_id, class_id, subject_id)
             )
             if cur.fetchone():
                 return {
@@ -367,8 +419,9 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
                 }, 409
             cur.execute(
                 """INSERT INTO teacher_class_subjects
-                   (teacher_user_id, class_id, subject) VALUES (%s, %s, %s)""",
-                (teacher_id, class_id, subject)
+                         (teacher_user_id, class_id, subject_id)
+                         VALUES (%s, %s, %s)""",
+                     (teacher_id, class_id, subject_id)
             )
             assignment_id = cur.lastrowid
             if is_class_teacher:
