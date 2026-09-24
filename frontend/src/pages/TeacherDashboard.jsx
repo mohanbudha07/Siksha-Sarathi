@@ -36,6 +36,7 @@ function TeacherDashboard() {
   const teacher = data?.teacher || {}
   const statistics = data?.statistics || {}
   const recentNotes = data?.recent_notes || []
+  const assignments = data?.assignments || []
   const firstName = String(teacher.name || 'Teacher').trim().split(/\s+/)[0]
 
   return (
@@ -71,14 +72,37 @@ function TeacherDashboard() {
         </section>
 
         <section className="teacher-overview-section">
-          <div className="teacher-overview-section-title"><div><h2>Recent notes</h2><p>Your latest learning materials.</p></div><button onClick={() => navigate('/teacher/notes')}>View all</button></div>
-          {recentNotes.length === 0 ? <div className="teacher-overview-empty">No notes uploaded yet.</div> : (
-            <div className="teacher-recent-list">{recentNotes.slice(0, 4).map((note) => (
-              <article key={note.id}><span>{note.subject?.charAt(0) || 'N'}</span><div><strong>{note.title}</strong><small>{note.subject}{note.chapter ? ` · Chapter ${note.chapter}` : ''}</small></div></article>
-            ))}</div>
+          <div className="teacher-overview-section-title"><div><h2>My Teaching Assignments</h2><p>Classes and subjects currently assigned to you.</p></div></div>
+          {assignments.length === 0 ? (
+            <div className="teacher-overview-empty">No class or subject assignments yet.</div>
+          ) : (
+            <div className="teacher-assignment-list">
+              {assignments.map((assignment) => (
+                <div key={`${assignment.class_id}-${assignment.subject_id ?? 'class-teacher'}`} className="teacher-assignment-row">
+                  <div className="teacher-assignment-main">
+                    <strong>{assignment.class_name}</strong>
+                    <small>{assignment.grade} · {assignment.section}</small>
+                  </div>
+                  <div className="teacher-assignment-meta">
+                    <span>{assignment.subject || 'Class teacher'}</span>
+                    <small>{assignment.student_count ?? 0} students</small>
+                  </div>
+                  {assignment.is_class_teacher && <span className="teacher-assignment-badge">Class Teacher</span>}
+                </div>
+              ))}
+            </div>
           )}
         </section>
       </div>
+
+      <section className="teacher-overview-section">
+        <div className="teacher-overview-section-title"><div><h2>Recent notes</h2><p>Your latest learning materials.</p></div><button onClick={() => navigate('/teacher/notes')}>View all</button></div>
+        {recentNotes.length === 0 ? <div className="teacher-overview-empty">No notes uploaded yet.</div> : (
+          <div className="teacher-recent-list">{recentNotes.slice(0, 4).map((note) => (
+            <article key={note.id}><span>{note.subject?.charAt(0) || 'N'}</span><div><strong>{note.title}</strong><small>{note.subject}{note.chapter ? ` · Chapter ${note.chapter}` : ''}</small></div></article>
+          ))}</div>
+        )}
+      </section>
     </div>
   )
 }
