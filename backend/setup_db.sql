@@ -32,6 +32,15 @@ CREATE TABLE IF NOT EXISTS classes (
     UNIQUE KEY uq_class_grade_section (grade, section)
 );
 
+CREATE TABLE IF NOT EXISTS subjects (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(30) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_subject_name (name),
+    UNIQUE KEY uq_subject_code (code)
+);
+
 CREATE TABLE IF NOT EXISTS student_class_enrollments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
@@ -46,11 +55,12 @@ CREATE TABLE IF NOT EXISTS teacher_class_subjects (
     id INT AUTO_INCREMENT PRIMARY KEY,
     teacher_user_id INT NOT NULL,
     class_id INT NOT NULL,
-    subject VARCHAR(100) NOT NULL,
+    subject_id INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_teacher_class_subject (teacher_user_id, class_id, subject),
+    UNIQUE KEY uq_teacher_class_subject_id (teacher_user_id, class_id, subject_id),
     FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE,
+    FOREIGN KEY (subject_id) REFERENCES subjects(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS notes (

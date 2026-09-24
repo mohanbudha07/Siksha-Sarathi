@@ -77,10 +77,12 @@ class QuizStatisticsTests(unittest.TestCase):
                 full_name TEXT, grade TEXT);
             CREATE TABLE classes(id INTEGER PRIMARY KEY, name TEXT, grade TEXT,
                 section TEXT, created_at TEXT);
+            CREATE TABLE subjects(id INTEGER PRIMARY KEY, name TEXT UNIQUE,
+                code TEXT UNIQUE, created_at TEXT);
             CREATE TABLE student_class_enrollments(id INTEGER PRIMARY KEY,
                 student_id INTEGER, class_id INTEGER, created_at TEXT);
             CREATE TABLE teacher_class_subjects(id INTEGER PRIMARY KEY,
-                teacher_user_id INTEGER, class_id INTEGER, subject TEXT,
+                teacher_user_id INTEGER, class_id INTEGER, subject_id INTEGER,
                 created_at TEXT);
             CREATE TABLE quizzes(id INTEGER PRIMARY KEY, title TEXT, subject TEXT,
                 questions TEXT, created_by INTEGER, is_published INTEGER,
@@ -151,9 +153,10 @@ class QuizStatisticsTests(unittest.TestCase):
             INSERT INTO students VALUES(2,5,'Student Two','9');
             INSERT INTO classes VALUES(1,'Grade 10','10','Default','2026-01-01');
             INSERT INTO classes VALUES(2,'Grade 9','9','Default','2026-01-01');
+            INSERT INTO subjects VALUES(1,'Science','SCI','2026-01-01');
             INSERT INTO student_class_enrollments VALUES(1,1,1,'2026-01-01');
             INSERT INTO student_class_enrollments VALUES(2,2,2,'2026-01-01');
-            INSERT INTO teacher_class_subjects VALUES(1,2,1,'Science','2026-01-01');
+            INSERT INTO teacher_class_subjects VALUES(1,2,1,1,'2026-01-01');
             INSERT INTO class_teacher_assignments VALUES(1,2,1,'2026-01-01');
         ''')
         self.questions = [
@@ -304,7 +307,7 @@ class QuizStatisticsTests(unittest.TestCase):
         }).status_code, 200)
         assignment = self.client.post('/api/admin/teacher-assignments', json={
             'teacher_user_id': teacher_id, 'class_id': class_id,
-            'subject': 'Science', 'is_class_teacher': True
+            'subject_id': 1, 'is_class_teacher': True
         })
         self.assertEqual(assignment.status_code, 201)
 
@@ -312,12 +315,72 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(setup.status_code, 200)
         self.assertTrue(any(item['email'] == 'science@example.test'
                             for item in setup.json['teachers']))
+        self.assertEqual(set((item['name'], item['code']) for item in setup.json['subjects']), {('Science', 'SCI')})
         self.assertTrue(any(item['student_id'] == 2 and item['class_id'] == class_id
                             for item in setup.json['students']))
         self.assertTrue(setup.json['assignments'][-1]['is_class_teacher'])
         self.assertEqual(self.client.delete(
             f"/api/admin/teacher-assignments/{assignment.json['assignment_id']}"
         ).status_code, 200)
+
+    def test_admin_subject_catalog_and_structured_assignment_validation(self):
+        self.login('admin')
+        created = self.client.post('/api/admin/subjects', json={
+            'name': '  Mathematics  ', 'code': 'MATH'
+        })
+        self.assertEqual(created.status_code, 201)
+        subject_id = created.json['subject_id']
+        self.assertEqual(self.client.post('/api/admin/subjects', json={
+            'name': 'x' * 101
+        }).status_code, 400)
+        self.assertEqual(self.client.post('/api/admin/subjects', json={
+            'name': 'Code Length', 'code': 'x' * 31
+        }).status_code, 400)
+        blank_code = self.client.post('/api/admin/subjects', json={
+            'name': 'No Code', 'code': '   '
+        })
+        self.assertEqual(blank_code.status_code, 201)
+        self.assertIsNone(self.db.execute(
+            'SELECT code FROM subjects WHERE id=?',
+            (blank_code.json['subject_id'],)
+        ).fetchone()['code'])
+        self.assertEqual(self.client.post('/api/admin/subjects', json={
+            'name': 'Mathematics', 'code': 'MATH2'
+        }).status_code, 409)
+        self.assertEqual(self.client.post('/api/admin/subjects', json={
+            'name': 'Algebra', 'code': 'MATH'
+        }).status_code, 409)
+
+        for role in ('student', 'teacher'):
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(self.client.post('/api/admin/subjects', json={
+                    'name': 'Unauthorized'
+                }).status_code, 403)
+        self.login('admin')
+        teacher_id = self.client.post('/api/admin/teachers', json={
+            'username': 'Math Teacher', 'email': 'math@example.test',
+            'password': 'Password123'
+        }).json['teacher_id']
+        invalid = self.client.post('/api/admin/teacher-assignments', json={
+            'teacher_user_id': teacher_id, 'class_id': 1,
+            'subject_id': 999, 'is_class_teacher': False
+        })
+        self.assertEqual(invalid.status_code, 404)
+        assignment = self.client.post('/api/admin/teacher-assignments', json={
+            'teacher_user_id': teacher_id, 'class_id': 1,
+            'subject_id': subject_id, 'is_class_teacher': False
+        })
+        self.assertEqual(assignment.status_code, 201)
+        self.assertEqual(self.client.post('/api/admin/teacher-assignments', json={
+            'teacher_user_id': teacher_id, 'class_id': 1,
+            'subject_id': subject_id, 'is_class_teacher': False
+        }).status_code, 409)
+        setup = self.client.get('/api/admin/school-setup').json
+        matching = [item for item in setup['assignments']
+                    if item['id'] == assignment.json['assignment_id']]
+        self.assertEqual(matching[0]['subject_id'], subject_id)
+        self.assertEqual(matching[0]['subject'], 'Mathematics')
 
     def test_school_setup_requires_admin_role(self):
         for role in ('student', 'teacher'):
@@ -617,7 +680,7 @@ class QuizStatisticsTests(unittest.TestCase):
         self.db.execute("INSERT INTO predictions(student_id,prediction) VALUES(2,'Needs Improvement')")
         self.db.execute("INSERT INTO classes VALUES(3,'Grade 10 B','10','B','2026-01-01')")
         self.db.execute("INSERT INTO student_class_enrollments VALUES(3,1,3,'2026-01-01')")
-        self.db.execute("INSERT INTO teacher_class_subjects VALUES(2,2,3,'Science','2026-01-01')")
+        self.db.execute("INSERT INTO teacher_class_subjects VALUES(2,2,3,1,'2026-01-01')")
 
         self.login('teacher')
         result = self.client.get('/api/teacher/dashboard')

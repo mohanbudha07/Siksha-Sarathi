@@ -61,9 +61,10 @@ def validate_paper_assessment_payload(data):
 def teacher_has_class_subject(cur, teacher_id, class_id, subject):
     cur.execute(
         """
-        SELECT id FROM teacher_class_subjects
-        WHERE teacher_user_id = %s AND class_id = %s
-          AND LOWER(subject) = LOWER(%s)
+        SELECT teacher_class_subjects.id FROM teacher_class_subjects
+                INNER JOIN subjects sub ON sub.id = teacher_class_subjects.subject_id
+                WHERE teacher_user_id = %s AND class_id = %s
+                    AND LOWER(sub.name) = LOWER(%s)
         """,
         (teacher_id, class_id, subject)
     )

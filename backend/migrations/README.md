@@ -84,6 +84,24 @@ class, and subject explicitly. Teacher learning analytics only includes a
 student when that student is enrolled in the assigned class and the quiz
 subject matches the teacher assignment.
 
+## Subject catalog migration
+
+Migration 013 creates the school subject catalog and backfills every distinct
+legacy `teacher_class_subjects.subject` value into `subjects`. Assignments are
+then linked through `subject_id`, the structured unique constraint and foreign
+key are added, and the old free-text assignment column is removed. Run this
+only after backing up the database; it preserves existing assignments but
+normalizes their subject source. The migration validates legacy assignments
+first and refuses NULL/blank subjects or normalized duplicate assignments. It
+does not silently discard assignment rows. The final structured index is named
+`uq_teacher_class_subject_id`; rerunning a completed migration leaves it in
+place and skips the already-NOT-NULL column alteration. The migration sequence
+runs inside one stored procedure so a validation or backfill `SIGNAL` prevents
+later legacy index/column cleanup even when a SQL client continues after an
+error.
+
+    sudo mysql siksha_sarathi < migrations/013_subject_catalog.sql
+
 ## Hybrid computer-lab quiz migration
 
 Migration 005 adds class-scoped and time-limited computer-lab quiz sessions.

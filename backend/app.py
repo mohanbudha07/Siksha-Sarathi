@@ -549,10 +549,11 @@ def teacher_dashboard_api():
             INNER JOIN quizzes q ON q.id = qr.quiz_id
             WHERE EXISTS (
                 SELECT 1 FROM teacher_class_subjects tcs
+                INNER JOIN subjects sub ON sub.id = tcs.subject_id
                 INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
                 WHERE tcs.teacher_user_id = %s
                   AND sce.student_id = qr.student_id
-                  AND LOWER(tcs.subject) = LOWER(q.subject)
+                  AND LOWER(sub.name) = LOWER(q.subject)
             )
             """,
             (session["user_id"],)
@@ -584,10 +585,11 @@ def teacher_dashboard_api():
             LEFT JOIN quiz_answer_results qar ON qar.quiz_result_id = qr.id
             WHERE EXISTS (
                 SELECT 1 FROM teacher_class_subjects tcs
+                INNER JOIN subjects sub ON sub.id = tcs.subject_id
                 INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
                 WHERE tcs.teacher_user_id = %s
                   AND sce.student_id = qr.student_id
-                  AND LOWER(tcs.subject) = LOWER(q.subject)
+                  AND LOWER(sub.name) = LOWER(q.subject)
             )
             GROUP BY qr.student_id, LOWER(q.subject)
             """,
@@ -622,10 +624,12 @@ def teacher_dashboard_api():
                 AND EXISTS (
                     SELECT 1 FROM quizzes q
                     INNER JOIN teacher_class_subjects tcs
-                        ON LOWER(q.subject) = LOWER(tcs.subject)
+                        ON TRUE
+                    INNER JOIN subjects sub ON sub.id = tcs.subject_id
                     INNER JOIN student_class_enrollments sce
                         ON sce.class_id = tcs.class_id
                     WHERE q.id = qr.quiz_id
+                                            AND LOWER(q.subject) = LOWER(sub.name)
                       AND sce.student_id = s.id
                       AND tcs.teacher_user_id = %s
                 )
@@ -882,21 +886,22 @@ def build_teacher_actions(topics, metrics, paper, attendance, subject):
 def fetch_teacher_topic_priorities(cur, teacher_id):
     cur.execute(
         """
-        SELECT tcs.class_id, tcs.subject, qar.topic, s.id AS student_id,
+        SELECT tcs.class_id, sub.name AS subject, qar.topic, s.id AS student_id,
                s.full_name, COUNT(*) AS total_questions,
                COUNT(DISTINCT qar.question_text) AS distinct_questions,
                COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
                COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
         FROM teacher_class_subjects tcs
+        INNER JOIN subjects sub ON sub.id = tcs.subject_id
         INNER JOIN student_class_enrollments sce
             ON sce.class_id = tcs.class_id
         INNER JOIN students s ON s.id = sce.student_id
         INNER JOIN quiz_results qr ON qr.student_id = s.id
         INNER JOIN quizzes q ON q.id = qr.quiz_id
-            AND LOWER(q.subject) = LOWER(tcs.subject)
+            AND LOWER(q.subject) = LOWER(sub.name)
         INNER JOIN quiz_answer_results qar ON qar.quiz_result_id = qr.id
         WHERE tcs.teacher_user_id = %s
-        GROUP BY tcs.class_id, tcs.subject, qar.topic, s.id, s.full_name
+        GROUP BY tcs.class_id, sub.name, qar.topic, s.id, s.full_name
         """,
         (teacher_id,)
     )
@@ -951,11 +956,12 @@ def teacher_learning_analytics_api():
                 c.name AS class_name,
                 c.grade,
                 c.section,
-                tcs.subject
+                sub.name AS subject
             FROM teacher_class_subjects tcs
             INNER JOIN classes c ON c.id = tcs.class_id
+            INNER JOIN subjects sub ON sub.id = tcs.subject_id
             WHERE tcs.teacher_user_id = %s
-            ORDER BY c.grade, c.section, tcs.subject
+            ORDER BY c.grade, c.section, sub.name
             """,
             (session["user_id"],)
         )
@@ -970,13 +976,14 @@ def teacher_learning_analytics_api():
                 c.id AS class_id,
                 c.name AS class_name,
                 c.section,
-                tcs.subject
+                sub.name AS subject
             FROM teacher_class_subjects tcs
             INNER JOIN classes c ON c.id = tcs.class_id
+            INNER JOIN subjects sub ON sub.id = tcs.subject_id
             INNER JOIN student_class_enrollments sce ON sce.class_id = c.id
             INNER JOIN students s ON s.id = sce.student_id
             WHERE tcs.teacher_user_id = %s
-            ORDER BY s.full_name, tcs.subject
+            ORDER BY s.full_name, sub.name
             """,
             (session["user_id"],)
         )
@@ -1051,14 +1058,15 @@ def teacher_student_learning_profile_api(student_id):
                 c.id AS class_id,
                 c.name AS class_name,
                 c.section,
-                tcs.subject
+                sub.name AS subject
             FROM teacher_class_subjects tcs
             INNER JOIN classes c ON c.id = tcs.class_id
+            INNER JOIN subjects sub ON sub.id = tcs.subject_id
             INNER JOIN student_class_enrollments sce ON sce.class_id = c.id
             INNER JOIN students s ON s.id = sce.student_id
             WHERE tcs.teacher_user_id = %s
               AND s.id = %s
-              AND LOWER(tcs.subject) = LOWER(%s)
+              AND LOWER(sub.name) = LOWER(%s)
             LIMIT 1
             """,
             (session["user_id"], student_id, subject)
@@ -1282,11 +1290,12 @@ def fetch_teacher_support_class_id(cur, teacher_id, student_id, subject):
         """
         SELECT tcs.class_id
         FROM teacher_class_subjects tcs
+        INNER JOIN subjects sub ON sub.id = tcs.subject_id
         INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
         INNER JOIN students s ON s.id = sce.student_id
         WHERE tcs.teacher_user_id = %s
           AND s.id = %s
-          AND LOWER(tcs.subject) = LOWER(%s)
+          AND LOWER(sub.name) = LOWER(%s)
         LIMIT 1
         """,
         (teacher_id, student_id, subject)

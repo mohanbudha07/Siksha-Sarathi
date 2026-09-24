@@ -106,10 +106,11 @@ def create_lab_quiz_blueprint(
                 INNER JOIN teacher_class_subjects tcs
                     ON tcs.teacher_user_id = %s
                    AND tcs.class_id = %s
-                   AND LOWER(tcs.subject) = LOWER(q.subject)
+                                INNER JOIN subjects sub ON sub.id = tcs.subject_id
                 WHERE q.id = %s
                   AND q.created_by = %s
                   AND q.is_published = TRUE
+                                    AND LOWER(sub.name) = LOWER(q.subject)
                 """,
                 (session["user_id"], class_id, quiz_id, session["user_id"])
             )

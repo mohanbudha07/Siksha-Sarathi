@@ -39,9 +39,10 @@ def main():
                 """SELECT DISTINCT c.id, c.name, c.grade
                    FROM users u
                    JOIN teacher_class_subjects tcs ON tcs.teacher_user_id = u.id
+                                     JOIN subjects sub ON sub.id = tcs.subject_id
                    JOIN classes c ON c.id = tcs.class_id
                    WHERE u.email = %s AND u.role = 'teacher'
-                     AND LOWER(tcs.subject) = LOWER(%s) AND c.grade = '10'""",
+                                         AND LOWER(sub.name) = LOWER(%s) AND c.grade = '10'""",
                 (TEACHER_EMAIL, SUBJECT),
             )
             assigned_classes = cursor.fetchall()
