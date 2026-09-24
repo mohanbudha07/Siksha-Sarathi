@@ -71,7 +71,8 @@ class QuizStatisticsTests(unittest.TestCase):
         self.db.row_factory = sqlite3.Row
         self.db.executescript('''
             CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT, email TEXT,
-                password TEXT, role TEXT, created_at TEXT);
+                password TEXT, role TEXT, must_change_password INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT);
             CREATE TABLE students(id INTEGER PRIMARY KEY, user_id INTEGER,
                 full_name TEXT, grade TEXT);
             CREATE TABLE classes(id INTEGER PRIMARY KEY, name TEXT, grade TEXT,
@@ -141,11 +142,11 @@ class QuizStatisticsTests(unittest.TestCase):
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE notes(id INTEGER PRIMARY KEY, title TEXT, subject TEXT,
                 chapter TEXT, content TEXT, created_at TEXT, uploaded_by INTEGER);
-            INSERT INTO users VALUES(1,'Student','s@example.test','hash','student','2026-01-01');
-            INSERT INTO users VALUES(2,'Teacher','t@example.test','hash','teacher','2026-01-01');
-            INSERT INTO users VALUES(3,'Admin','a@example.test','hash','admin','2026-01-01');
-            INSERT INTO users VALUES(4,'Other Teacher','other@example.test','hash','teacher','2026-01-01');
-            INSERT INTO users VALUES(5,'Student Two','s2@example.test','hash','student','2026-01-01');
+            INSERT INTO users VALUES(1,'Student','s@example.test','hash','student',0,'2026-01-01');
+            INSERT INTO users VALUES(2,'Teacher','t@example.test','hash','teacher',0,'2026-01-01');
+            INSERT INTO users VALUES(3,'Admin','a@example.test','hash','admin',0,'2026-01-01');
+            INSERT INTO users VALUES(4,'Other Teacher','other@example.test','hash','teacher',0,'2026-01-01');
+            INSERT INTO users VALUES(5,'Student Two','s2@example.test','hash','student',0,'2026-01-01');
             INSERT INTO students VALUES(1,1,'Student One','10');
             INSERT INTO students VALUES(2,5,'Student Two','9');
             INSERT INTO classes VALUES(1,'Grade 10','10','Default','2026-01-01');

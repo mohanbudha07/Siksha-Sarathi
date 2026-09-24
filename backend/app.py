@@ -133,9 +133,35 @@ def role_required(role):
                     "error": "Authentication required"
                 }, 401
 
-            if session.get("role") != role:
+            cur = None
+            try:
+                cur = mysql.connection.cursor()
+                cur.execute(
+                    """SELECT role, must_change_password
+                       FROM users WHERE id = %s""",
+                    (session["user_id"],)
+                )
+                user = cur.fetchone()
+            except Exception as error:
+                print("Account state lookup error:", error)
+                return {"error": "Unable to verify account state"}, 500
+            finally:
+                if cur is not None:
+                    cur.close()
+
+            if not user:
+                session.clear()
+                return {"error": "Authentication required"}, 401
+
+            session["role"] = user["role"]
+            if user["role"] != role:
                 return {
                     "error": "Access denied"
+                }, 403
+
+            if bool(user["must_change_password"]):
+                return {
+                    "error": "Password change required before using this feature"
                 }, 403
 
             return f(*args, **kwargs)
