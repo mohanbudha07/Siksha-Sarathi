@@ -16,7 +16,8 @@ def teacher_has_class_assignment(cur, teacher_id, class_id):
     cur.execute(
         """
         SELECT id FROM class_teacher_assignments
-        WHERE teacher_user_id = %s AND class_id = %s
+                WHERE teacher_user_id = %s AND class_id = %s
+                    AND ended_at IS NULL
         """,
         (teacher_id, class_id)
     )
@@ -91,7 +92,8 @@ def create_attendance_blueprint(
                            c.grade, c.section
                     FROM class_teacher_assignments cta
                     INNER JOIN classes c ON c.id = cta.class_id
-                    WHERE cta.teacher_user_id = %s
+                                        WHERE cta.teacher_user_id = %s
+                                            AND cta.ended_at IS NULL
                     ORDER BY c.grade, c.section, c.name
                     """,
                     (session["user_id"],)
@@ -186,6 +188,10 @@ def create_attendance_blueprint(
             )
             if not attendance:
                 return {"error": "Monthly attendance summary not found"}, 404
+            if request.method in ("PUT", "DELETE") and not teacher_has_class_assignment(
+                cur, session["user_id"], attendance["class_id"]
+            ):
+                return {"error": "Active class teacher assignment not found"}, 403
             if request.method == "DELETE":
                 cur.execute(
                     "DELETE FROM monthly_attendance_summaries WHERE id = %s AND teacher_user_id = %s",
@@ -268,6 +274,10 @@ def create_attendance_blueprint(
             )
             if not attendance:
                 return {"error": "Monthly attendance summary not found"}, 404
+            if not teacher_has_class_assignment(
+                cur, session["user_id"], attendance["class_id"]
+            ):
+                return {"error": "Active class teacher assignment not found"}, 403
             cur.execute(
                 "SELECT student_id FROM student_class_enrollments WHERE class_id = %s",
                 (attendance["class_id"],)

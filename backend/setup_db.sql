@@ -172,8 +172,18 @@ CREATE TABLE IF NOT EXISTS class_teacher_assignments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     teacher_user_id INT NOT NULL,
     class_id INT NOT NULL,
+    academic_year VARCHAR(20) NULL,
+    started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ended_at DATETIME NULL,
+    active_class_id INT GENERATED ALWAYS AS
+        (CASE WHEN ended_at IS NULL THEN class_id ELSE NULL END) VIRTUAL,
+    active_teacher_user_id INT GENERATED ALWAYS AS
+        (CASE WHEN ended_at IS NULL THEN teacher_user_id ELSE NULL END) VIRTUAL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_class_teacher_class (class_id),
+    INDEX idx_class_teacher_class_status (class_id, ended_at),
+    INDEX idx_teacher_class_teacher_current (teacher_user_id, ended_at),
+    UNIQUE KEY uq_class_teacher_active_class (active_class_id),
+    UNIQUE KEY uq_class_teacher_active_teacher (active_teacher_user_id),
     FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
 );

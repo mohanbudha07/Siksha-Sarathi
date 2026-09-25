@@ -179,3 +179,27 @@ usable with the default `FALSE`; administrator-created accounts explicitly set
 it to `TRUE` and must choose a new password after signing in.
 
     sudo mysql siksha_sarathi < migrations/012_first_login_password_change.sql
+
+## Class-teacher history migration
+
+Migration 014 separates class-teacher responsibility from subject assignments.
+It adds nullable `academic_year`, `started_at`, and `ended_at` to
+`class_teacher_assignments`, backfills legacy `started_at` values from
+`created_at`, and removes the old one-row-per-class unique index. Existing
+rows remain intact; their academic year is left NULL because it cannot be
+reliably inferred. New responsibility changes close the active row and insert
+a new row, so only the current assignment has a NULL `ended_at`. MySQL also
+enforces one active class per teacher and one active teacher per class through
+generated active-key columns and unique indexes; historical rows produce NULL
+keys and remain unrestricted. The migration checks for active conflicts and
+aborts with a useful error instead of deleting or changing conflicting rows.
+Stored timestamps are left unchanged; admin and teacher APIs convert
+class-teacher datetimes to readable `Asia/Kathmandu` (NPT, UTC+05:45) values
+at the response boundary without rewriting historical records.
+
+Run it after migration 013:
+
+    sudo mysql siksha_sarathi < migrations/014_class_teacher_history.sql
+
+The migration uses `INFORMATION_SCHEMA` guards and may be rerun after a
+successful run. It does not delete class-teacher or attendance history.
