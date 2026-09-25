@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+FEATURE_CONTRACT_VERSION = "1"
+
 METADATA_COLUMNS = [
     "student_id",
     "subject",
