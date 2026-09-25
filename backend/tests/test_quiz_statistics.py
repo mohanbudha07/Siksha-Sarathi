@@ -111,8 +111,9 @@ class QuizStatisticsTests(unittest.TestCase):
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE class_teacher_assignments(id INTEGER PRIMARY KEY,
-                teacher_user_id INTEGER, class_id INTEGER UNIQUE,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+                teacher_user_id INTEGER, class_id INTEGER,
+                academic_year TEXT, started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE monthly_attendance_summaries(id INTEGER PRIMARY KEY,
                 teacher_user_id INTEGER, class_id INTEGER, attendance_month TEXT,
                 total_school_days INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -157,7 +158,9 @@ class QuizStatisticsTests(unittest.TestCase):
             INSERT INTO student_class_enrollments VALUES(1,1,1,'2026-01-01');
             INSERT INTO student_class_enrollments VALUES(2,2,2,'2026-01-01');
             INSERT INTO teacher_class_subjects VALUES(1,2,1,1,'2026-01-01');
-            INSERT INTO class_teacher_assignments VALUES(1,2,1,'2026-01-01');
+            INSERT INTO class_teacher_assignments
+                (id, teacher_user_id, class_id, academic_year, started_at, created_at)
+                VALUES(1,2,1,'2083/84','2026-01-01','2026-01-01');
         ''')
         self.questions = [
             {'question': 'First?', 'options': ['A', 'B'], 'answer': 'A',
@@ -307,9 +310,15 @@ class QuizStatisticsTests(unittest.TestCase):
         }).status_code, 200)
         assignment = self.client.post('/api/admin/teacher-assignments', json={
             'teacher_user_id': teacher_id, 'class_id': class_id,
-            'subject_id': 1, 'is_class_teacher': True
+            'subject_id': 1
         })
         self.assertEqual(assignment.status_code, 201)
+
+        class_teacher = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': teacher_id, 'class_id': class_id,
+            'academic_year': '2083/84'
+        })
+        self.assertEqual(class_teacher.status_code, 201)
 
         setup = self.client.get('/api/admin/school-setup')
         self.assertEqual(setup.status_code, 200)
@@ -318,10 +327,85 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(set((item['name'], item['code']) for item in setup.json['subjects']), {('Science', 'SCI')})
         self.assertTrue(any(item['student_id'] == 2 and item['class_id'] == class_id
                             for item in setup.json['students']))
-        self.assertTrue(setup.json['assignments'][-1]['is_class_teacher'])
+        self.assertEqual(len(setup.json['current_class_teachers']), 2)
+        self.assertEqual(setup.json['current_class_teachers'][-1]['academic_year'], '2083/84')
+        self.assertIn('NPT', setup.json['current_class_teachers'][-1]['started_at'])
         self.assertEqual(self.client.delete(
             f"/api/admin/teacher-assignments/{assignment.json['assignment_id']}"
         ).status_code, 200)
+
+    def test_subject_assignment_does_not_change_class_teacher_scope(self):
+        self.login('admin')
+        response = self.client.post('/api/admin/teacher-assignments', json={
+            'teacher_user_id': 2, 'class_id': 1, 'subject_id': 1
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('saved', response.json['message'].lower())
+        self.assertEqual(self.db.execute(
+            'SELECT teacher_user_id FROM class_teacher_assignments WHERE class_id=?',
+            (1,)
+        ).fetchone()[0], 2)
+
+    def test_class_teacher_history_is_idempotent_and_preserved(self):
+        self.login('admin')
+        missing_year = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 2, 'class_id': 1
+        })
+        self.assertEqual(missing_year.status_code, 400)
+        first = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 2, 'class_id': 1, 'academic_year': '2083/84'
+        })
+        self.assertEqual(first.status_code, 200)
+        duplicate = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 2, 'class_id': 1, 'academic_year': '2083/84'
+        })
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM class_teacher_assignments WHERE class_id=?', (1,)
+        ).fetchone()[0], 1)
+        replacement = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 4, 'class_id': 1, 'academic_year': '2084/85'
+        })
+        self.assertEqual(replacement.status_code, 201)
+        rows = self.db.execute(
+            'SELECT teacher_user_id, academic_year, ended_at FROM class_teacher_assignments WHERE class_id=? ORDER BY id',
+            (1,)
+        ).fetchall()
+        self.assertEqual(len(rows), 2)
+        self.assertIsNotNone(rows[0]['ended_at'])
+        self.assertIsNone(rows[1]['ended_at'])
+        self.assertEqual(rows[1]['teacher_user_id'], 4)
+        current = self.client.get('/api/admin/school-setup').json
+        self.assertEqual(len(current['current_class_teachers']), 1)
+        self.assertEqual(len(current['class_teacher_history']), 2)
+        self.assertTrue(any(
+            item['ended_at'] and 'NPT' in item['ended_at']
+            for item in current['class_teacher_history']
+        ))
+        ended = self.client.post(
+            f"/api/admin/class-teacher-assignments/{replacement.json['assignment_id']}/end"
+        )
+        self.assertEqual(ended.status_code, 200)
+        self.assertIsNotNone(self.db.execute(
+            'SELECT ended_at FROM class_teacher_assignments WHERE id=?',
+            (replacement.json['assignment_id'],)
+        ).fetchone()['ended_at'])
+
+    def test_only_active_class_teacher_can_create_attendance(self):
+        self.login('teacher')
+        active = self.client.post('/api/teacher/monthly-attendance', json={
+            'class_id': 1, 'attendance_month': '2026-02', 'total_school_days': 20
+        })
+        self.assertEqual(active.status_code, 201)
+        self.db.execute(
+            'UPDATE class_teacher_assignments SET ended_at=? WHERE id=1',
+            ('2026-02-15',)
+        )
+        self.db.commit()
+        former = self.client.post('/api/teacher/monthly-attendance', json={
+            'class_id': 1, 'attendance_month': '2026-03', 'total_school_days': 20
+        })
+        self.assertEqual(former.status_code, 404)
 
     def test_admin_subject_catalog_and_structured_assignment_validation(self):
         self.login('admin')
@@ -364,18 +448,20 @@ class QuizStatisticsTests(unittest.TestCase):
         }).json['teacher_id']
         invalid = self.client.post('/api/admin/teacher-assignments', json={
             'teacher_user_id': teacher_id, 'class_id': 1,
-            'subject_id': 999, 'is_class_teacher': False
+            'subject_id': 999
         })
         self.assertEqual(invalid.status_code, 404)
         assignment = self.client.post('/api/admin/teacher-assignments', json={
             'teacher_user_id': teacher_id, 'class_id': 1,
-            'subject_id': subject_id, 'is_class_teacher': False
+            'subject_id': subject_id
         })
         self.assertEqual(assignment.status_code, 201)
-        self.assertEqual(self.client.post('/api/admin/teacher-assignments', json={
+        existing = self.client.post('/api/admin/teacher-assignments', json={
             'teacher_user_id': teacher_id, 'class_id': 1,
-            'subject_id': subject_id, 'is_class_teacher': False
-        }).status_code, 409)
+            'subject_id': subject_id
+        })
+        self.assertEqual(existing.status_code, 200)
+        self.assertIn('saved', existing.json['message'].lower())
         setup = self.client.get('/api/admin/school-setup').json
         matching = [item for item in setup['assignments']
                     if item['id'] == assignment.json['assignment_id']]
@@ -703,7 +789,11 @@ class QuizStatisticsTests(unittest.TestCase):
     def test_teacher_dashboard_counts_class_teacher_scope_even_without_subject_assignment(self):
         self.db.execute("DELETE FROM teacher_class_subjects WHERE id = 1")
         self.db.execute("DELETE FROM class_teacher_assignments WHERE id = 1")
-        self.db.execute("INSERT INTO class_teacher_assignments VALUES(2,2,2,'2026-01-01')")
+        self.db.execute(
+            """INSERT INTO class_teacher_assignments
+               (teacher_user_id, class_id, academic_year, started_at, ended_at)
+               VALUES(2,2,'2083/84','2026-01-01',NULL)"""
+        )
         self.db.execute("INSERT INTO student_class_enrollments VALUES(3,2,2,'2026-01-01')")
 
         self.login('teacher')
@@ -727,8 +817,46 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(assignment['section'], 'Default')
         self.assertEqual(assignment['subject_id'], 1)
         self.assertEqual(assignment['subject'], 'Science')
-        self.assertTrue(assignment['is_class_teacher'])
         self.assertEqual(assignment['student_count'], 1)
+        self.assertEqual(response.json['class_teacher_responsibility']['class_id'], 1)
+        self.assertEqual(response.json['class_teacher_responsibility']['student_count'], 1)
+        self.assertIn('NPT', response.json['class_teacher_responsibility']['started_at'])
+
+    def test_active_class_teacher_relationship_is_one_to_one_with_history(self):
+        self.login('admin')
+        teacher_two_new_class = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 2, 'class_id': 2, 'academic_year': '2084/85'
+        })
+        self.assertEqual(teacher_two_new_class.status_code, 201)
+        self.assertIsNotNone(self.db.execute(
+            'SELECT ended_at FROM class_teacher_assignments WHERE id=1'
+        ).fetchone()['ended_at'])
+
+        teacher_four_same_class = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 4, 'class_id': 2, 'academic_year': '2084/85'
+        })
+        self.assertEqual(teacher_four_same_class.status_code, 201)
+        self.assertIsNotNone(self.db.execute(
+            'SELECT ended_at FROM class_teacher_assignments WHERE teacher_user_id=2 AND class_id=2 AND ended_at IS NOT NULL'
+        ).fetchone()['ended_at'])
+
+        teacher_four_new_class = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 4, 'class_id': 1, 'academic_year': '2084/85'
+        })
+        self.assertEqual(teacher_four_new_class.status_code, 201)
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM class_teacher_assignments WHERE teacher_user_id=4 AND ended_at IS NULL'
+        ).fetchone()[0], 1)
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM class_teacher_assignments WHERE class_id=1 AND ended_at IS NULL'
+        ).fetchone()[0], 1)
+        self.assertGreaterEqual(self.db.execute(
+            'SELECT COUNT(*) FROM class_teacher_assignments'
+        ).fetchone()[0], 4)
+        self.login('teacher')
+        dashboard = self.client.get('/api/teacher/dashboard')
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertIsNone(dashboard.json['class_teacher_responsibility'])
 
     def test_quiz_routes_still_require_student_role(self):
         self.login('teacher')

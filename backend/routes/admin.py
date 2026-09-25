@@ -1,7 +1,28 @@
 """Administrator school setup and account-management API routes."""
 
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 from flask import Blueprint, request
 from werkzeug.security import generate_password_hash
+
+NEPAL_TIMEZONE = ZoneInfo("Asia/Kathmandu")
+
+
+def serialize_nepal_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.replace("Z", "+00:00")
+        try:
+            value = datetime.fromisoformat(normalized)
+        except ValueError:
+            return value
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(NEPAL_TIMEZONE).strftime(
+        "%b %-d, %Y, %-I:%M %p NPT"
+    )
 
 
 def create_admin_blueprint(mysql, login_required, role_required, admin_role):
@@ -183,29 +204,51 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
                 """SELECT tcs.id, tcs.teacher_user_id,
                           u.username AS teacher_name,
                           tcs.class_id, c.name AS class_name,
-                          tcs.subject_id, sub.name AS subject,
-                          CASE WHEN cta.teacher_user_id IS NULL THEN 0 ELSE 1 END
-                              AS is_class_teacher
+                          tcs.subject_id, sub.name AS subject
                    FROM teacher_class_subjects tcs
                    INNER JOIN users u ON u.id = tcs.teacher_user_id
                    INNER JOIN classes c ON c.id = tcs.class_id
                    INNER JOIN subjects sub ON sub.id = tcs.subject_id
-                   LEFT JOIN class_teacher_assignments cta
-                     ON cta.class_id = tcs.class_id
-                    AND cta.teacher_user_id = tcs.teacher_user_id
                    ORDER BY c.name, sub.name, u.username"""
             )
             assignments = cur.fetchall()
-            for assignment in assignments:
-                assignment["is_class_teacher"] = bool(
-                    assignment["is_class_teacher"]
-                )
+            cur.execute(
+                """SELECT cta.id, cta.teacher_user_id,
+                          u.username AS teacher_name,
+                          cta.class_id, c.name AS class_name,
+                          cta.academic_year, cta.started_at
+                   FROM class_teacher_assignments cta
+                   INNER JOIN users u ON u.id = cta.teacher_user_id
+                   INNER JOIN classes c ON c.id = cta.class_id
+                   WHERE cta.ended_at IS NULL
+                   ORDER BY c.name, u.username"""
+            )
+            current_class_teachers = cur.fetchall()
+            cur.execute(
+                """SELECT cta.id, cta.teacher_user_id,
+                          u.username AS teacher_name,
+                          cta.class_id, c.name AS class_name,
+                          cta.academic_year, cta.started_at, cta.ended_at,
+                          CASE WHEN cta.ended_at IS NULL THEN 1 ELSE 0 END AS current
+                   FROM class_teacher_assignments cta
+                   INNER JOIN users u ON u.id = cta.teacher_user_id
+                   INNER JOIN classes c ON c.id = cta.class_id
+                   ORDER BY c.name, cta.started_at DESC, cta.id DESC"""
+            )
+            class_teacher_history = cur.fetchall()
+            for item in current_class_teachers:
+                item["started_at"] = serialize_nepal_datetime(item["started_at"])
+            for item in class_teacher_history:
+                item["started_at"] = serialize_nepal_datetime(item["started_at"])
+                item["ended_at"] = serialize_nepal_datetime(item["ended_at"])
             return {
                 "classes": classes,
                 "subjects": subjects,
                 "teachers": teachers,
                 "students": students,
-                "assignments": assignments
+                "assignments": assignments,
+                "current_class_teachers": current_class_teachers,
+                "class_teacher_history": class_teacher_history
             }, 200
         finally:
             cur.close()
@@ -388,11 +431,6 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             subject_id = int(data.get("subject_id"))
         except (AttributeError, TypeError, ValueError):
             return {"error": "Subject is required"}, 400
-        is_class_teacher = data.get("is_class_teacher", False)
-        if not isinstance(is_class_teacher, bool):
-            return {
-                "error": "Class teacher status must be true or false"
-            }, 400
         cur = mysql.connection.cursor()
         try:
             cur.execute(
@@ -407,33 +445,31 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             cur.execute("SELECT id FROM subjects WHERE id = %s", (subject_id,))
             if not cur.fetchone():
                 return {"error": "Subject not found"}, 404
+
             cur.execute(
                 """SELECT id FROM teacher_class_subjects
                    WHERE teacher_user_id = %s AND class_id = %s
                      AND subject_id = %s""",
                 (teacher_id, class_id, subject_id)
             )
-            if cur.fetchone():
+            existing_assignment = cur.fetchone()
+
+            if existing_assignment:
+                assignment_id = existing_assignment["id"]
+                mysql.connection.commit()
                 return {
-                    "error": "Teacher already has this class-subject assignment"
-                }, 409
+                    "message": "Teacher assignment saved",
+                    "assignment_id": assignment_id,
+                    "updated": True
+                }, 200
+
             cur.execute(
                 """INSERT INTO teacher_class_subjects
                          (teacher_user_id, class_id, subject_id)
                          VALUES (%s, %s, %s)""",
-                     (teacher_id, class_id, subject_id)
+                (teacher_id, class_id, subject_id)
             )
             assignment_id = cur.lastrowid
-            if is_class_teacher:
-                cur.execute(
-                    "DELETE FROM class_teacher_assignments WHERE class_id = %s",
-                    (class_id,)
-                )
-                cur.execute(
-                    """INSERT INTO class_teacher_assignments
-                       (teacher_user_id, class_id) VALUES (%s, %s)""",
-                    (teacher_id, class_id)
-                )
             mysql.connection.commit()
             return {
                 "message": "Teacher assignment created",
@@ -464,19 +500,111 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
                 "DELETE FROM teacher_class_subjects WHERE id = %s",
                 (assignment_id,)
             )
-            cur.execute(
-                """SELECT id FROM teacher_class_subjects
-                   WHERE teacher_user_id = %s AND class_id = %s LIMIT 1""",
-                (assignment["teacher_user_id"], assignment["class_id"])
-            )
-            if not cur.fetchone():
-                cur.execute(
-                    """DELETE FROM class_teacher_assignments
-                       WHERE teacher_user_id = %s AND class_id = %s""",
-                    (assignment["teacher_user_id"], assignment["class_id"])
-                )
             mysql.connection.commit()
             return {"message": "Teacher assignment removed"}, 200
+        finally:
+            cur.close()
+
+    @admin.post("/api/admin/class-teacher-assignments")
+    @login_required
+    @role_required(admin_role)
+    def admin_create_class_teacher_assignment_api():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return {"error": "Class teacher data is required"}, 400
+        try:
+            teacher_id = int(data.get("teacher_user_id"))
+            class_id = int(data.get("class_id"))
+        except (TypeError, ValueError):
+            return {"error": "Teacher and class are required"}, 400
+        academic_year = str(data.get("academic_year") or "").strip()
+        if not academic_year:
+            return {"error": "Academic year is required"}, 400
+        if len(academic_year) > 20:
+            return {"error": "Academic year must be at most 20 characters"}, 400
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                "SELECT id FROM users WHERE id = %s AND role = 'teacher'",
+                (teacher_id,)
+            )
+            if not cur.fetchone():
+                return {"error": "Teacher not found"}, 404
+            cur.execute("SELECT id FROM classes WHERE id = %s", (class_id,))
+            if not cur.fetchone():
+                return {"error": "Class not found"}, 404
+            cur.execute(
+                """SELECT id, teacher_user_id, academic_year
+                   FROM class_teacher_assignments
+                   WHERE class_id = %s AND ended_at IS NULL
+                   ORDER BY id DESC LIMIT 1""",
+                (class_id,)
+            )
+            current = cur.fetchone()
+            if (current and current["teacher_user_id"] == teacher_id
+                    and current["academic_year"] == academic_year):
+                return {
+                    "message": "Class teacher assignment is already current",
+                    "assignment_id": current["id"],
+                    "updated": False
+                }, 200
+            cur.execute(
+                """SELECT id
+                   FROM class_teacher_assignments
+                   WHERE teacher_user_id = %s AND ended_at IS NULL
+                     AND class_id <> %s""",
+                (teacher_id, class_id)
+            )
+            teacher_current = cur.fetchall()
+            assignment_ids_to_end = {
+                row["id"] for row in teacher_current
+            }
+            if current:
+                assignment_ids_to_end.add(current["id"])
+            for assignment_id_to_end in assignment_ids_to_end:
+                cur.execute(
+                    "UPDATE class_teacher_assignments SET ended_at = CURRENT_TIMESTAMP WHERE id = %s",
+                    (assignment_id_to_end,)
+                )
+            cur.execute(
+                """INSERT INTO class_teacher_assignments
+                   (teacher_user_id, class_id, academic_year, started_at)
+                   VALUES (%s, %s, %s, CURRENT_TIMESTAMP)""",
+                (teacher_id, class_id, academic_year)
+            )
+            assignment_id = cur.lastrowid
+            mysql.connection.commit()
+            return {
+                "message": "Class teacher assignment created",
+                "assignment_id": assignment_id
+            }, 201
+        except Exception as error:
+            mysql.connection.rollback()
+            print("Admin class teacher assignment error:", error)
+            return {"error": "Unable to assign class teacher"}, 500
+        finally:
+            cur.close()
+
+    @admin.post("/api/admin/class-teacher-assignments/<int:assignment_id>/end")
+    @login_required
+    @role_required(admin_role)
+    def admin_end_class_teacher_assignment_api(assignment_id):
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                """UPDATE class_teacher_assignments
+                   SET ended_at = CURRENT_TIMESTAMP
+                   WHERE id = %s AND ended_at IS NULL""",
+                (assignment_id,)
+            )
+            cur.execute(
+                "SELECT id FROM class_teacher_assignments WHERE id = %s AND ended_at IS NOT NULL",
+                (assignment_id,)
+            )
+            if not cur.fetchone():
+                return {"error": "Active class teacher assignment not found"}, 404
+            mysql.connection.commit()
+            return {"message": "Class teacher responsibility ended"}, 200
         finally:
             cur.close()
 

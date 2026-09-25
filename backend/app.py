@@ -5,7 +5,7 @@ from functools import wraps
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from backend.routes.admin import create_admin_blueprint
+from backend.routes.admin import create_admin_blueprint, serialize_nepal_datetime
 from backend.routes.assessments import create_assessments_blueprint
 from backend.routes.attendance import create_attendance_blueprint
 from backend.routes.auth import create_auth_blueprint
@@ -498,12 +498,14 @@ def teacher_dashboard_api():
                         FROM class_teacher_assignments cta
                         WHERE cta.teacher_user_id = %s
                           AND cta.class_id = c.id
+                                                    AND cta.ended_at IS NULL
                     ) THEN 1 ELSE 0
                 END AS is_class_teacher
             FROM (
                 SELECT class_id FROM teacher_class_subjects WHERE teacher_user_id = %s
                 UNION
-                SELECT class_id FROM class_teacher_assignments WHERE teacher_user_id = %s
+                SELECT class_id FROM class_teacher_assignments
+                WHERE teacher_user_id = %s AND ended_at IS NULL
             ) assigned_classes
             INNER JOIN classes c ON c.id = assigned_classes.class_id
             LEFT JOIN teacher_class_subjects tcs
@@ -540,7 +542,8 @@ def teacher_dashboard_api():
                 FROM (
                     SELECT class_id FROM teacher_class_subjects WHERE teacher_user_id = %s
                     UNION
-                    SELECT class_id FROM class_teacher_assignments WHERE teacher_user_id = %s
+                    SELECT class_id FROM class_teacher_assignments
+                    WHERE teacher_user_id = %s AND ended_at IS NULL
                 ) assigned_classes
                 WHERE assigned_classes.class_id = sce.class_id
             )
@@ -552,53 +555,53 @@ def teacher_dashboard_api():
         cur.execute(
             """
             SELECT
-                a.class_id,
+                tcs.class_id,
                 c.name AS class_name,
                 c.grade,
                 c.section,
-                a.subject_id,
+                tcs.subject_id,
                 sub.name AS subject,
-                CASE WHEN cta.teacher_user_id IS NOT NULL THEN 1 ELSE 0 END AS is_class_teacher,
                 COUNT(DISTINCT sce.student_id) AS student_count
-            FROM (
-                SELECT tcs.class_id, tcs.subject_id, tcs.teacher_user_id
-                FROM teacher_class_subjects tcs
-                WHERE tcs.teacher_user_id = %s
-
-                UNION ALL
-
-                SELECT cta.class_id, NULL AS subject_id, cta.teacher_user_id
-                FROM class_teacher_assignments cta
-                WHERE cta.teacher_user_id = %s
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM teacher_class_subjects tcs
-                      WHERE tcs.teacher_user_id = %s
-                        AND tcs.class_id = cta.class_id
-                  )
-            ) a
-            INNER JOIN classes c ON c.id = a.class_id
-            LEFT JOIN subjects sub ON sub.id = a.subject_id
-            LEFT JOIN class_teacher_assignments cta
-                ON cta.class_id = a.class_id
-               AND cta.teacher_user_id = a.teacher_user_id
-            LEFT JOIN student_class_enrollments sce ON sce.class_id = a.class_id
+            FROM teacher_class_subjects tcs
+            INNER JOIN classes c ON c.id = tcs.class_id
+            INNER JOIN subjects sub ON sub.id = tcs.subject_id
+            LEFT JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+            WHERE tcs.teacher_user_id = %s
             GROUP BY
-                a.class_id,
+                tcs.class_id,
                 c.name,
                 c.grade,
                 c.section,
-                a.subject_id,
-                sub.name,
-                cta.teacher_user_id
+                tcs.subject_id,
+                sub.name
             ORDER BY c.grade, c.section, c.name, COALESCE(sub.name, '')
             """,
-            (teacher_user_id, teacher_user_id, teacher_user_id)
+            (teacher_user_id,)
         )
         assignments = cur.fetchall()
         for assignment in assignments:
-            assignment["is_class_teacher"] = bool(assignment["is_class_teacher"])
             assignment["student_count"] = int(assignment["student_count"] or 0)
+
+        cur.execute(
+            """SELECT cta.id, cta.class_id, c.name AS class_name,
+                      cta.academic_year, cta.started_at,
+                      COUNT(DISTINCT sce.student_id) AS student_count
+               FROM class_teacher_assignments cta
+               INNER JOIN classes c ON c.id = cta.class_id
+               LEFT JOIN student_class_enrollments sce ON sce.class_id = cta.class_id
+               WHERE cta.teacher_user_id = %s AND cta.ended_at IS NULL
+               GROUP BY cta.id, cta.class_id, c.name,
+                        cta.academic_year, cta.started_at""",
+            (teacher_user_id,)
+        )
+        class_teacher_responsibility = cur.fetchone()
+        if class_teacher_responsibility:
+            class_teacher_responsibility["started_at"] = serialize_nepal_datetime(
+                class_teacher_responsibility["started_at"]
+            )
+            class_teacher_responsibility["student_count"] = int(
+                class_teacher_responsibility["student_count"] or 0
+            )
 
         cur.execute(
             """
@@ -734,6 +737,7 @@ def teacher_dashboard_api():
         return {
             "teacher": {"name": session.get("username")},
             "assignments": assignments,
+            "class_teacher_responsibility": class_teacher_responsibility,
             "assignment_summary": {
                 "total_classes": len(assigned_classes),
                 "total_subjects": total_subjects,
@@ -1805,7 +1809,7 @@ def admin_dashboard_api():
             """SELECT COUNT(*) AS classes_without_class_teacher
                  FROM classes c
                  LEFT JOIN class_teacher_assignments cta
-                     ON cta.class_id = c.id
+                     ON cta.class_id = c.id AND cta.ended_at IS NULL
                  WHERE cta.id IS NULL"""
         )
         classes_without_class_teacher = cur.fetchone()["classes_without_class_teacher"]
@@ -1840,6 +1844,7 @@ def admin_dashboard_api():
             LEFT JOIN class_teacher_assignments cta
                 ON cta.class_id = c.id
                 AND cta.teacher_user_id = tcs.teacher_user_id
+                AND cta.ended_at IS NULL
             LEFT JOIN users u
                 ON u.id = cta.teacher_user_id
             GROUP BY c.id, c.name, c.grade, c.section

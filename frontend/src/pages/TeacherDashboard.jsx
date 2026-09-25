@@ -37,6 +37,7 @@ function TeacherDashboard() {
   const statistics = data?.statistics || {}
   const recentNotes = data?.recent_notes || []
   const assignments = data?.assignments || []
+  const classTeacherResponsibility = data?.class_teacher_responsibility
   const firstName = String(teacher.name || 'Teacher').trim().split(/\s+/)[0]
 
   return (
@@ -84,16 +85,33 @@ function TeacherDashboard() {
                     <small>{assignment.grade} · {assignment.section}</small>
                   </div>
                   <div className="teacher-assignment-meta">
-                    <span>{assignment.subject || 'Class teacher'}</span>
+                    <span>{assignment.subject}</span>
                     <small>{assignment.student_count ?? 0} students</small>
                   </div>
-                  {assignment.is_class_teacher && <span className="teacher-assignment-badge">Class Teacher</span>}
                 </div>
               ))}
             </div>
           )}
         </section>
       </div>
+
+      <section className="teacher-overview-section">
+        <div className="teacher-overview-section-title"><div><h2>Class Teacher Responsibility</h2><p>Your current class-level responsibility.</p></div></div>
+        {!classTeacherResponsibility ? <div className="teacher-overview-empty">No class-teacher responsibility assigned.</div> : (
+          <div className="teacher-assignment-list">
+            <div className="teacher-assignment-row">
+              <div className="teacher-assignment-main">
+                <strong>{classTeacherResponsibility.class_name}</strong>
+                <small>Academic Year: {classTeacherResponsibility.academic_year || 'Unspecified'}</small>
+              </div>
+              <div className="teacher-assignment-meta">
+                <span>{classTeacherResponsibility.student_count ?? 0} students</span>
+                <small>Started {classTeacherResponsibility.started_at}</small>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="teacher-overview-section">
         <div className="teacher-overview-section-title"><div><h2>Recent notes</h2><p>Your latest learning materials.</p></div><button onClick={() => navigate('/teacher/notes')}>View all</button></div>
