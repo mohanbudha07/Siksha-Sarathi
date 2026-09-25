@@ -340,7 +340,9 @@ class ProductionFeaturePipelineTests(unittest.TestCase):
         )
         connection.commit()
 
+        changes_before = connection.total_changes
         report = generate_diagnostics(connection)
+        self.assertEqual(connection.total_changes, changes_before)
         self.assertEqual(report["paper_assessments"], 2)
         self.assertEqual(report["usable_target_rows"], 2)
         self.assertEqual(report["targets_with_academic_evidence"], 2)
@@ -350,6 +352,15 @@ class ProductionFeaturePipelineTests(unittest.TestCase):
         self.assertEqual(report["eligible_feature_snapshots"], 2)
         self.assertEqual(report["ineligible_feature_snapshots"], 0)
         self.assertEqual(report["ineligible_reason_counts"], {})
+        self.assertEqual(report["students_with_evidence"], 1)
+        self.assertEqual(report["unique_eligible_students"], 1)
+        self.assertEqual(report["snapshots_per_eligible_student"], {"11": 2})
+        self.assertEqual(report["subjects_represented"], ["Math"])
+        self.assertEqual(report["classes_represented"], [7])
+        self.assertEqual(report["eligible_snapshots_by_subject"], {"Math": 2})
+        self.assertEqual(report["eligible_snapshots_by_class"], {"7": 2})
+        self.assertEqual(report["evidence_presence_counts"], {"quiz": 2, "prior_paper": 1, "attendance": 2})
+        self.assertEqual(report["readiness_level"], "DATA AVAILABLE; REVIEW DIVERSITY")
         self.assertIn("feature_columns", report)
 
     def test_target_percent_uses_marks_over_max_marks(self):
