@@ -1,0 +1,133 @@
+{
+  "dataset_role": "external research only",
+  "dataset_source": "UCI Student Performance dataset, student-mat.csv and student-por.csv",
+  "generated_at_utc": "2026-09-25T15:48:54.156793+00:00",
+  "group_size_distribution": {
+    "1": 293,
+    "2": 360,
+    "3": 5,
+    "4": 4
+  },
+  "groups_with_multiple_subject_rows": 369,
+  "identity_group_fields": [
+    "school",
+    "sex",
+    "age",
+    "address",
+    "famsize",
+    "Pstatus",
+    "Medu",
+    "Fedu",
+    "Mjob",
+    "Fjob",
+    "reason",
+    "nursery",
+    "internet"
+  ],
+  "identity_groups": 662,
+  "model_parameters": {
+    "DummyRegressor": {
+      "strategy": "mean"
+    },
+    "GradientBoostingRegressor": {
+      "learning_rate": 0.05,
+      "max_depth": 2,
+      "n_estimators": 100,
+      "random_state": 42
+    },
+    "RandomForestRegressor": {
+      "n_estimators": 100,
+      "random_state": 42
+    },
+    "Ridge": {
+      "alpha": 10.0
+    }
+  },
+  "models": [
+    "DummyRegressor",
+    "Ridge",
+    "RandomForestRegressor",
+    "GradientBoostingRegressor"
+  ],
+  "proxy_key_collision_diagnostics": {
+    "groups_with_size_greater_than_two": 9,
+    "label": "ambiguous proxy-key collisions; not verified students",
+    "maximum_proxy_group_size": 4,
+    "policy": "keep collision groups together conservatively to prevent identity leakage",
+    "rows_inside_collision_groups": 31
+  },
+  "python_version": "3.12.3",
+  "row_count": 1044,
+  "scenarios": {
+    "scenario_a_prior_performance": {
+      "features": [
+        "G1",
+        "failures",
+        "studytime",
+        "absences",
+        "subject"
+      ],
+      "target": "G3"
+    },
+    "scenario_b_no_prior_grade": {
+      "features": [
+        "failures",
+        "studytime",
+        "absences",
+        "subject"
+      ],
+      "target": "G3"
+    }
+  },
+  "single_record_groups": 293,
+  "sklearn_version": "1.9.0",
+  "split_seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "split_strategy": "repeated GroupShuffleSplit; same split indices shared by all models within each scenario",
+  "split_summary": [
+    {
+      "seed": 42,
+      "test_groups": 133,
+      "test_rows": 213,
+      "train_groups": 529,
+      "train_rows": 831
+    },
+    {
+      "seed": 43,
+      "test_groups": 133,
+      "test_rows": 209,
+      "train_groups": 529,
+      "train_rows": 835
+    },
+    {
+      "seed": 44,
+      "test_groups": 133,
+      "test_rows": 216,
+      "train_groups": 529,
+      "train_rows": 828
+    },
+    {
+      "seed": 45,
+      "test_groups": 133,
+      "test_rows": 213,
+      "train_groups": 529,
+      "train_rows": 831
+    },
+    {
+      "seed": 46,
+      "test_groups": 133,
+      "test_rows": 209,
+      "train_groups": 529,
+      "train_rows": 835
+    }
+  ],
+  "target": "G3",
+  "target_scale": "original UCI 0-20 grade scale",
+  "test_size": 0.2,
+  "tuning": "No hyperparameter search; conservative fixed parameters avoid outer-test leakage."
+}

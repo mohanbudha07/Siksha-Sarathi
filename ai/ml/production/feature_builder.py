@@ -77,6 +77,86 @@ def _fetch_table_columns(connection, table_name):
         return set()
 
 
+def _scalar_query(connection, query):
+    cursor = connection.cursor()
+    try:
+        cursor.execute(query)
+        row = cursor.fetchone()
+        if row is None:
+            return 0
+        if hasattr(row, "keys"):
+            return row[list(row.keys())[0]]
+        return row[0]
+    except Exception:
+        return 0
+    finally:
+        cursor.close()
+
+
+def _database_counts(connection):
+    return {
+        "total_db_students": int(_scalar_query(connection, "SELECT COUNT(*) FROM students")),
+        "total_db_classes": int(_scalar_query(connection, "SELECT COUNT(*) FROM classes")),
+        "subject_catalog_rows": int(_scalar_query(connection, "SELECT COUNT(*) FROM subjects")),
+    }
+
+
+def _readiness_breakdown(training):
+    if training.empty:
+        return {
+            "students_with_evidence": 0,
+            "unique_eligible_students": 0,
+            "snapshots_per_eligible_student": {},
+            "subjects_represented": [],
+            "classes_represented": [],
+            "target_assessment_dates_represented": [],
+            "eligible_snapshots_by_subject": {},
+            "eligible_snapshots_by_class": {},
+            "eligible_snapshots_by_target_date": {},
+            "evidence_presence_counts": {
+                "quiz": 0,
+                "prior_paper": 0,
+                "attendance": 0,
+            },
+            "readiness_level": "PIPELINE ONLY",
+        }
+
+    eligible = training[training["eligible_for_prediction"]]
+    students_with_evidence = int(training["student_id"].nunique())
+    eligible_student_counts = eligible["student_id"].value_counts().sort_index()
+    subject_counts = eligible["subject"].value_counts().sort_index()
+    class_counts = eligible["target_class_id"].value_counts().sort_index()
+    date_values = training["target_assessment_date"].map(str)
+    eligible_date_counts = date_values[eligible.index].value_counts().sort_index()
+    readiness_level = "PIPELINE ONLY" if eligible.empty else "DATA AVAILABLE; REVIEW DIVERSITY"
+    return {
+        "students_with_evidence": students_with_evidence,
+        "unique_eligible_students": int(eligible["student_id"].nunique()),
+        "snapshots_per_eligible_student": {
+            str(student_id): int(count)
+            for student_id, count in eligible_student_counts.items()
+        },
+        "subjects_represented": sorted(str(value) for value in training["subject"].dropna().unique()),
+        "classes_represented": sorted(int(value) for value in training["target_class_id"].dropna().unique()),
+        "target_assessment_dates_represented": sorted(date_values.unique().tolist()),
+        "eligible_snapshots_by_subject": {
+            str(subject): int(count) for subject, count in subject_counts.items()
+        },
+        "eligible_snapshots_by_class": {
+            str(class_id): int(count) for class_id, count in class_counts.items()
+        },
+        "eligible_snapshots_by_target_date": {
+            str(target_date): int(count) for target_date, count in eligible_date_counts.items()
+        },
+        "evidence_presence_counts": {
+            "quiz": int(training["has_quiz_evidence"].sum()),
+            "prior_paper": int(training["has_prior_paper_evidence"].sum()),
+            "attendance": int(training["has_attendance_evidence"].sum()),
+        },
+        "readiness_level": readiness_level,
+    }
+
+
 def _is_valid_target_assessment(row):
     if row is None:
         return False
@@ -487,7 +567,9 @@ def count_feature_evidence(connection, subject=None):
         }
 
     summary = {
+        **_database_counts(connection),
         "students": len(students),
+        "students_with_evidence": len(students),
         "subjects": len({str(row.get("subject") or "").strip() for row in paper_rows if str(row.get("subject") or "").strip()}),
         "paper_assessments": len({int(row.get("assessment_id")) for row in paper_rows}),
         "paper_score_rows": len(paper_rows),
@@ -504,6 +586,7 @@ def count_feature_evidence(connection, subject=None):
         "ineligible_feature_snapshots": ineligible,
         "ineligible_reason_counts": reason_counts,
     }
+    summary.update(_readiness_breakdown(training))
     return summary
 
 
