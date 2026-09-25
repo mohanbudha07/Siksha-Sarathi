@@ -17,6 +17,7 @@ from backend.routes.quiz import (
     parse_quiz_questions,
     quiz_has_open_lab_session
 )
+from backend.student_access import fetch_student_context
 
 import os
 import json
@@ -267,41 +268,49 @@ def student_dashboard_api():
         # Student profile
         # ----------------------------------------------------
 
-        cur.execute(
-            """
-            SELECT
-                s.id AS student_id,
-                s.full_name,
-                s.grade
-            FROM students s
-            WHERE s.user_id = %s
-            """,
-            (session["user_id"],)
-        )
+        context = fetch_student_context(cur, session["user_id"])
+        if not context:
+            return {"error": "Student profile not found"}, 404
 
-        student = cur.fetchone()
+        student = context["student"]
+        student_id = context["student_id"]
+        current_class = context["current_class"]
+        subject_names = context["subject_names"]
 
-        if not student:
-            return {
-                "error": "Student profile not found"
-            }, 404
+        available_notes = 0
+        if current_class and subject_names:
+            cur.execute(
+                """SELECT COUNT(*) AS available_notes
+                   FROM notes n
+                   WHERE EXISTS (
+                       SELECT 1
+                       FROM teacher_class_subjects tcs
+                       INNER JOIN subjects sub ON sub.id = tcs.subject_id
+                       WHERE tcs.class_id = %s
+                         AND LOWER(TRIM(sub.name)) = LOWER(TRIM(n.subject))
+                   )""",
+                (current_class["id"],)
+            )
+            available_notes = int(cur.fetchone()["available_notes"] or 0)
 
-        student_id = student["student_id"]
-
-        # ----------------------------------------------------
-        # Available notes
-        # ----------------------------------------------------
-
-        cur.execute(
-            """
-            SELECT COUNT(*) AS total_notes
-            FROM notes
-            """
-        )
-
-        notes_data = cur.fetchone()
-
-        total_notes = notes_data["total_notes"]
+        available_quizzes = 0
+        if current_class and subject_names:
+            cur.execute(
+                """SELECT id, subject, questions
+                   FROM quizzes
+                   WHERE is_published = TRUE"""
+            )
+            for quiz in cur.fetchall():
+                if str(quiz["subject"] or "").strip().casefold() not in subject_names:
+                    continue
+                if not quiz_has_open_lab_session(cur, quiz["id"]):
+                    try:
+                        parse_quiz_questions(
+                            quiz["questions"], quiz["subject"] or "General"
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                    available_quizzes += 1
 
         # ----------------------------------------------------
         # Quiz statistics
@@ -323,17 +332,66 @@ def student_dashboard_api():
         completed_quizzes = quiz_stats["completed_quizzes"]
 
         average_score = round(
-            float(quiz_stats["average_score"]),
+            float(quiz_stats["average_score"] or 0),
             2
         )
 
+        cur.execute(
+            """SELECT qr.id AS attempt_id, q.title AS quiz_title,
+                      q.subject, qr.score, qr.total_questions, qr.created_at
+               FROM quiz_results qr
+               INNER JOIN quizzes q ON q.id = qr.quiz_id
+               WHERE qr.student_id = %s
+               ORDER BY qr.id DESC
+               LIMIT 5""",
+            (student_id,)
+        )
+        recent_activity = []
+        for attempt in cur.fetchall():
+            total = int(attempt["total_questions"] or 0)
+            score = int(attempt["score"] or 0)
+            recent_activity.append({
+                **attempt,
+                "score": score,
+                "total_questions": total,
+                "percentage": round(100 * score / total, 2) if total else 0
+            })
+
+        cur.execute(
+            """SELECT q.subject, COUNT(*) AS attempts,
+                      COALESCE(AVG(100.0 * qr.score / NULLIF(qr.total_questions, 0)), 0)
+                          AS average_score
+               FROM quiz_results qr
+               INNER JOIN quizzes q ON q.id = qr.quiz_id
+               WHERE qr.student_id = %s
+               GROUP BY q.subject
+               ORDER BY q.subject""",
+            (student_id,)
+        )
+        subject_performance = [
+            {
+                "subject": row["subject"],
+                "attempts": int(row["attempts"] or 0),
+                "average_score": round(float(row["average_score"] or 0), 2)
+            }
+            for row in cur.fetchall()
+            if str(row["subject"] or "").strip().casefold() in subject_names
+        ]
+
         return {
             "student": student,
+            "current_class": current_class,
+            "subjects": context["subjects"],
             "stats": {
-                "total_notes": total_notes,
+                "available_notes": available_notes,
+                "total_notes": available_notes,
+                "available_quizzes": available_quizzes,
+                "subject_count": len(context["subjects"]),
                 "completed_quizzes": completed_quizzes,
                 "average_quiz_score": average_score
-            }
+            },
+            "recent_activity": recent_activity,
+            "subject_performance": subject_performance
         }, 200
 
     finally:
@@ -352,13 +410,11 @@ def student_practice_plan_api():
     """Suggest practice from the student's recent, tagged quiz answers."""
     cur = mysql.connection.cursor()
     try:
-        cur.execute(
-            "SELECT id, full_name FROM students WHERE user_id = %s",
-            (session["user_id"],)
-        )
-        student = cur.fetchone()
-        if not student:
+        context = fetch_student_context(cur, session["user_id"])
+        if not context:
             return {"error": "Student profile not found"}, 404
+        student_id = context["student_id"]
+        subject_names = context["subject_names"]
 
         cur.execute(
             """
@@ -377,12 +433,14 @@ def student_practice_plan_api():
             INNER JOIN quizzes q ON q.id = qr.quiz_id
             GROUP BY q.subject, qar.topic
             """,
-            (student["id"],)
+            (student_id,)
         )
         rows = cur.fetchall()
         priorities = []
         for row in rows:
             subject = str(row["subject"] or "").strip()
+            if subject.casefold() not in subject_names:
+                continue
             topic = str(row["topic"] or "").strip()
             if not topic or topic.casefold() in {"unspecified", subject.casefold()}:
                 continue
@@ -413,7 +471,16 @@ def student_practice_plan_api():
 
         if priorities:
             cur.execute(
-                "SELECT id, title, subject, chapter FROM notes ORDER BY id DESC"
+                """SELECT id, title, subject, chapter FROM notes
+                   WHERE EXISTS (
+                       SELECT 1
+                       FROM teacher_class_subjects tcs
+                       INNER JOIN subjects sub ON sub.id = tcs.subject_id
+                       WHERE tcs.class_id = %s
+                         AND LOWER(TRIM(sub.name)) = LOWER(TRIM(notes.subject))
+                   )
+                   ORDER BY id DESC""",
+                (context["current_class"]["id"],)
             )
             notes = cur.fetchall()
             cur.execute(

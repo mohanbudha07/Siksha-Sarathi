@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from flask import Blueprint, request, session
+from backend.student_access import fetch_student_context
 
 
 def parse_quiz_questions(raw_questions, fallback_topic="General"):
@@ -245,6 +246,9 @@ def create_quiz_blueprint(
     def student_quizzes_api():
         cur = mysql.connection.cursor()
         try:
+            context = fetch_student_context(cur, session["user_id"])
+            if not context or not context["current_class"]:
+                return {"quizzes": []}, 200
             cur.execute(
                 """
                 SELECT id, title, subject, questions
@@ -255,6 +259,8 @@ def create_quiz_blueprint(
             )
             quizzes = []
             for stored_quiz in cur.fetchall():
+                if str(stored_quiz["subject"] or "").strip().casefold() not in context["subject_names"]:
+                    continue
                 if quiz_has_open_lab_session(cur, stored_quiz["id"]):
                     continue
                 try:
@@ -285,7 +291,10 @@ def create_quiz_blueprint(
 
         cur = mysql.connection.cursor()
         try:
+            context = fetch_student_context(cur, session["user_id"])
             if quiz_id is None:
+                if not context or not context["current_class"]:
+                    return {"error": "No quiz available"}, 404
                 cur.execute(
                     """
                     SELECT id, title, subject, questions
@@ -296,6 +305,8 @@ def create_quiz_blueprint(
                 )
                 quiz_data = None
                 for candidate in cur.fetchall():
+                    if str(candidate["subject"] or "").strip().casefold() not in context["subject_names"]:
+                        continue
                     if not quiz_has_open_lab_session(cur, candidate["id"]):
                         quiz_data = candidate
                         break
@@ -309,8 +320,15 @@ def create_quiz_blueprint(
                     (quiz_id,)
                 )
                 quiz_data = cur.fetchone()
-                if quiz_data and quiz_has_open_lab_session(cur, quiz_data["id"]):
-                    quiz_data = None
+                if quiz_data:
+                    protected = quiz_has_open_lab_session(cur, quiz_data["id"])
+                    unavailable = (
+                        not context or not context["current_class"]
+                        or str(quiz_data["subject"] or "").strip().casefold()
+                        not in context["subject_names"]
+                    )
+                    if protected or unavailable:
+                        quiz_data = None
 
             if not quiz_data:
                 return {"error": "No quiz available"}, 404
@@ -342,6 +360,9 @@ def create_quiz_blueprint(
 
         cur = mysql.connection.cursor()
         try:
+            context = fetch_student_context(cur, session["user_id"])
+            if not context:
+                return {"error": "Student profile not found"}, 404
             cur.execute(
                 """
                 SELECT id, subject, questions
@@ -387,17 +408,15 @@ def create_quiz_blueprint(
                     "is_skipped": int(selected_answer is None)
                 })
 
-            cur.execute(
-                "SELECT id FROM students WHERE user_id = %s",
-                (session["user_id"],)
-            )
-            student = cur.fetchone()
-            if not student:
-                return {"error": "Student profile not found"}, 404
-            student_id = student["id"]
+            student_id = context["student_id"]
 
             lab_session_id = None
             requires_session = quiz_has_open_lab_session(cur, quiz_id)
+            if (not requires_session and
+                    (not context["current_class"] or
+                     str(quiz_data["subject"] or "").strip().casefold()
+                     not in context["subject_names"])):
+                return {"error": "Quiz is not available for this class"}, 404
             if requires_session:
                 try:
                     lab_session_id = int(raw_lab_session_id)
