@@ -495,6 +495,50 @@ def build_feature_row_for_target(connection, target_row):
     return _build_feature_row(target_row, paper_rows, quiz_rows, question_rows, attendance_rows)
 
 
+def build_live_feature_row(connection, student_id, class_id, subject, as_of_date):
+    """Build ordered model features without requiring a future target result."""
+    paper_rows, quiz_rows, question_rows, attendance_rows = _fetch_evidence(connection)
+    row = _build_feature_row(
+        {
+            "student_id": student_id,
+            "class_id": class_id,
+            "subject": subject,
+            "assessment_id": 0,
+            "assessment_date": as_of_date,
+            "max_marks": None,
+            "marks_obtained": None,
+        },
+        paper_rows,
+        quiz_rows,
+        question_rows,
+        attendance_rows,
+    )
+    features = {column: row[column] for column in MODEL_FEATURE_COLUMNS}
+    evidence = {
+        "academic_evidence_count": int(row["quiz_attempt_count"] + row["prior_paper_count"]),
+        "quiz_attempt_count": int(row["quiz_attempt_count"]),
+        "prior_paper_count": int(row["prior_paper_count"]),
+        "has_quiz_evidence": int(row["has_quiz_evidence"]),
+        "has_prior_paper_evidence": int(row["has_prior_paper_evidence"]),
+        "has_attendance_evidence": int(row["has_attendance_evidence"]),
+        "recent_evidence_count": int(row["recent_evidence_count"]),
+    }
+    return {
+        "student_id": int(student_id),
+        "class_id": int(class_id),
+        "subject": str(subject).strip(),
+        "as_of_date": (
+            str(row["target_assessment_date"])
+            if row["target_assessment_date"] is not None else None
+        ),
+        "feature_names": list(MODEL_FEATURE_COLUMNS),
+        "features": features,
+        "eligible_for_prediction": bool(row["eligible_for_prediction"]),
+        "ineligible_reason": row["ineligible_reason"],
+        "evidence": evidence,
+    }
+
+
 def build_training_dataset(connection, subject=None, include_ineligible=False):
     """Create a deterministic training feature DataFrame from real Siksha Sarathi data."""
     paper_rows, quiz_rows, question_rows, attendance_rows = _fetch_evidence(connection)
