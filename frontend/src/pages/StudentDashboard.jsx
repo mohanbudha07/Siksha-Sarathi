@@ -6,6 +6,10 @@ import './StudentDashboard.css'
 function StudentDashboard() {
   const [student, setStudent] = useState(null)
   const [stats, setStats] = useState(null)
+  const [currentClass, setCurrentClass] = useState(null)
+  const [subjects, setSubjects] = useState([])
+  const [recentActivity, setRecentActivity] = useState([])
+  const [subjectPerformance, setSubjectPerformance] = useState([])
   const [error, setError] = useState('')
 
   const navigate = useNavigate()
@@ -16,6 +20,10 @@ function StudentDashboard() {
       .then((response) => {
         setStudent(response.data.student)
         setStats(response.data.stats)
+        setCurrentClass(response.data.current_class)
+        setSubjects(response.data.subjects || [])
+        setRecentActivity(response.data.recent_activity || [])
+        setSubjectPerformance(response.data.subject_performance || [])
       })
       .catch((error) => {
         console.error(error)
@@ -24,6 +32,12 @@ function StudentDashboard() {
         )
       })
   }, [])
+
+  const formatActivityDate = (value) => {
+    if (!value) return ''
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleDateString()
+  }
 
   return (
     <div className="dashboard">
@@ -38,7 +52,7 @@ function StudentDashboard() {
           {student ? (
             <>
               <strong>{student.full_name}</strong>
-              <span>Grade {student.grade}</span>
+              <span>{currentClass?.name || `Grade ${student.grade}`}</span>
             </>
           ) : (
             <span>Loading...</span>
@@ -62,7 +76,7 @@ function StudentDashboard() {
           </div>
 
           <div className="welcome-badge">
-            🎓 Grade {student?.grade || '--'}
+            🎓 {currentClass?.name || 'No class assigned'}
           </div>
         </section>
 
@@ -100,11 +114,37 @@ function StudentDashboard() {
             <div>
               <span>Learning Notes</span>
               <strong>
-                {stats ? stats.total_notes : '--'}
+                {stats ? stats.available_notes : '--'}
               </strong>
             </div>
           </div>
 
+          <div className="stat-card">
+            <div className="stat-icon">📚</div>
+            <div>
+              <span>Subjects</span>
+              <strong>{stats ? stats.subject_count : '--'}</strong>
+            </div>
+          </div>
+
+        </section>
+
+        {!currentClass && <section className="dashboard-empty"><strong>No class assigned yet</strong><span>Your class subjects, notes, and quizzes will appear here once your school assigns you to a class.</span></section>}
+
+        <section className="dashboard-overview-grid">
+          <div className="dashboard-panel">
+            <div className="panel-heading"><h2>My Subjects</h2><span>{subjects.length}</span></div>
+            {subjects.length === 0 ? <p className="dashboard-empty-text">No subjects are available yet.</p> : <div className="subject-list">{subjects.map((subject) => <span key={subject.id}>{subject.name}{subject.code ? ` · ${subject.code}` : ''}</span>)}</div>}
+          </div>
+          <div className="dashboard-panel">
+            <div className="panel-heading"><h2>Subject Performance</h2></div>
+            {subjectPerformance.length === 0 ? <p className="dashboard-empty-text">Complete a quiz to see subject performance.</p> : <div className="performance-list">{subjectPerformance.map((item) => <div key={item.subject}><span>{item.subject}</span><strong>{item.average_score}% <small>{item.attempts} attempt{item.attempts === 1 ? '' : 's'}</small></strong></div>)}</div>}
+          </div>
+        </section>
+
+        <section className="dashboard-panel dashboard-activity">
+          <div className="panel-heading"><h2>Recent Quiz Activity</h2></div>
+          {recentActivity.length === 0 ? <p className="dashboard-empty-text">No quiz attempts yet. Your completed quizzes will appear here.</p> : <div className="activity-list">{recentActivity.map((item) => <div key={item.attempt_id}><div><strong>{item.quiz_title}</strong><span>{item.subject}{formatActivityDate(item.created_at) ? ` · ${formatActivityDate(item.created_at)}` : ''}</span></div><strong>{item.score}/{item.total_questions} <small>{item.percentage}%</small></strong></div>)}</div>}
         </section>
 
         <section className="student-plan-prompt">

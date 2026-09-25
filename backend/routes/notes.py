@@ -1,6 +1,7 @@
 """Student reading notes and teacher note-management API routes."""
 
 from flask import Blueprint, request, session
+from backend.student_access import fetch_student_context
 
 
 def create_notes_blueprint(
@@ -18,12 +19,23 @@ def create_notes_blueprint(
     def student_notes_api():
         cur = mysql.connection.cursor()
         try:
+            context = fetch_student_context(cur, session["user_id"])
+            if not context or not context["current_class"]:
+                return {"notes": []}, 200
             cur.execute(
                 """
                 SELECT id, title, subject, chapter, content, created_at
                 FROM notes
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM teacher_class_subjects tcs
+                    INNER JOIN subjects sub ON sub.id = tcs.subject_id
+                    WHERE tcs.class_id = %s
+                      AND LOWER(TRIM(sub.name)) = LOWER(TRIM(notes.subject))
+                )
                 ORDER BY created_at DESC
-                """
+                """,
+                (context["current_class"]["id"],)
             )
             return {"notes": cur.fetchall()}, 200
         finally:

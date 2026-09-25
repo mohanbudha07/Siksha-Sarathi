@@ -89,7 +89,7 @@ class QuizStatisticsTests(unittest.TestCase):
                 created_at TEXT, requires_session INTEGER DEFAULT 0);
             CREATE TABLE quiz_results(id INTEGER PRIMARY KEY, student_id INTEGER,
                 quiz_id INTEGER, score INTEGER, total_questions INTEGER,
-                quiz_session_id INTEGER);
+                quiz_session_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE quiz_answer_results(id INTEGER PRIMARY KEY,
                 quiz_result_id INTEGER, question_index INTEGER, question_text TEXT,
                 topic TEXT, difficulty TEXT, curriculum_code TEXT DEFAULT 'unspecified',
@@ -752,6 +752,76 @@ class QuizStatisticsTests(unittest.TestCase):
         response = self.client.get('/api/student/dashboard')
         self.assertEqual(response.status_code, 200)
         self.assertNotIn('prediction', response.json)
+
+    def test_student_dashboard_and_learning_access_are_current_class_scoped(self):
+        self.db.execute(
+            'INSERT INTO subjects (id, name, code, created_at) VALUES (2,?,?,?)',
+            ('Mathematics', 'MATH', '2026-01-02')
+        )
+        self.db.executemany(
+            'INSERT INTO teacher_class_subjects VALUES(?,?,?,?,?)',
+            [(2, 4, 1, 2, '2026-01-02'), (3, 4, 1, 1, '2026-01-03')]
+        )
+        self.db.executemany(
+            '''INSERT INTO notes(id,title,subject,chapter,content,created_at,uploaded_by)
+               VALUES(?,?,?,?,?,?,?)''',
+            [(1, 'Science notes', 'Science', 'Force', 'Science content', '2026-01-02', 2),
+             (2, 'Math notes', ' mathematics ', 'Numbers', 'Math content', '2026-01-03', 2),
+             (3, 'History notes', 'History', 'Past', 'History content', '2026-01-04', 2)]
+        )
+        self.db.executemany(
+            '''INSERT INTO quizzes(id,title,subject,questions,created_by,is_published,created_at)
+               VALUES(?,?,?,?,?,?,?)''',
+            [(2, 'Math Quiz', ' mathematics ', json.dumps(self.questions), 2, 1, '2026-01-02'),
+             (3, 'History Quiz', 'History', json.dumps(self.questions), 2, 1, '2026-01-03')]
+        )
+        self.db.executemany(
+            '''INSERT INTO quiz_results
+               (id,student_id,quiz_id,score,total_questions,created_at)
+               VALUES(?,?,?,?,?,?)''',
+            [(10, 1, 1, 1, 2, '2026-01-05'),
+             (11, 2, 1, 2, 2, '2026-01-06')]
+        )
+        self.db.commit()
+
+        dashboard = self.client.get('/api/student/dashboard')
+        self.assertEqual(dashboard.status_code, 200)
+        payload = dashboard.json
+        self.assertEqual(payload['current_class'], {
+            'id': 1, 'name': 'Grade 10', 'grade': '10', 'section': 'Default'
+        })
+        self.assertEqual([subject['name'] for subject in payload['subjects']], ['Mathematics', 'Science'])
+        self.assertEqual(payload['stats']['subject_count'], 2)
+        self.assertEqual(payload['stats']['available_notes'], 2)
+        self.assertEqual(payload['stats']['available_quizzes'], 2)
+        self.assertEqual(payload['stats']['completed_quizzes'], 1)
+        self.assertEqual(payload['stats']['average_quiz_score'], 50)
+        self.assertEqual(payload['subject_performance'], [{
+            'subject': 'Science', 'attempts': 1, 'average_score': 50
+        }])
+        self.assertEqual([item['attempt_id'] for item in payload['recent_activity']], [10])
+
+        notes = self.client.get('/api/student/notes')
+        self.assertEqual({note['id'] for note in notes.json['notes']}, {1, 2})
+        quizzes = self.client.get('/api/student/quizzes')
+        self.assertEqual({quiz['id'] for quiz in quizzes.json['quizzes']}, {1, 2})
+        self.assertEqual(self.client.get('/api/student/quiz?quiz_id=3').status_code, 404)
+        self.assertEqual(self.client.post('/api/student/quiz/submit', json={
+            'quiz_id': 3, 'answers': {'0': 'A', '1': 'D'}
+        }).status_code, 404)
+
+    def test_student_without_current_class_gets_empty_learning_state(self):
+        self.db.execute('DELETE FROM student_class_enrollments WHERE student_id=1')
+        self.db.commit()
+        dashboard = self.client.get('/api/student/dashboard')
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertIsNone(dashboard.json['current_class'])
+        self.assertEqual(dashboard.json['subjects'], [])
+        self.assertEqual(dashboard.json['stats']['available_notes'], 0)
+        self.assertEqual(dashboard.json['stats']['available_quizzes'], 0)
+        self.assertEqual(self.client.get('/api/student/notes').json['notes'], [])
+        self.assertEqual(self.client.get('/api/student/quizzes').json['quizzes'], [])
+        self.assertEqual(self.client.get('/api/student/quiz').status_code, 404)
 
     def test_teacher_dashboard_only_shows_assigned_students_and_quiz_evidence(self):
         self.assertEqual(self.submit({'0': 'B', '1': 'C'}).status_code, 200)
