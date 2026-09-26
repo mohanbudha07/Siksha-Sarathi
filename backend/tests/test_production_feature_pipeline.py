@@ -406,8 +406,10 @@ class ProductionFeaturePipelineTests(unittest.TestCase):
         self.assertEqual(first, second)
 
     def test_dotenv_discovery_points_to_repository_root(self):
-        self.assertEqual(repository_root().name, "Siksha-Sarathi")
-        self.assertTrue((repository_root() / ".env").exists())
+        root = repository_root()
+        self.assertTrue((root / ".env.example").is_file())
+        self.assertTrue((root / "backend").is_dir())
+        self.assertTrue((root / "ai").is_dir())
 
     def test_model_feature_order_is_deterministic(self):
         connection = self._connect()
