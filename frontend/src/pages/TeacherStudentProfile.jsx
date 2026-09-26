@@ -26,6 +26,10 @@ function TeacherStudentProfile() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [prediction, setPrediction] = useState(null)
+  const [predictionLoading, setPredictionLoading] = useState(true)
+  const [predictionError, setPredictionError] = useState(false)
+  const [predictionRetry, setPredictionRetry] = useState(0)
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -55,6 +59,41 @@ function TeacherStudentProfile() {
 
     loadProfile()
   }, [studentId, subject])
+
+  useEffect(() => {
+    let active = true
+
+    const loadPrediction = async () => {
+      if (!subject) {
+        setPrediction(null)
+        setPredictionError(false)
+        setPredictionLoading(false)
+        return
+      }
+
+      setPredictionLoading(true)
+      setPredictionError(false)
+      try {
+        const response = await api.get(
+          `/teacher/students/${studentId}/prediction`,
+          { params: { subject } }
+        )
+        if (active) setPrediction(response.data)
+      } catch {
+        if (active) {
+          setPrediction(null)
+          setPredictionError(true)
+        }
+      } finally {
+        if (active) setPredictionLoading(false)
+      }
+    }
+
+    loadPrediction()
+    return () => {
+      active = false
+    }
+  }, [studentId, subject, predictionRetry])
 
   if (loading) {
     return (
@@ -92,6 +131,136 @@ function TeacherStudentProfile() {
   const paperHistory = data?.recent_paper_assessments || []
   const attendanceHistory = data?.recent_attendance || []
   const actions = data?.teacher_actions || []
+  const forecast = prediction?.prediction || {}
+  const forecastEvidence = prediction?.evidence || {}
+  const predictionPercent = forecast.prediction_percent
+  const validPrediction =
+    typeof predictionPercent === 'number' &&
+    Number.isFinite(predictionPercent) &&
+    predictionPercent >= 0 &&
+    predictionPercent <= 100
+  const academicEvidenceCount =
+    forecastEvidence.academic_evidence_count ??
+    (Number(forecastEvidence.quiz_attempt_count || 0) +
+      Number(forecastEvidence.prior_paper_count || 0))
+
+  const renderForecastEvidence = () => (
+    <div className="tla-forecast-evidence">
+      <h3>Evidence available</h3>
+      <dl>
+        <div>
+          <dt>Prior scored quizzes</dt>
+          <dd>{forecastEvidence.quiz_attempt_count ?? 'Not recorded'}</dd>
+        </div>
+        <div>
+          <dt>Prior paper results</dt>
+          <dd>{forecastEvidence.prior_paper_count ?? 'Not recorded'}</dd>
+        </div>
+        <div>
+          <dt>Attendance</dt>
+          <dd>
+            {forecastEvidence.has_attendance_evidence === undefined
+              ? 'Not recorded'
+              : forecastEvidence.has_attendance_evidence
+                ? 'Available'
+                : 'Not available'}
+          </dd>
+        </div>
+      </dl>
+      {forecastEvidence.academic_evidence_count !== undefined && (
+        <p className="tla-forecast-evidence-total">
+          {academicEvidenceCount} scored academic observations before this date
+        </p>
+      )}
+    </div>
+  )
+
+  const renderForecastState = () => {
+    if (predictionLoading) {
+      return <p className="tla-muted" role="status">Checking forecast availability…</p>
+    }
+
+    if (predictionError) {
+      return (
+        <div className="tla-forecast-message" role="status">
+          <strong>Forecast service unavailable.</strong>
+          <p>Observed learning evidence is still available on this profile.</p>
+          <button
+            type="button"
+            className="tla-forecast-retry"
+            onClick={() => setPredictionRetry((retry) => retry + 1)}
+          >
+            Retry forecast
+          </button>
+        </div>
+      )
+    }
+
+    if (forecast.status === 'prediction_available' && validPrediction) {
+      return (
+        <div className="tla-forecast-available">
+          <div>
+            <span className="tla-forecast-label">Estimated next paper score</span>
+            <strong className="tla-forecast-value">{predictionPercent}%</strong>
+            <p>This is a model estimate, not a guaranteed result.</p>
+          </div>
+          <dl className="tla-forecast-meta">
+            <div><dt>Subject</dt><dd>{prediction?.student?.subject || subject}</dd></div>
+            <div><dt>As of</dt><dd>{prediction?.as_of_date || 'Not provided'}</dd></div>
+            {forecast.model_version && <div><dt>Model version</dt><dd>{forecast.model_version}</dd></div>}
+            {forecast.model_type && <div><dt>Model type</dt><dd>{forecast.model_type}</dd></div>}
+          </dl>
+          {renderForecastEvidence()}
+        </div>
+      )
+    }
+
+    if (forecast.status === 'model_unavailable') {
+      return (
+        <div className="tla-forecast-message" role="status">
+          <strong>ML forecast not available yet.</strong>
+          <p>No validated school prediction model is currently deployed.</p>
+          <p>Observed quiz, paper and attendance evidence remains available below.</p>
+        </div>
+      )
+    }
+
+    if (forecast.status === 'insufficient_evidence') {
+      return (
+        <div className="tla-forecast-message" role="status">
+          <strong>Not enough academic evidence yet.</strong>
+          <p>A forecast requires at least one prior scored quiz or one prior paper assessment. Attendance alone is not enough.</p>
+          {forecastEvidence.academic_evidence_count !== undefined && (
+            <p>{academicEvidenceCount} scored academic observations are available before this date.</p>
+          )}
+          {renderForecastEvidence()}
+        </div>
+      )
+    }
+
+    if (forecast.status === 'prediction_invalid' || forecast.status === 'prediction_available') {
+      return (
+        <div className="tla-forecast-message" role="status">
+          <strong>Forecast temporarily unavailable.</strong>
+          <p>The prediction output did not pass validation, so Siksha Sarathi is using observed learning evidence instead.</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="tla-forecast-message" role="status">
+        <strong>Forecast service unavailable.</strong>
+        <p>Observed learning evidence is still available on this profile.</p>
+        <button
+          type="button"
+          className="tla-forecast-retry"
+          onClick={() => setPredictionRetry((retry) => retry + 1)}
+        >
+          Retry forecast
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="tla-page tla-profile-page">
@@ -134,6 +303,17 @@ function TeacherStudentProfile() {
           <strong>{summary.skipped_answers}</strong>
           <small>{summary.skip_percent}% of quiz questions</small>
         </article>
+      </section>
+
+      <section className="tla-panel tla-forecast-panel" aria-labelledby="tla-forecast-title">
+        <div className="tla-section-heading">
+          <div>
+            <p className="tla-eyebrow tla-forecast-eyebrow">ML FORECAST</p>
+            <h2 id="tla-forecast-title">Performance forecast</h2>
+            <p>A separate model estimate alongside the observed learning evidence.</p>
+          </div>
+        </div>
+        {renderForecastState()}
       </section>
 
       <TeacherInterventions
