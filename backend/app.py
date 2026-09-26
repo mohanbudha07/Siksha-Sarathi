@@ -12,12 +12,14 @@ from backend.routes.auth import create_auth_blueprint
 from backend.routes.chatbot import create_chatbot_blueprint
 from backend.routes.lab_quiz import create_lab_quiz_blueprint
 from backend.routes.notes import create_notes_blueprint
+from backend.routes.prediction import create_prediction_blueprint
 from backend.routes.quiz import (
     create_quiz_blueprint,
     parse_quiz_questions,
     quiz_has_open_lab_session
 )
 from backend.student_access import fetch_student_context
+from ai.ml.production.prediction_service import PredictionService
 
 import os
 import json
@@ -248,6 +250,17 @@ app.register_blueprint(create_admin_blueprint(
     login_required=login_required,
     role_required=role_required,
     admin_role=ADMIN
+))
+
+production_prediction_service = PredictionService()
+app.extensions["prediction_service"] = production_prediction_service
+app.register_blueprint(create_prediction_blueprint(
+    mysql=mysql,
+    login_required=login_required,
+    role_required=role_required,
+    teacher_role=TEACHER,
+    admin_role=ADMIN,
+    prediction_service=production_prediction_service,
 ))
 
 

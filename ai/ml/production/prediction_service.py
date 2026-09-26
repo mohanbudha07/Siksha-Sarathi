@@ -27,6 +27,31 @@ class PredictionService:
 
     def predict(self, connection, student_id, class_id, subject, as_of_date):
         try:
+            load_result = self.loader.load()
+        except Exception:
+            return {
+                "status": MODEL_UNAVAILABLE,
+                "prediction_percent": None,
+                "reason": "production model could not be loaded",
+                "model_status": MODEL_UNAVAILABLE,
+                "fallback": FALLBACK_MODE,
+                "feature_contract_version": FEATURE_CONTRACT_VERSION,
+                "as_of_date": str(as_of_date),
+                "evidence": {},
+            }
+        if not load_result.available:
+            return {
+                "status": MODEL_UNAVAILABLE,
+                "prediction_percent": None,
+                "reason": load_result.reason or load_result.status,
+                "model_status": load_result.status,
+                "fallback": FALLBACK_MODE,
+                "feature_contract_version": FEATURE_CONTRACT_VERSION,
+                "as_of_date": str(as_of_date),
+                "evidence": {},
+            }
+
+        try:
             live_row = build_live_feature_row(
                 connection,
                 student_id=student_id,
@@ -48,27 +73,6 @@ class PredictionService:
                 "status": INSUFFICIENT_EVIDENCE,
                 "prediction_percent": None,
                 "reason": live_row["ineligible_reason"],
-                "fallback": FALLBACK_MODE,
-            }
-
-        try:
-            load_result = self.loader.load()
-        except Exception:
-            return {
-                **base_result,
-                "status": MODEL_UNAVAILABLE,
-                "prediction_percent": None,
-                "reason": "production model could not be loaded",
-                "model_status": MODEL_UNAVAILABLE,
-                "fallback": FALLBACK_MODE,
-            }
-        if not load_result.available:
-            return {
-                **base_result,
-                "status": MODEL_UNAVAILABLE,
-                "prediction_percent": None,
-                "reason": load_result.reason or load_result.status,
-                "model_status": load_result.status,
                 "fallback": FALLBACK_MODE,
             }
 
