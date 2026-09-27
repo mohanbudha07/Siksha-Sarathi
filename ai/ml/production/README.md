@@ -98,3 +98,45 @@ Teacher decision support is versioned separately as `DECISION_SUPPORT_VERSION =
 `review` below 50, `monitor` from 50 through below 75, and `stronger_outlook` at
 75 or above. These are product heuristics, not official grade or pass
 boundaries, probabilities, confidence values, diagnoses, or guarantees.
+
+## Phase 8 admin readiness monitoring
+
+Phase 8 adds an admin-only, read-only view of genuine source evidence and the
+existing Phase 7 readiness gates. The endpoint is
+`GET /api/admin/ml/training-readiness`; it uses the standard login and admin
+role checks and returns only aggregate counts, readiness states, blocker
+explanations, and informational guidance. The `/admin/ml-readiness` page loads
+when opened and refreshes only when an administrator requests it.
+
+Phase 7 remains the sole source for readiness analysis and thresholds:
+
+- `MIN_ELIGIBLE_ROWS = 100`
+- `MIN_UNIQUE_STUDENTS = 30`
+- `MIN_UNIQUE_TARGET_DATES = 4`
+- `MIN_VALIDATION_ROWS = 20`
+- `MIN_VALIDATION_STUDENTS = 10`
+
+The monitoring endpoint calls the canonical production feature builder and
+Phase 7 readiness/temporal split logic, but disables baseline model evaluation.
+Validation row and student counts are reported only after that temporal split
+can be constructed; otherwise they are unavailable. No estimator is fitted by
+the monitoring request.
+
+Source evidence counts (such as quiz attempts, published paper assessments,
+valid scored paper rows, and attendance records) are displayed separately from
+eligible training snapshots. A quiz attempt or paper score by itself is not an
+eligible snapshot. Eligibility requires a valid scored target paper assessment
+with earlier quiz or paper evidence for the same student, class, and subject.
+Attendance alone is not qualifying academic evidence. Useful data accumulates
+through ordinary student learning activity and normal recording/publishing of
+valid assessments across multiple students and target dates; the monitor never
+creates or recommends manufactured activity.
+
+Responses intentionally exclude student and account identities, individual
+marks or answers, feature rows, filesystem details, credentials, and artifact
+metadata. The endpoint performs read-only queries and creates no predictions,
+training snapshots, interventions, school records, or artifacts. Phase 8 does
+not train or deploy a model, alter any readiness threshold or decision-support
+rule, or change `PredictionService`. There is no overall readiness percentage;
+each gate is reported independently, and deployment readiness remains false
+until a later authorized phase establishes it.

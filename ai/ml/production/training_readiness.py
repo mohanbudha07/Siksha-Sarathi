@@ -21,7 +21,10 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
-from ai.ml.production.feature_builder import build_training_dataset
+from ai.ml.production.feature_builder import (
+    build_source_evidence_summary,
+    build_training_dataset,
+)
 from ai.ml.production.feature_contract import (
     FEATURE_CONTRACT_VERSION,
     METADATA_COLUMNS,
@@ -541,7 +544,12 @@ def _validate_dataset_for_readiness(dataset: pd.DataFrame) -> Dict[str, Any]:
     return report
 
 
-def evaluate_training_dataset(dataset: pd.DataFrame, *, subject: str | None = None):
+def evaluate_training_dataset(
+    dataset: pd.DataFrame,
+    *,
+    subject: str | None = None,
+    run_baseline_evaluation: bool = True,
+):
     """Return a privacy-safe readiness evaluation from a DataFrame, with a deterministic temporal split when valid."""
     report = {
         "TRAINING_READINESS_VERSION": TRAINING_READINESS_VERSION,
@@ -657,22 +665,39 @@ def evaluate_training_dataset(dataset: pd.DataFrame, *, subject: str | None = No
         min(temporal["validation_dates"]),
         max(temporal["validation_dates"]),
     ] if temporal["validation_dates"] else None
+    report["validation_rows"] = int(len(validation))
+    report["validation_students"] = int(validation["student_id"].nunique())
 
-    try:
-        import sklearn
-        report["reproducibility"]["sklearn_version"] = sklearn.__version__
-    except Exception:
-        report["reproducibility"]["sklearn_version"] = None
+    if run_baseline_evaluation:
+        try:
+            import sklearn
+            report["reproducibility"]["sklearn_version"] = sklearn.__version__
+        except Exception:
+            report["reproducibility"]["sklearn_version"] = None
 
-    report["baseline_evaluation"] = _evaluate_models(train, validation)
-    report["reproducibility"]["model_parameters"] = {
-        model["model_name"]: model["params"] for model in report["baseline_evaluation"].get("models", [])
-    }
-    report["secondary_student_group_robustness"] = _secondary_grouped_robustness(eligible)
+        report["baseline_evaluation"] = _evaluate_models(train, validation)
+        report["reproducibility"]["model_parameters"] = {
+            model["model_name"]: model["params"] for model in report["baseline_evaluation"].get("models", [])
+        }
+        report["secondary_student_group_robustness"] = _secondary_grouped_robustness(eligible)
+    else:
+        report["readiness_state"] = "ready_for_evaluation"
+        report["state"] = "READY_FOR_EVALUATION"
+        report["baseline_evaluation"] = {
+            "status": "not_run",
+            "reason": "Model evaluation is not run by the readiness monitoring endpoint.",
+            "models": [],
+        }
     return report
 
 
-def build_training_readiness_report(connection, subject=None, *, minimum_eligible_snapshots=MIN_ELIGIBLE_ROWS):
+def build_training_readiness_report(
+    connection,
+    subject=None,
+    *,
+    minimum_eligible_snapshots=MIN_ELIGIBLE_ROWS,
+    run_baseline_evaluation=True,
+):
     """Build a privacy-safe readiness report from the canonical production dataset."""
     dataset = build_training_dataset(connection, subject=subject, include_ineligible=True)
     if dataset is None or dataset.empty:
@@ -738,11 +763,123 @@ def build_training_readiness_report(connection, subject=None, *, minimum_eligibl
             },
         }
 
-    report = evaluate_training_dataset(eligible_dataset, subject=subject)
+    report = evaluate_training_dataset(
+        eligible_dataset,
+        subject=subject,
+        run_baseline_evaluation=run_baseline_evaluation,
+    )
     report["all_dataset_summary"] = _compute_aggregate_summary(dataset)
     if not dataset["eligible_for_prediction"].all() if "eligible_for_prediction" in dataset.columns else False:
         report["blockers"] = sorted(set(report.get("blockers", [])) | {"ineligible_rows_present"})
     return report
+
+
+def build_admin_training_readiness_report(connection):
+    """Build the admin-safe Phase 8 response from canonical Phase 7 readiness."""
+    phase7 = build_training_readiness_report(
+        connection,
+        run_baseline_evaluation=False,
+    )
+    summary = phase7.get("privacy_safe_summary") or {}
+    eligible_snapshots = int(
+        phase7.get("eligible_training_snapshots", summary.get("eligible_rows", 0)) or 0
+    )
+    unique_students = int(phase7.get("unique_students", summary.get("unique_students", 0)) or 0)
+    unique_target_dates = int(
+        phase7.get("unique_target_dates", summary.get("unique_target_dates", 0)) or 0
+    )
+    evaluation_ready = bool(phase7.get("evaluation_ready"))
+
+    progress = {
+        "eligible_snapshots": {
+            "current": eligible_snapshots,
+            "required": MIN_ELIGIBLE_ROWS,
+            "met": eligible_snapshots >= MIN_ELIGIBLE_ROWS,
+            "available": True,
+        },
+        "unique_students": {
+            "current": unique_students,
+            "required": MIN_UNIQUE_STUDENTS,
+            "met": unique_students >= MIN_UNIQUE_STUDENTS,
+            "available": True,
+        },
+        "unique_target_dates": {
+            "current": unique_target_dates,
+            "required": MIN_UNIQUE_TARGET_DATES,
+            "met": unique_target_dates >= MIN_UNIQUE_TARGET_DATES,
+            "available": True,
+        },
+        "validation_rows": {
+            "current": int(phase7["validation_rows"]) if evaluation_ready else None,
+            "required": MIN_VALIDATION_ROWS,
+            "met": bool(evaluation_ready and phase7["validation_rows"] >= MIN_VALIDATION_ROWS),
+            "available": evaluation_ready,
+        },
+        "validation_students": {
+            "current": int(phase7["validation_students"]) if evaluation_ready else None,
+            "required": MIN_VALIDATION_STUDENTS,
+            "met": bool(evaluation_ready and phase7["validation_students"] >= MIN_VALIDATION_STUDENTS),
+            "available": evaluation_ready,
+        },
+    }
+
+    state = phase7.get("readiness_state", "pipeline_only")
+    state_explanations = {
+        "pipeline_only": "The feature pipeline is available, but no eligible historical training snapshots exist yet.",
+        "insufficient_data": "Some genuine evidence exists, but one or more Phase 7 data or temporal validation gates are not met.",
+        "data_quality_blocked": "The available dataset has a structural or data-quality issue that must be resolved at its source.",
+        "ready_for_evaluation": "The Phase 7 data and temporal holdout gates are met. This monitoring request did not run model evaluation.",
+        "evaluation_ready": "The Phase 7 data and temporal holdout gates are met.",
+        "evaluated_not_deployed": "Evaluation has been completed, but deployment is a separate later-phase decision.",
+    }
+    blocker_messages = {
+        "empty_dataset": "No valid scored paper-assessment target rows exist yet; no eligible historical training snapshots are available.",
+        "empty_eligible_dataset": "Scored targets exist, but none has earlier qualifying quiz or paper evidence for the same student, class, and subject.",
+        "ineligible_rows_present": "Some source assessment rows do not meet the historical snapshot eligibility rules.",
+        "insufficient_temporal_validation": "Not enough historical target dates, validation rows, or validation students are available for a time-safe holdout.",
+        "missing_feature_columns": "The canonical feature dataset is missing required model features.",
+        "missing_required_metadata": "The canonical feature dataset is missing required assessment metadata.",
+        "non_finite_features": "One or more model features are not finite numeric values.",
+        "non_finite_target": "One or more assessment targets are not finite numeric values.",
+        "invalid_target_range": "One or more assessment targets fall outside the valid 0 to 100 range.",
+        "missing_target_dates": "One or more target assessments do not have a valid date.",
+        "duplicate_snapshot_identity": "The source data contains duplicate historical snapshot identities.",
+    }
+    blocker_codes = [str(code) for code in phase7.get("blockers", [])]
+    messages = [blocker_messages[code] for code in blocker_codes if code in blocker_messages]
+    for key, label in (
+        ("eligible_snapshots", "eligible historical snapshots"),
+        ("unique_students", "students with eligible snapshots"),
+        ("unique_target_dates", "distinct eligible target dates"),
+    ):
+        gate = progress[key]
+        if gate["available"] and not gate["met"]:
+            messages.append(f"The {label} gate is not met ({gate['current']} of {gate['required']}).")
+    if not evaluation_ready:
+        messages.append("Validation coverage becomes measurable once enough historical target dates exist for a temporal holdout.")
+
+    safe_blockers = [code for code in blocker_codes if code in blocker_messages]
+    return {
+        "readiness": {
+            "state": state,
+            "state_explanation": state_explanations.get(state, "The dataset has not passed all Phase 7 readiness checks."),
+            "training_ready": bool(phase7.get("training_ready")),
+            "evaluation_ready": evaluation_ready,
+            "deployment_ready": False,
+            "blockers": safe_blockers,
+            "blocker_messages": list(dict.fromkeys(messages)),
+            "warnings": [],
+        },
+        "progress": progress,
+        "source_evidence": build_source_evidence_summary(connection),
+        "guidance": [
+            "Eligible historical snapshots require a scored paper assessment with earlier quiz or paper evidence for the same student, class, and subject.",
+            "Genuine quiz activity can contribute evidence for a later paper assessment; quiz attempts alone are not eligible training snapshots.",
+            "Teachers should record and publish valid paper assessment scores as part of normal academic activity.",
+            "Evidence must accumulate across multiple students and distinct target assessment dates.",
+            "Attendance alone does not make a historical snapshot academically eligible.",
+        ],
+    }
 
 
 def repository_root():

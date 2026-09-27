@@ -6,6 +6,7 @@ import pandas as pd
 
 from ai.ml.production.feature_builder import (
     build_feature_row_for_target,
+    build_source_evidence_summary,
     build_training_dataset,
     generate_diagnostics,
 )
@@ -20,6 +21,7 @@ from ai.ml.production.training_readiness import (
     _candidate_models,
     _evaluate_models,
     _temporal_split,
+    build_admin_training_readiness_report,
     build_training_readiness_report,
     evaluate_training_dataset,
 )
@@ -149,6 +151,9 @@ class ProductionFeaturePipelineTests(unittest.TestCase):
             )
             """
         )
+        connection.execute("CREATE TABLE students (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE classes (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE subjects (id INTEGER PRIMARY KEY)")
 
     def test_training_dataset_uses_production_contract(self):
         connection = self._connect()
@@ -515,6 +520,135 @@ class ProductionFeaturePipelineTests(unittest.TestCase):
         self.assertTrue(report["training_ready"])
         self.assertTrue(report["evaluation_ready"])
         self.assertEqual(report["readiness_state"], "evaluation_ready")
+
+    def test_monitoring_readiness_does_not_run_baseline_models(self):
+        with patch(
+            "ai.ml.production.training_readiness._evaluate_models",
+            side_effect=AssertionError("monitoring must not evaluate models"),
+        ):
+            report = evaluate_training_dataset(
+                self._readiness_dataset(),
+                run_baseline_evaluation=False,
+            )
+        self.assertTrue(report["evaluation_ready"])
+        self.assertEqual(report["readiness_state"], "ready_for_evaluation")
+        self.assertEqual(report["baseline_evaluation"]["status"], "not_run")
+        self.assertEqual(report["validation_rows"], 30)
+        self.assertEqual(report["validation_students"], 30)
+
+    def test_source_evidence_summary_reports_empty_database_as_aggregate_zeros(self):
+        connection = self._connect()
+        self._seed_database(connection)
+        report = build_source_evidence_summary(connection)
+        self.assertEqual(
+            report,
+            {
+                "total_students": 0,
+                "quiz_attempts": 0,
+                "students_with_quiz_attempts": 0,
+                "published_paper_assessments": 0,
+                "valid_scored_paper_rows": 0,
+                "students_with_valid_paper_evidence": 0,
+                "distinct_scored_paper_dates": 0,
+                "attendance_records": 0,
+                "subjects_with_academic_evidence": 0,
+                "classes_with_academic_evidence": 0,
+            },
+        )
+
+    def test_quiz_attempts_without_target_papers_are_not_eligible_snapshots(self):
+        connection = self._connect()
+        self._seed_database(connection)
+        connection.execute("INSERT INTO students (id) VALUES (11)")
+        connection.execute("INSERT INTO classes (id) VALUES (7)")
+        connection.execute("INSERT INTO subjects (id) VALUES (1)")
+        connection.execute("INSERT INTO quiz_sessions (id, class_id, student_id) VALUES (1, 7, 11)")
+        connection.execute("INSERT INTO quizzes (id, subject) VALUES (1, 'Math')")
+        connection.execute(
+            "INSERT INTO quiz_results (id, quiz_id, quiz_session_id, student_id, score, total_questions, created_at) VALUES (1, 1, 1, 11, 8, 10, '2024-02-01T09:00:00')"
+        )
+        connection.commit()
+
+        report = build_admin_training_readiness_report(connection)
+        self.assertEqual(report["source_evidence"]["quiz_attempts"], 1)
+        self.assertEqual(report["source_evidence"]["students_with_quiz_attempts"], 1)
+        self.assertEqual(report["source_evidence"]["published_paper_assessments"], 0)
+        self.assertEqual(report["progress"]["eligible_snapshots"]["current"], 0)
+        self.assertEqual(report["readiness"]["blockers"], ["empty_dataset"])
+
+    def test_paper_score_without_prior_academic_evidence_is_not_eligible(self):
+        connection = self._connect()
+        self._seed_database(connection)
+        connection.execute("INSERT INTO students (id) VALUES (11)")
+        connection.execute("INSERT INTO classes (id) VALUES (7)")
+        connection.execute("INSERT INTO subjects (id) VALUES (1)")
+        connection.execute(
+            "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (1, 7, 'Math', '2024-03-01', 100, 1)"
+        )
+        connection.execute(
+            "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (1, 11, 72, 0, '2024-03-01T08:00:00', '2024-03-01T08:00:00')"
+        )
+        connection.commit()
+
+        report = build_admin_training_readiness_report(connection)
+        self.assertEqual(report["source_evidence"]["valid_scored_paper_rows"], 1)
+        self.assertEqual(report["source_evidence"]["students_with_valid_paper_evidence"], 1)
+        self.assertEqual(report["progress"]["eligible_snapshots"]["current"], 0)
+        self.assertEqual(report["readiness"]["blockers"], ["empty_eligible_dataset"])
+
+    def test_non_finite_paper_score_is_excluded_from_valid_source_evidence(self):
+        connection = self._connect()
+        self._seed_database(connection)
+        connection.execute(
+            "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (1, 7, 'Math', '2024-03-01', 100, 1)"
+        )
+        connection.execute(
+            "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (1, 11, 'NaN', 0, '2024-03-01T08:00:00', '2024-03-01T08:00:00')"
+        )
+        connection.commit()
+
+        report = build_source_evidence_summary(connection)
+        self.assertEqual(report["published_paper_assessments"], 1)
+        self.assertEqual(report["valid_scored_paper_rows"], 0)
+        self.assertEqual(report["students_with_valid_paper_evidence"], 0)
+
+    def test_genuine_prior_quiz_and_later_paper_produce_one_eligible_snapshot(self):
+        connection = self._connect()
+        self._seed_database(connection)
+        connection.execute("INSERT INTO students (id) VALUES (11)")
+        connection.execute("INSERT INTO classes (id) VALUES (7)")
+        connection.execute("INSERT INTO subjects (id) VALUES (1)")
+        connection.execute(
+            "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (1, 7, 'Math', '2024-03-01', 100, 1)"
+        )
+        connection.execute(
+            "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (1, 11, 72, 0, '2024-03-01T08:00:00', '2024-03-01T08:00:00')"
+        )
+        connection.execute("INSERT INTO quiz_sessions (id, class_id, student_id) VALUES (1, 7, 11)")
+        connection.execute("INSERT INTO quizzes (id, subject) VALUES (1, 'Math')")
+        connection.execute(
+            "INSERT INTO quiz_results (id, quiz_id, quiz_session_id, student_id, score, total_questions, created_at) VALUES (1, 1, 1, 11, 8, 10, '2024-02-01T09:00:00')"
+        )
+        connection.commit()
+
+        report = build_admin_training_readiness_report(connection)
+        self.assertEqual(report["source_evidence"]["quiz_attempts"], 1)
+        self.assertEqual(report["source_evidence"]["valid_scored_paper_rows"], 1)
+        self.assertEqual(report["source_evidence"]["distinct_scored_paper_dates"], 1)
+        self.assertEqual(report["source_evidence"]["subjects_with_academic_evidence"], 1)
+        self.assertEqual(report["source_evidence"]["classes_with_academic_evidence"], 1)
+        self.assertEqual(report["progress"]["eligible_snapshots"]["current"], 1)
+
+    def test_source_evidence_response_contains_no_individual_identity_fields(self):
+        connection = self._connect()
+        self._seed_database(connection)
+        report = build_admin_training_readiness_report(connection)
+        forbidden = {
+            "student_id", "user_id", "teacher_user_id", "student_name", "full_name",
+            "username", "email", "marks_obtained", "features", "feature_vector",
+        }
+        self.assertTrue(forbidden.isdisjoint(report["source_evidence"]))
+        self.assertTrue(all(isinstance(value, int) for value in report["source_evidence"].values()))
 
     def test_temporal_split_keeps_train_dates_strictly_before_validation_dates(self):
         split = _temporal_split(self._readiness_dataset())
