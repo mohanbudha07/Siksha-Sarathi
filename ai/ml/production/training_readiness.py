@@ -463,7 +463,12 @@ def _evaluate_models(train: pd.DataFrame, validation: pd.DataFrame) -> Dict[str,
         preds = estimator.predict(X_validation)
         mae = float(np.mean(np.abs(preds - y_validation)))
         rmse = float(np.sqrt(np.mean((preds - y_validation) ** 2)))
-        r2 = float(1.0 - (np.sum((y_validation - preds) ** 2) / np.sum((y_validation - y_validation.mean()) ** 2))) if np.sum((y_validation - y_validation.mean()) ** 2) > 0 else 1.0
+        validation_variance = np.sum((y_validation - y_validation.mean()) ** 2)
+        r2 = (
+            float(1.0 - (np.sum((y_validation - preds) ** 2) / validation_variance))
+            if validation_variance > 0
+            else None
+        )
         if name == "DummyRegressor":
             dummy_ref = mae
         models.append(
@@ -471,7 +476,7 @@ def _evaluate_models(train: pd.DataFrame, validation: pd.DataFrame) -> Dict[str,
                 "model_name": name,
                 "mae": round(mae, 4),
                 "rmse": round(rmse, 4),
-                "r2": round(r2, 4),
+                "r2": round(r2, 4) if r2 is not None else None,
                 "params": params,
                 "mae_improvement_vs_dummy": 0.0 if dummy_ref is None and name == "DummyRegressor" else (0.0 if dummy_ref == 0 else round(dummy_ref - mae, 4)),
             }

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import joblib
 import numpy as np
+import pandas as pd
 
 from ai.ml.production.artifact_loader import (
     ARTIFACT_CORRUPT,
@@ -27,6 +28,10 @@ from ai.ml.production.prediction_service import (
     PredictionService,
 )
 from ai.ml.production.feature_builder import build_live_feature_row
+from ai.ml.production.model_training import (
+    assess_candidate_approval,
+    package_approved_candidate,
+)
 
 
 class StubModel:
@@ -319,6 +324,45 @@ class ProductionRuntimeTests(unittest.TestCase):
         self.assertEqual(result["status"], PREDICTION_AVAILABLE)
         self.assertEqual(result["prediction_percent"], 72.5)
         self.assertEqual(model.received_columns, MODEL_FEATURE_COLUMNS)
+        self.assertEqual(result["feature_contract_version"], FEATURE_CONTRACT_VERSION)
+
+    def test_prediction_service_loads_approved_staged_candidate(self):
+        from sklearn.linear_model import Ridge
+
+        connection = self._eligible_connection()
+        training_row = {
+            "student_id": 11,
+            "target_assessment_date": "2024-02-01",
+            **{column: 0.0 for column in MODEL_FEATURE_COLUMNS},
+        }
+        training_dataset = pd.DataFrame([training_row])
+        training_features = training_dataset[MODEL_FEATURE_COLUMNS]
+        model = Ridge(alpha=10.0).fit(training_features, [72.0])
+        evaluation = {
+            "models": [
+                {"model_name": "DummyRegressor", "mae": 10.0, "rmse": 12.0, "r2": None},
+                {"model_name": "Ridge", "mae": 8.0, "rmse": 9.0, "r2": None},
+            ]
+        }
+        approval = assess_candidate_approval(evaluation)
+        self.assertEqual(approval["status"], "candidate_approval_eligible")
+
+        with tempfile.TemporaryDirectory() as directory:
+            staging = Path(directory) / "staging"
+            packaged = package_approved_candidate(
+                model=model,
+                model_name="Ridge",
+                eligible_dataset=training_dataset,
+                evaluation_report={"feature_names": list(MODEL_FEATURE_COLUMNS)},
+                approval=approval,
+                output_dir=staging,
+            )
+            self.assertEqual(packaged["status"], "candidate_packaged")
+            service = PredictionService(ProductionArtifactLoader(staging))
+            result = service.predict(connection, 11, 7, "Math", "2024-02-15")
+
+        self.assertEqual(result["status"], PREDICTION_AVAILABLE)
+        self.assertEqual(result["prediction_percent"], 72.0)
         self.assertEqual(result["feature_contract_version"], FEATURE_CONTRACT_VERSION)
 
     def test_invalid_predictions_fall_back(self):

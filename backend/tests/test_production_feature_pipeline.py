@@ -753,6 +753,13 @@ class ProductionFeaturePipelineTests(unittest.TestCase):
             expected_improvement = 0.0 if dummy_mae == 0 else round(dummy_mae - model["mae"], 4)
             self.assertEqual(model["mae_improvement_vs_dummy"], expected_improvement)
 
+    def test_baseline_reports_unavailable_r2_for_constant_validation_target(self):
+        split = _temporal_split(self._readiness_dataset())
+        validation = split["validation"].copy()
+        validation[TARGET_COLUMN] = 65.0
+        report = _evaluate_models(split["train"], validation)
+        self.assertTrue(all(model["r2"] is None for model in report["models"]))
+
     def test_estimators_receive_only_ordered_model_features(self):
         class RecordingEstimator:
             def __init__(self):

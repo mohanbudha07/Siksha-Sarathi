@@ -140,3 +140,79 @@ not train or deploy a model, alter any readiness threshold or decision-support
 rule, or change `PredictionService`. There is no overall readiness percentage;
 each gate is reported independently, and deployment readiness remains false
 until a later authorized phase establishes it.
+
+## Phase 9 guarded local candidate training
+
+Phase 9 defines a fail-closed local path from genuine MySQL evidence to an
+explicitly staged, loader-validated candidate. It does not synthesize school
+records, use UCI research data, use `performance_model.pkl` or
+`label_encoder.pkl`, change the feature contract, or alter prediction or
+decision-support behavior.
+
+Run the real-database readiness gate and temporal candidate evaluation without
+writing files:
+
+`python -m ai.ml.production.train_local_model --dry-run`
+
+The training gate calls the canonical Phase 7 readiness analysis before fitting
+any estimator. Both `training_ready` and `evaluation_ready` must be true. A
+failure returns `training_refused` with aggregate counts and blockers; it does
+not fit candidate models or create a directory. Phase 7 thresholds remain the
+only readiness thresholds. When gates pass, the fixed Phase 7 candidates
+(`DummyRegressor`, Ridge with `StandardScaler`, `RandomForestRegressor`, and
+`GradientBoostingRegressor`) are evaluated on the same deterministic temporal
+holdout. Selection ranks temporal-validation MAE; RMSE and R² are retained, and
+undefined R² is represented as unavailable.
+
+`MODEL_TRAINING_VERSION = "1"` and
+`MODEL_APPROVAL_POLICY_VERSION = "1"` identify this workflow and its policy.
+Dummy is an evaluation baseline only and can never be selected for packaging.
+A non-Dummy candidate must have finite MAE/RMSE and finite R² when defined, beat
+Dummy on temporal-validation MAE, and achieve at least
+`MIN_MAE_IMPROVEMENT_VS_DUMMY = 0.10` relative MAE improvement. This 10% value is
+a Siksha Sarathi project approval heuristic, not a universal scientific rule.
+It is not lowered to make a candidate pass. Passing is called
+`candidate_approval_eligible`, not a claim of accuracy or production readiness.
+
+Only after that policy passes does the workflow create a fresh instance of the
+selected candidate and fit it on all eligible production rows, using exactly
+`MODEL_FEATURE_COLUMNS`. Packaging requires an explicit staging directory, for
+example:
+
+`python -m ai.ml.production.train_local_model --output-dir /tmp/siksha-model-candidate`
+
+Staging is separate from `ai/ml/production/artifacts/` and contains only
+`model.joblib`, `manifest.json`, and `evaluation_report.json`. It contains no
+training rows or identities. The manifest reuses the existing
+`ProductionArtifactLoader` contract, including artifact/model/feature/target
+metadata, timestamps, source, aggregate training counts, validation strategy
+and metrics, relative model filename, and checksum. SHA-256 is calculated from
+the serialized model bytes after writing the model file.
+
+Before publishing the staging directory, the workflow loads it through
+`ProductionArtifactLoader` and runs a smoke inference using one in-memory
+eligible feature row. Exactly one finite prediction in the supported 0-100 range
+is required. The row and prediction value are not written to reports. Loader or
+smoke failure rejects the package and removes the temporary package directory.
+
+Training never promotes automatically. Promotion is a separate explicit
+operator action:
+
+`python -m ai.ml.production.train_local_model --promote-from /tmp/siksha-model-candidate`
+
+If an active artifact already exists, promotion refuses replacement unless
+`--replace-active` is also supplied. A replacement retains the previous
+artifact in a sibling `artifacts.backup-*` directory; a failed install restores
+the previous active directory. For rollback, stop the backend, move the current
+`artifacts` directory aside, restore the desired retained backup to the
+`artifacts` name, then restart the backend. After any successful promotion,
+restart the backend so its cached `ProductionArtifactLoader` result is not
+stale. No hot reload is performed.
+
+The current real MySQL dataset remains `pipeline_only` with `empty_dataset`,
+zero eligible snapshots/students/target dates, and both training and evaluation
+gates false. Consequently the real CLI must return `training_refused`, perform
+no estimator fit, and create no staging bundle, manifest, model, or production
+artifact directory. Synthetic DataFrames in automated tests verify code paths
+only; they do not demonstrate school-model accuracy, validate Nepalese student
+outcomes, or make the real database ready.
