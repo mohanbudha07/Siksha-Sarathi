@@ -263,6 +263,192 @@ class PredictionApiTests(unittest.TestCase):
         for forbidden in ("path", "checksum", "manifest", "/private"):
             self.assertNotIn(forbidden, serialized)
 
+    def test_admin_monitoring_status_api_reports_truthful_no_model_state(self):
+        path = "/api/admin/ml/monitoring-status"
+        self.login("teacher")
+        self.assertEqual(self.client.get(path).status_code, 403)
+        self.login("student")
+        self.assertEqual(self.client.get(path).status_code, 403)
+        with self.client.session_transaction() as session:
+            session.clear()
+        self.assertEqual(self.client.get(path).status_code, 401)
+
+        self.login("admin")
+        response = self.client.get(path)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["status"], "model_unavailable")
+        self.assertFalse(response.json["available"])
+        self.assertEqual(response.json["monitoring_state"], "no_model")
+        self.assertFalse(response.json["retraining_required"])
+        self.assertEqual(response.json["observed_metrics"], {})
+
+    def test_teacher_prediction_records_valid_production_audit(self):
+        self.login("teacher")
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS ml_prediction_audits (id INTEGER PRIMARY KEY, student_id INTEGER, teacher_user_id INTEGER, class_id INTEGER, subject TEXT, as_of_date TEXT, prediction_status TEXT, prediction_percent REAL, fallback TEXT, reason TEXT, model_version TEXT, model_type TEXT, artifact_version TEXT, feature_contract_version TEXT, validation_mae REAL, model_training_timestamp TEXT, UNIQUE(student_id, class_id, subject, as_of_date, model_version))"
+        )
+        self.service.result = {
+            "status": "prediction_available",
+            "prediction_percent": 73.5,
+            "fallback": None,
+            "reason": None,
+            "evidence": {"academic_evidence_count": 1},
+        }
+        self.service.loader = SimpleNamespace(
+            load=lambda: SimpleNamespace(
+                available=True,
+                status="prediction_available",
+                manifest={
+                    "artifact_version": "v-route-audit",
+                    "model_type": "gradient_boosting",
+                    "feature_contract_version": "1",
+                    "validation_metrics": {"mae": 9.2},
+                    "training_timestamp": "2026-09-01T00:00:00+00:00",
+                },
+            )
+        )
+        response = self.request_prediction()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ml_prediction_audits").fetchone()[0], 1)
+
+    def test_teacher_prediction_refresh_does_not_duplicate_audit(self):
+        self.login("teacher")
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS ml_prediction_audits (id INTEGER PRIMARY KEY, student_id INTEGER, teacher_user_id INTEGER, class_id INTEGER, subject TEXT, as_of_date TEXT, prediction_status TEXT, prediction_percent REAL, fallback TEXT, reason TEXT, model_version TEXT, model_type TEXT, artifact_version TEXT, feature_contract_version TEXT, validation_mae REAL, model_training_timestamp TEXT, UNIQUE(student_id, class_id, subject, as_of_date, model_version))"
+        )
+        self.service.result = {
+            "status": "prediction_available",
+            "prediction_percent": 73.5,
+            "fallback": None,
+            "reason": None,
+            "evidence": {"academic_evidence_count": 1},
+        }
+        self.service.loader = SimpleNamespace(
+            load=lambda: SimpleNamespace(
+                available=True,
+                status="prediction_available",
+                manifest={
+                    "artifact_version": "v-route-audit",
+                    "model_type": "gradient_boosting",
+                    "feature_contract_version": "1",
+                    "validation_metrics": {"mae": 9.2},
+                    "training_timestamp": "2026-09-01T00:00:00+00:00",
+                },
+            )
+        )
+        first = self.request_prediction()
+        second = self.request_prediction()
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ml_prediction_audits").fetchone()[0], 1)
+
+    def test_model_unavailable_prediction_does_not_create_audit(self):
+        self.login("teacher")
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS ml_prediction_audits (id INTEGER PRIMARY KEY, student_id INTEGER, teacher_user_id INTEGER, class_id INTEGER, subject TEXT, as_of_date TEXT, prediction_status TEXT, prediction_percent REAL, fallback TEXT, reason TEXT, model_version TEXT, model_type TEXT, artifact_version TEXT, feature_contract_version TEXT, validation_mae REAL, model_training_timestamp TEXT, UNIQUE(student_id, class_id, subject, as_of_date, model_version))"
+        )
+        self.service.result = {
+            "status": "model_unavailable",
+            "prediction_percent": None,
+            "fallback": "observed_analytics",
+            "reason": "no model",
+            "evidence": {"academic_evidence_count": 1},
+        }
+        self.service.loader = SimpleNamespace(
+            load=lambda: SimpleNamespace(
+                available=False,
+                status="model_unavailable",
+                manifest=None,
+            )
+        )
+        response = self.request_prediction()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ml_prediction_audits").fetchone()[0], 0)
+
+    def test_insufficient_evidence_prediction_does_not_create_audit(self):
+        self.login("teacher")
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS ml_prediction_audits (id INTEGER PRIMARY KEY, student_id INTEGER, teacher_user_id INTEGER, class_id INTEGER, subject TEXT, as_of_date TEXT, prediction_status TEXT, prediction_percent REAL, fallback TEXT, reason TEXT, model_version TEXT, model_type TEXT, artifact_version TEXT, feature_contract_version TEXT, validation_mae REAL, model_training_timestamp TEXT, UNIQUE(student_id, class_id, subject, as_of_date, model_version))"
+        )
+        self.service.result = {
+            "status": "insufficient_evidence",
+            "prediction_percent": None,
+            "fallback": "observed_analytics",
+            "reason": "not enough evidence",
+            "evidence": {"academic_evidence_count": 1},
+        }
+        response = self.request_prediction()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ml_prediction_audits").fetchone()[0], 0)
+
+    def test_invalid_prediction_does_not_create_audit(self):
+        self.login("teacher")
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS ml_prediction_audits (id INTEGER PRIMARY KEY, student_id INTEGER, teacher_user_id INTEGER, class_id INTEGER, subject TEXT, as_of_date TEXT, prediction_status TEXT, prediction_percent REAL, fallback TEXT, reason TEXT, model_version TEXT, model_type TEXT, artifact_version TEXT, feature_contract_version TEXT, validation_mae REAL, model_training_timestamp TEXT, UNIQUE(student_id, class_id, subject, as_of_date, model_version))"
+        )
+        self.service.result = {
+            "status": "prediction_invalid",
+            "prediction_percent": None,
+            "fallback": "observed_analytics",
+            "reason": "bad prediction",
+            "evidence": {"academic_evidence_count": 1},
+        }
+        response = self.request_prediction()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ml_prediction_audits").fetchone()[0], 0)
+
+    def test_audit_failure_does_not_break_valid_teacher_prediction(self):
+        self.login("teacher")
+        self.service.result = {
+            "status": "prediction_available",
+            "prediction_percent": 73.5,
+            "fallback": None,
+            "reason": None,
+            "evidence": {"academic_evidence_count": 1},
+        }
+        self.service.loader = SimpleNamespace(
+            load=lambda: SimpleNamespace(
+                available=True,
+                status="prediction_available",
+                manifest={
+                    "artifact_version": "v-route-audit",
+                    "model_type": "gradient_boosting",
+                    "feature_contract_version": "1",
+                    "validation_metrics": {"mae": 9.2},
+                    "training_timestamp": "2026-09-01T00:00:00+00:00",
+                },
+            )
+        )
+        with patch("backend.ml_prediction_audit.record_prediction_audit", side_effect=RuntimeError("boom")):
+            response = self.request_prediction()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["prediction"]["status"], "prediction_available")
+
+    def test_unauthorized_teacher_does_not_create_prediction_audit(self):
+        self.login("teacher")
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS ml_prediction_audits (id INTEGER PRIMARY KEY, student_id INTEGER, teacher_user_id INTEGER, class_id INTEGER, subject TEXT, as_of_date TEXT, prediction_status TEXT, prediction_percent REAL, fallback TEXT, reason TEXT, model_version TEXT, model_type TEXT, artifact_version TEXT, feature_contract_version TEXT, validation_mae REAL, model_training_timestamp TEXT, UNIQUE(student_id, class_id, subject, as_of_date, model_version))"
+        )
+        self.login("other_teacher")
+        response = self.request_prediction(student_id=2, query="subject=Science")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM ml_prediction_audits").fetchone()[0], 0)
+
+    def test_prediction_response_does_not_expose_audit_internal_metadata(self):
+        self.login("teacher")
+        self.service.result = {
+            "status": "prediction_available",
+            "prediction_percent": 73.5,
+            "fallback": None,
+            "reason": None,
+            "evidence": {"academic_evidence_count": 1},
+        }
+        response = self.request_prediction()
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_data(as_text=True)
+        for forbidden in ("raw_features", "evidence_json", "checksum_sha256", "model_file", "artifact_path"):
+            self.assertNotIn(forbidden, payload)
+
     def test_current_real_loader_result_is_reported_as_model_unavailable(self):
         self.login("teacher")
         self.backend.app.extensions["prediction_service"] = PredictionService(

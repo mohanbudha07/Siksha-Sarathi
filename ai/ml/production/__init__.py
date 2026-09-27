@@ -14,6 +14,11 @@ from .feature_builder import (
     build_live_feature_row,
 )
 from .decision_support import DECISION_SUPPORT_VERSION, build_teacher_decision_support
+from .model_monitoring import (
+    MODEL_MONITORING_VERSION,
+    build_model_monitoring_report,
+    summarize_monitoring_status,
+)
 from .training_readiness import (
     MIN_ELIGIBLE_ROWS,
     MIN_UNIQUE_STUDENTS,
@@ -50,6 +55,9 @@ __all__ = [
     "build_live_feature_row",
     "DECISION_SUPPORT_VERSION",
     "build_teacher_decision_support",
+    "MODEL_MONITORING_VERSION",
+    "build_model_monitoring_report",
+    "summarize_monitoring_status",
     "TRAINING_READINESS_VERSION",
     "MIN_ELIGIBLE_ROWS",
     "MIN_UNIQUE_STUDENTS",

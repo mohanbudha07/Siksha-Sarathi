@@ -203,3 +203,25 @@ Run it after migration 013:
 
 The migration uses `INFORMATION_SCHEMA` guards and may be rerun after a
 successful run. It does not delete class-teacher or attendance history.
+
+## ML prediction monitoring audit migration
+
+Migration 015 creates `ml_prediction_audits`, which is a write-once audit table
+for production forecast requests. It stores actual teacher, student, class,
+subject, and result metadata without writing any fabricated monitoring
+signals. Historical model identity is preserved with `model_version`,
+`model_type`, `artifact_version`, `validation_mae`, and
+`model_training_timestamp`; these values let future monitoring compare the
+served model version against the original validation baseline even after the
+active artifact is replaced. The table intentionally does not store
+`evidence_json` because that payload can include raw feature vectors, quiz
+answers, or other sensitive values and is not required for model-version
+monitoring.
+
+Run it after migration 014:
+
+    sudo mysql siksha_sarathi < migrations/015_ml_prediction_monitoring.sql
+
+The table keeps request metadata only. When no production artifact exists, the
+system returns a no-model state and leaves any monitoring or retraining claim
+empty; it does not create synthetic model health data.
