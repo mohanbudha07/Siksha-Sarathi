@@ -142,10 +142,34 @@
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .answer-top strong {
   color: #1e293b;
+}
+
+.grounding-indicator {
+  margin-bottom: 10px;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.grounding-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.source-chip {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 12px;
 }
 
 .subject-badge {
@@ -244,6 +268,29 @@
   margin-top: 20px;
 }
 
+.subject-picker-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  color: #334155;
+  font-size: 14px;
+}
+
+.subject-picker-wrap label {
+  font-weight: 600;
+}
+
+.subject-picker-wrap select {
+  flex: 1;
+  max-width: 220px;
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  color: #111827;
+}
+
 .ai-input-area textarea {
   width: 100%;
   box-sizing: border-box;
@@ -325,6 +372,15 @@
 
   .online-status {
     display: none;
+  }
+
+  .subject-picker-wrap {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .subject-picker-wrap select {
+    max-width: none;
   }
 
   .input-footer {
