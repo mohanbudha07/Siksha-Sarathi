@@ -20,6 +20,11 @@ from backend.routes.quiz import (
 )
 from backend.student_access import fetch_student_context
 from ai.ml.production.prediction_service import PredictionService
+from ai.ml.production.learning_recommendations import (
+    LEARNING_RECOMMENDATION_VERSION,
+    build_learning_recommendations,
+    recommendation_source_kind,
+)
 
 import os
 import json
@@ -416,11 +421,89 @@ def student_dashboard_api():
 # STUDENT NOTES
 # ============================================================
 
+def fetch_learning_recommendation_resources(cur, class_id, subject_names):
+    """Fetch only published resources visible in this class's assigned subjects."""
+    if class_id is None or not subject_names:
+        return [], []
+    cur.execute(
+        """SELECT id, title, subject, chapter FROM notes
+           WHERE EXISTS (
+               SELECT 1
+               FROM teacher_class_subjects tcs
+               INNER JOIN subjects sub ON sub.id = tcs.subject_id
+               WHERE tcs.class_id = %s
+                 AND LOWER(TRIM(sub.name)) = LOWER(TRIM(notes.subject))
+           )
+           ORDER BY title, id""",
+        (class_id,),
+    )
+    notes = [
+        {
+            "id": note["id"],
+            "title": note["title"],
+            "subject": note["subject"],
+            "chapter": note["chapter"],
+            "authorized": str(note["subject"] or "").strip().casefold() in subject_names,
+        }
+        for note in cur.fetchall()
+        if str(note["subject"] or "").strip().casefold() in subject_names
+    ]
+
+    cur.execute(
+        """SELECT id, title, subject, questions FROM quizzes
+           WHERE is_published = TRUE ORDER BY title, id"""
+    )
+    quizzes = []
+    for quiz in cur.fetchall():
+        subject = str(quiz["subject"] or "").strip()
+        if subject.casefold() not in subject_names:
+            continue
+        if quiz_has_open_lab_session(cur, quiz["id"]):
+            continue
+        try:
+            questions = parse_quiz_questions(
+                quiz["questions"], quiz["subject"] or "General"
+            )
+        except (TypeError, ValueError):
+            continue
+        quizzes.append({
+            "id": quiz["id"],
+            "title": quiz["title"],
+            "subject": subject,
+            "topics": [question["topic"] for question in questions],
+            "is_published": True,
+            "protected": False,
+            "authorized": True,
+        })
+    return notes, quizzes
+
+
+def _legacy_practice_topics(recommendations):
+    """Derive the historical student response field from canonical recommendations."""
+    topics = []
+    for recommendation in recommendations:
+        if recommendation.get("kind") != "topic_review":
+            continue
+        evidence = recommendation["evidence"]
+        topics.append({
+            "subject": recommendation["subject"],
+            "topic": recommendation["topic"],
+            "total_questions": evidence["total_questions"],
+            "distinct_questions": evidence["distinct_questions"],
+            "correct_answers": evidence["correct_answers"],
+            "skipped_answers": evidence["skipped_answers"],
+            "accuracy_percent": evidence["accuracy_percent"],
+            "steps": [recommendation["next_step"]],
+            "notes": recommendation["resources"]["notes"],
+            "quizzes": recommendation["resources"]["quizzes"],
+        })
+    return topics
+
 @app.route("/api/student/practice-plan", methods=["GET"])
 @login_required
 @role_required(STUDENT)
 def student_practice_plan_api():
-    """Suggest practice from the student's recent, tagged quiz answers."""
+    """Build personal next steps from the student's own observed evidence."""
     cur = mysql.connection.cursor()
     try:
         context = fetch_student_context(cur, session["user_id"])
@@ -428,7 +511,7 @@ def student_practice_plan_api():
             return {"error": "Student profile not found"}, 404
         student_id = context["student_id"]
         subject_names = context["subject_names"]
-
+        current_class = context["current_class"]
         cur.execute(
             """
             SELECT q.subject, qar.topic,
@@ -448,104 +531,160 @@ def student_practice_plan_api():
             """,
             (student_id,)
         )
-        rows = cur.fetchall()
-        priorities = []
-        for row in rows:
-            subject = str(row["subject"] or "").strip()
-            if subject.casefold() not in subject_names:
+        topic_rows = cur.fetchall()
+        subjects_by_key = {
+            str(subject["name"]).strip().casefold(): str(subject["name"]).strip()
+            for subject in context["subjects"]
+            if str(subject.get("name") or "").strip()
+        }
+        topics_by_subject = {key: [] for key in subjects_by_key}
+        for row in topic_rows:
+            subject_key = str(row["subject"] or "").strip().casefold()
+            if subject_key not in topics_by_subject:
                 continue
-            topic = str(row["topic"] or "").strip()
-            if not topic or topic.casefold() in {"unspecified", subject.casefold()}:
-                continue
-            total = int(row["total_questions"] or 0)
-            correct = int(row["correct_answers"] or 0)
-            if total < 3 or int(row["distinct_questions"] or 0) < 2:
-                continue
-            accuracy = round(100 * correct / total, 2)
-            if accuracy >= 60:
-                continue
-            priorities.append({
-                "subject": subject, "topic": topic,
-                "total_questions": total, "correct_answers": correct,
+            topics_by_subject[subject_key].append({
+                "topic": row["topic"],
+                "total_questions": int(row["total_questions"] or 0),
+                "distinct_questions": int(row["distinct_questions"] or 0),
+                "correct_answers": int(row["correct_answers"] or 0),
                 "skipped_answers": int(row["skipped_answers"] or 0),
-                "accuracy_percent": accuracy,
-                "steps": [
-                    f"Review your notes about {topic}.",
-                    "Try a short practice quiz and check your answers.",
-                    "Ask your teacher about questions you still find difficult."
-                ],
-                "notes": [], "quizzes": []
             })
-        priorities.sort(key=lambda item: (
-            item["accuracy_percent"], -item["total_questions"],
-            item["subject"], item["topic"]
-        ))
-        priorities = priorities[:3]
 
-        if priorities:
-            cur.execute(
-                """SELECT id, title, subject, chapter FROM notes
-                   WHERE EXISTS (
-                       SELECT 1
-                       FROM teacher_class_subjects tcs
-                       INNER JOIN subjects sub ON sub.id = tcs.subject_id
-                       WHERE tcs.class_id = %s
-                         AND LOWER(TRIM(sub.name)) = LOWER(TRIM(notes.subject))
-                   )
-                   ORDER BY id DESC""",
-                (context["current_class"]["id"],)
-            )
-            notes = cur.fetchall()
+        cur.execute(
+            """
+            SELECT q.subject, COUNT(qar.id) AS total_questions,
+                   COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
+                   COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
+            FROM (SELECT id FROM quiz_results WHERE student_id = %s
+                  ORDER BY id DESC LIMIT 10) recent
+            INNER JOIN quiz_results qr ON qr.id = recent.id
+            INNER JOIN quizzes q ON q.id = qr.quiz_id
+            LEFT JOIN quiz_answer_results qar ON qar.quiz_result_id = qr.id
+            GROUP BY q.subject
+            """,
+            (student_id,),
+        )
+        quiz_summary_by_subject = {}
+        for row in cur.fetchall():
+            key = str(row["subject"] or "").strip().casefold()
+            if key in subjects_by_key:
+                quiz_summary_by_subject[key] = {
+                    "total_questions": int(row["total_questions"] or 0),
+                    "correct_answers": int(row["correct_answers"] or 0),
+                    "skipped_answers": int(row["skipped_answers"] or 0),
+                }
+
+        cur.execute(
+            """
+            SELECT q.subject, qar.topic, qar.question_text, COUNT(*) AS responses
+            FROM (SELECT id FROM quiz_results WHERE student_id = %s
+                  ORDER BY id DESC LIMIT 10) recent
+            INNER JOIN quiz_results qr ON qr.id = recent.id
+            INNER JOIN quizzes q ON q.id = qr.quiz_id
+            INNER JOIN quiz_answer_results qar ON qar.quiz_result_id = qr.id
+            WHERE qar.is_correct = FALSE AND qar.is_skipped = FALSE
+            GROUP BY q.subject, qar.topic, qar.question_text
+            """,
+            (student_id,),
+        )
+        repeated_by_topic = {}
+        for row in cur.fetchall():
+            subject_key = str(row["subject"] or "").strip().casefold()
+            topic_key = str(row["topic"] or "").strip().casefold()
+            if subject_key in subjects_by_key:
+                key = (subject_key, topic_key)
+                repeated_by_topic[key] = repeated_by_topic.get(key, 0) + max(
+                    0, int(row["responses"] or 0) - 1
+                )
+        for subject_key, topics in topics_by_subject.items():
+            for topic in topics:
+                topic["repeated_mistake_count"] = repeated_by_topic.get(
+                    (subject_key, str(topic["topic"] or "").strip().casefold()), 0
+                )
+
+        paper_by_subject = {}
+        if current_class and subject_names:
             cur.execute(
                 """
-                SELECT id, title, subject, questions FROM quizzes
-                WHERE is_published = TRUE
-                ORDER BY id DESC
-                """
+                SELECT pa.subject, COUNT(DISTINCT pa.id) AS graded_assessments,
+                       COALESCE(SUM(pas.marks_obtained), 0) AS marks_obtained,
+                       COALESCE(SUM(pa.max_marks), 0) AS maximum_marks,
+                       MAX(pa.assessment_date) AS latest_published_assessment_date
+                FROM paper_assessments pa
+                INNER JOIN paper_assessment_scores pas
+                    ON pas.assessment_id = pa.id
+                WHERE pas.student_id = %s AND pa.class_id = %s
+                  AND pa.is_published = TRUE AND pas.is_absent = FALSE
+                  AND pas.marks_obtained IS NOT NULL AND pa.max_marks > 0
+                  AND pas.marks_obtained >= 0 AND pas.marks_obtained <= pa.max_marks
+                GROUP BY pa.subject
+                """,
+                (student_id, current_class["id"]),
             )
-            quizzes = [
-                quiz for quiz in cur.fetchall()
-                if not quiz_has_open_lab_session(cur, quiz["id"])
-            ]
-            for priority in priorities:
-                subject = priority["subject"].casefold()
-                topic = priority["topic"].casefold()
-                priority["notes"] = [
-                    {"id": note["id"], "title": note["title"],
-                     "chapter": note["chapter"]}
-                    for note in notes
-                    if str(note["subject"] or "").casefold() == subject
-                    and topic in str(note["chapter"] or "").casefold()
-                ][:2]
-                for quiz in quizzes:
-                    if str(quiz["subject"] or "").casefold() != subject:
-                        continue
-                    try:
-                        questions = parse_quiz_questions(
-                            quiz["questions"], quiz["subject"] or "General"
-                        )
-                    except (TypeError, ValueError):
-                        continue
-                    if any(str(question["topic"]).casefold() == topic
-                           for question in questions):
-                        priority["quizzes"].append({
-                            "id": quiz["id"], "title": quiz["title"]
-                        })
-                    if len(priority["quizzes"]) >= 2:
-                        break
+            for row in cur.fetchall():
+                key = str(row["subject"] or "").strip().casefold()
+                if key not in subjects_by_key:
+                    continue
+                maximum = float(row["maximum_marks"] or 0)
+                paper_by_subject[key] = {
+                    "graded_assessments": int(row["graded_assessments"] or 0),
+                    "average_percent": round(
+                        100 * float(row["marks_obtained"] or 0) / maximum, 2
+                    ) if maximum else 0.0,
+                    "recent_published_assessment_available": bool(row["latest_published_assessment_date"]),
+                }
 
-        if priorities:
-            message = "Start with one topic, then check your progress with new questions."
-        elif rows:
-            message = (
-                "No clear topic to practise yet. Keep learning and try more "
-                "questions across different topics."
+        attendance = {"recorded_days": 0, "present_days": 0, "absent_days": 0, "attendance_percent": 0.0}
+        if current_class:
+            cur.execute(
+                """
+                SELECT COALESCE(SUM(mas.total_school_days), 0) AS recorded_days,
+                       COALESCE(SUM(mar.present_days), 0) AS present_days,
+                       COALESCE(SUM(mas.total_school_days - mar.present_days), 0) AS absent_days
+                FROM monthly_attendance_summaries mas
+                INNER JOIN monthly_attendance_records mar ON mar.summary_id = mas.id
+                WHERE mas.class_id = %s AND mar.student_id = %s
+                """,
+                (current_class["id"], student_id),
             )
-        else:
-            message = (
-                "Take a practice quiz to start building a plan for your learning."
-            )
-        return {"message": message, "topics": priorities}, 200
+            attendance_row = cur.fetchone() or {}
+            recorded = int(attendance_row.get("recorded_days") or 0)
+            present = int(attendance_row.get("present_days") or 0)
+            attendance = {
+                "recorded_days": recorded,
+                "present_days": present,
+                "absent_days": int(attendance_row.get("absent_days") or 0),
+                "attendance_percent": round(100 * present / recorded, 2) if recorded else 0.0,
+            }
+
+        subject_evidence = [
+            {
+                "subject": subject,
+                "topics": topics_by_subject[subject_key],
+                "quiz_summary": quiz_summary_by_subject.get(subject_key, {}),
+                "paper_evidence": paper_by_subject.get(subject_key, {}),
+            }
+            for subject_key, subject in subjects_by_key.items()
+        ]
+        notes, quizzes = fetch_learning_recommendation_resources(
+            cur,
+            current_class["id"] if current_class else None,
+            subject_names,
+        )
+        result = build_learning_recommendations(
+            {"subject_evidence": subject_evidence, "attendance_evidence": attendance},
+            notes=notes,
+            quizzes=quizzes,
+        )
+        return {
+            "recommendation_version": LEARNING_RECOMMENDATION_VERSION,
+            "provenance": result["provenance"],
+            "status": result["status"],
+            "evidence_state": result["evidence_state"],
+            "message": result["message"],
+            "recommendations": result["recommendations"],
+            "topics": _legacy_practice_topics(result["recommendations"]),
+        }, 200
     finally:
         cur.close()
 
@@ -969,74 +1108,76 @@ def fetch_student_attendance_metrics(cur, student_id, class_id):
     }
 
 
-def build_teacher_actions(topics, metrics, paper, attendance, subject):
-    """Suggest review steps from observed evidence, without predicting causes."""
+def build_teacher_recommendations(
+    topics,
+    metrics,
+    paper,
+    attendance,
+    subject,
+    *,
+    notes=(),
+    quizzes=(),
+    common_mistakes=(),
+):
+    """Normalize authorized profile evidence for the shared recommendation engine."""
+    repeated_by_topic = {}
+    for mistake in common_mistakes:
+        topic_key = str(mistake.get("topic") or "").strip().casefold()
+        repeated_by_topic[topic_key] = repeated_by_topic.get(topic_key, 0) + max(
+            0, int(mistake.get("mistake_count") or 0) - 1
+        )
+    normalized_topics = []
+    for topic in topics:
+        normalized_topics.append({
+            "topic": topic.get("topic"),
+            "total_questions": topic.get("total_questions", 0),
+            "distinct_questions": topic.get("distinct_questions", 0),
+            "correct_answers": topic.get("correct_answers", 0),
+            "skipped_answers": topic.get("skipped_answers", 0),
+            "repeated_mistake_count": repeated_by_topic.get(
+                str(topic.get("topic") or "").strip().casefold(), 0
+            ),
+        })
+    return build_learning_recommendations(
+        {
+            "subject": subject,
+            "topics": normalized_topics,
+            "quiz_summary": {
+                "total_questions": metrics.get("total_questions", 0),
+                "correct_answers": metrics.get("correct_answers", 0),
+                "skipped_answers": metrics.get("skipped_answers", 0),
+            },
+            "paper_evidence": paper,
+            "attendance_evidence": attendance,
+        },
+        notes=notes,
+        quizzes=quizzes,
+    )
+
+
+def teacher_actions_from_recommendations(recommendation_result):
+    """Preserve the existing teacher_actions contract for manual support plans."""
     actions = []
-    specific_topics = [
-        topic for topic in topics
-        if str(topic["topic"]).strip().casefold() not in
-        {"unspecified", str(subject).strip().casefold()}
-        and topic["total_questions"] >= 3
-        and topic["distinct_questions"] >= 2
-        and topic["accuracy_percent"] < 60
-    ]
-    for topic in specific_topics[:2]:
+    for recommendation in recommendation_result.get("recommendations", []):
         actions.append({
-            "kind": "topic",
-            "title": f'Review {topic["topic"]}',
-            "evidence": (
-                f'{topic["correct_answers"]}/{topic["total_questions"]} '
-                f'correct; {topic["skipped_answers"]} skipped'
+            "kind": recommendation_source_kind(recommendation["kind"]),
+            "recommendation_kind": recommendation["kind"],
+            "title": recommendation["title"],
+            "evidence": recommendation["reason"],
+            "suggestion": recommendation["next_step"],
+            "resources": recommendation.get(
+                "resources", {"notes": [], "quizzes": [], "note_message": None}
             ),
-            "suggestion": (
-                "Revisit the concept with a worked example, then give a "
-                "short practice quiz and check whether accuracy improves."
-            )
         })
-
-    if metrics["total_questions"] >= 4 and metrics["skip_percent"] >= 25:
-        actions.append({
-            "kind": "quiz",
-            "title": "Check unanswered quiz questions",
-            "evidence": (
-                f'{metrics["skipped_answers"]}/{metrics["total_questions"]} '
-                "questions skipped"
-            ),
-            "suggestion": (
-                "Ask which questions were unclear and offer guided practice. "
-                "A skipped answer does not identify the reason."
-            )
-        })
-
-    if paper["graded_assessments"] >= 2 and paper["average_percent"] < 60:
-        actions.append({
-            "kind": "paper",
-            "title": "Review paper assessment work",
-            "evidence": (
-                f'{paper["average_percent"]}% across '
-                f'{paper["graded_assessments"]} graded assessments'
-            ),
-            "suggestion": (
-                "Compare marked answers with the lesson objectives and "
-                "discuss where the student needs support."
-            )
-        })
-
-    if attendance["recorded_days"] >= 5 and attendance["absent_days"] >= 2:
-        actions.append({
-            "kind": "attendance",
-            "title": "Follow up on missed school days",
-            "evidence": (
-                f'{attendance["absent_days"]} absences in '
-                f'{attendance["recorded_days"]} recorded days'
-            ),
-            "suggestion": (
-                "Check in privately and offer a way to catch up on missed lessons. "
-                "Attendance alone does not explain learning performance."
-            )
-        })
-
     return actions
+
+
+def build_teacher_actions(topics, metrics, paper, attendance, subject):
+    """Backward-compatible wrapper backed by the canonical recommendation engine."""
+    result = build_teacher_recommendations(
+        topics, metrics, paper, attendance, subject
+    )
+    return teacher_actions_from_recommendations(result)
 
 
 def fetch_teacher_topic_priorities(cur, teacher_id):
@@ -1051,6 +1192,11 @@ def fetch_teacher_topic_priorities(cur, teacher_id):
         INNER JOIN subjects sub ON sub.id = tcs.subject_id
         INNER JOIN student_class_enrollments sce
             ON sce.class_id = tcs.class_id
+           AND sce.id = (
+               SELECT latest.id FROM student_class_enrollments latest
+               WHERE latest.student_id = sce.student_id
+               ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+           )
         INNER JOIN students s ON s.id = sce.student_id
         INNER JOIN quiz_results qr ON qr.student_id = s.id
         INNER JOIN quizzes q ON q.id = qr.quiz_id
@@ -1137,6 +1283,11 @@ def teacher_learning_analytics_api():
             INNER JOIN classes c ON c.id = tcs.class_id
             INNER JOIN subjects sub ON sub.id = tcs.subject_id
             INNER JOIN student_class_enrollments sce ON sce.class_id = c.id
+                AND sce.id = (
+                    SELECT latest.id FROM student_class_enrollments latest
+                    WHERE latest.student_id = sce.student_id
+                    ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+                )
             INNER JOIN students s ON s.id = sce.student_id
             WHERE tcs.teacher_user_id = %s
             ORDER BY s.full_name, sub.name
@@ -1219,6 +1370,11 @@ def teacher_student_learning_profile_api(student_id):
             INNER JOIN classes c ON c.id = tcs.class_id
             INNER JOIN subjects sub ON sub.id = tcs.subject_id
             INNER JOIN student_class_enrollments sce ON sce.class_id = c.id
+                AND sce.id = (
+                    SELECT latest.id FROM student_class_enrollments latest
+                    WHERE latest.student_id = sce.student_id
+                    ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+                )
             INNER JOIN students s ON s.id = sce.student_id
             WHERE tcs.teacher_user_id = %s
               AND s.id = %s
@@ -1328,10 +1484,6 @@ def teacher_student_learning_profile_api(student_id):
             })
         topics.sort(key=lambda item: (item["accuracy_percent"], -item["total_questions"]))
 
-        teacher_actions = build_teacher_actions(
-            topics, metrics, paper_metrics, attendance_metrics, subject
-        )
-
         cur.execute(
             """
             SELECT
@@ -1415,6 +1567,21 @@ def teacher_student_learning_profile_api(student_id):
         for mistake in common_mistakes:
             mistake["mistake_count"] = int(mistake["mistake_count"] or 0)
 
+        available_notes, available_quizzes = fetch_learning_recommendation_resources(
+            cur, student["class_id"], {str(student["subject"]).strip().casefold()}
+        )
+        recommendation_result = build_teacher_recommendations(
+            topics,
+            metrics,
+            paper_metrics,
+            attendance_metrics,
+            student["subject"],
+            notes=available_notes,
+            quizzes=available_quizzes,
+            common_mistakes=common_mistakes,
+        )
+        teacher_actions = teacher_actions_from_recommendations(recommendation_result)
+
         return {
             "student": student,
             "summary": metrics,
@@ -1423,6 +1590,10 @@ def teacher_student_learning_profile_api(student_id):
             "recent_paper_assessments": recent_paper_assessments,
             "recent_attendance": recent_attendance,
             "topics": topics,
+            "recommendation_version": LEARNING_RECOMMENDATION_VERSION,
+            "recommendation_provenance": recommendation_result["provenance"],
+            "recommendation_status": recommendation_result["status"],
+            "recommendations": recommendation_result["recommendations"],
             "teacher_actions": teacher_actions,
             "difficulties": difficulties,
             "recent_attempts": recent_attempts,
@@ -1448,6 +1619,11 @@ def fetch_teacher_support_class_id(cur, teacher_id, student_id, subject):
         FROM teacher_class_subjects tcs
         INNER JOIN subjects sub ON sub.id = tcs.subject_id
         INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+            AND sce.id = (
+                SELECT latest.id FROM student_class_enrollments latest
+                WHERE latest.student_id = sce.student_id
+                ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+            )
         INNER JOIN students s ON s.id = sce.student_id
         WHERE tcs.teacher_user_id = %s
           AND s.id = %s

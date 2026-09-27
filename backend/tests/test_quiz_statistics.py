@@ -707,6 +707,14 @@ class QuizStatisticsTests(unittest.TestCase):
                created_at,requires_session) VALUES(2,'Lab Force','Science',?,2,1,
                '2026-09-01',1)''', (json.dumps(questions),)
         )
+        self.db.execute(
+            '''INSERT INTO quizzes(id,title,subject,questions,created_by,is_published,
+               created_at,requires_session) VALUES
+               (3,'Unpublished Force','Science',?,2,0,'2026-09-01',0),
+               (4,'Invalid Quiz','Science','not-json',2,1,'2026-09-01',0),
+               (5,'Other Subject Force','Math',?,2,1,'2026-09-01',0)''',
+            (json.dumps(questions), json.dumps(questions)),
+        )
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         self.db.execute(
             '''INSERT INTO quiz_sessions
@@ -722,16 +730,38 @@ class QuizStatisticsTests(unittest.TestCase):
                            question_index,question_text,topic,difficulty,is_correct,
                            is_skipped) VALUES(90,0,'Other student?','Force','easy',0,0)''')
 
+        changes_before = self.db.total_changes
         response = self.client.get('/api/student/practice-plan')
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.total_changes, changes_before)
+        self.assertEqual(response.json['recommendation_version'], '1')
+        self.assertEqual(response.json['provenance'], 'observed_academic_evidence')
+        self.assertEqual(response.json['status'], 'recommendations_available')
         self.assertEqual(len(response.json['topics']), 1)
         topic = response.json['topics'][0]
         self.assertEqual((topic['subject'], topic['topic']), ('Science', 'Force'))
         self.assertEqual((topic['correct_answers'],topic['total_questions']), (0,6))
         self.assertEqual([note['id'] for note in topic['notes']], [1])
         self.assertEqual([quiz['id'] for quiz in topic['quizzes']], [1])
+        recommendation = response.json['recommendations'][0]
+        self.assertEqual(recommendation['kind'], 'topic_review')
+        self.assertIn('0/6 correct across 2 distinct questions', recommendation['reason'])
+        self.assertEqual(recommendation['evidence']['total_questions'], 6)
         self.assertNotIn('correct_answer', topic)
         self.assertEqual(set(topic['quizzes'][0]), {'id', 'title'})
+        response_text = response.get_data(as_text=True)
+        for forbidden in ('student_id', 'user_id', 'teacher_user_id', 'feature_vector', 'checksum_sha256'):
+            self.assertNotIn(forbidden, response_text)
+
+    def test_student_practice_plan_empty_state_has_no_fake_recommendation_or_writes(self):
+        before = self.db.total_changes
+        response = self.client.get('/api/student/practice-plan')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.total_changes, before)
+        self.assertEqual(response.json['status'], 'no_evidence')
+        self.assertEqual(response.json['recommendations'], [])
+        self.assertIn('Take a practice quiz to start building personalized recommendations.', response.json['message'])
+        self.assertEqual(response.json['topics'], [])
 
     def test_student_practice_plan_does_not_guess_from_one_repeated_question(self):
         for _ in range(3):
@@ -1149,6 +1179,11 @@ class QuizStatisticsTests(unittest.TestCase):
                (summary_id,student_id,present_days,note)
                VALUES(1,1,3,'Two absences')'''
         )
+        self.db.execute(
+            '''INSERT INTO notes
+               (id,title,subject,chapter,content,created_at,uploaded_by)
+               VALUES(1,'Force lesson','Science','Force and motion','Lesson','2026-09-16',2)'''
+        )
         self.db.commit()
 
         self.login('teacher')
@@ -1160,11 +1195,26 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(priorities[0]['total_questions'], 6)
         self.assertEqual(priorities[0]['students_to_support'][0]['student_id'], 1)
 
+        changes_before_profile = self.db.total_changes
         profile = self.client.get(
             '/api/teacher/students/1/learning-profile?subject=Science'
         )
         actions = {action['kind']: action for action in profile.json['teacher_actions']}
+        self.assertEqual(self.db.total_changes, changes_before_profile)
+        self.assertEqual(profile.json['recommendation_version'], '1')
+        self.assertEqual(profile.json['recommendation_provenance'], 'observed_academic_evidence')
+        self.assertEqual(
+            {item['kind'] for item in profile.json['recommendations']},
+            {'topic_review', 'paper_review', 'attendance_catch_up'},
+        )
+        topic_recommendation = next(
+            item for item in profile.json['recommendations']
+            if item['kind'] == 'topic_review'
+        )
+        self.assertEqual([note['id'] for note in topic_recommendation['resources']['notes']], [1])
+        self.assertEqual([quiz['id'] for quiz in topic_recommendation['resources']['quizzes']], [1])
         self.assertEqual(set(actions), {'topic', 'paper', 'attendance'})
+        self.assertTrue(all(action['kind'] in self.backend.INTERVENTION_SOURCES for action in profile.json['teacher_actions']))
         self.assertIn('Force', actions['topic']['title'])
         self.assertIn('2 absences', actions['attendance']['evidence'])
         self.assertIn('40.0%', actions['paper']['evidence'])
@@ -1214,6 +1264,34 @@ class QuizStatisticsTests(unittest.TestCase):
             ).status_code,
             404
         )
+
+    def test_teacher_recommendations_follow_students_latest_class_enrollment(self):
+        self.db.execute(
+            "INSERT INTO student_class_enrollments VALUES(3,1,2,'2026-02-01')"
+        )
+        self.db.commit()
+        self.login('teacher')
+        before = self.db.total_changes
+        response = self.client.get(
+            '/api/teacher/students/1/learning-profile?subject=Science'
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.db.total_changes, before)
+
+    def test_recommendation_source_kinds_map_to_persisted_intervention_sources(self):
+        actions = self.backend.teacher_actions_from_recommendations({
+            'recommendations': [
+                {'kind': 'topic_review', 'title': 'Review Force', 'reason': '2/6', 'next_step': 'Review Force with a worked example.'},
+                {'kind': 'paper_review', 'title': 'Review paper work', 'reason': '50% average', 'next_step': 'Review marked paper work.'},
+                {'kind': 'attendance_catch_up', 'title': 'Catch up', 'reason': '2 absences', 'next_step': 'Check lessons to catch up.'},
+                {'kind': 'skipped_questions', 'title': 'Review unanswered', 'reason': '2 skipped', 'next_step': 'Review unanswered questions.'},
+            ]
+        })
+        self.assertEqual(
+            [action['kind'] for action in actions],
+            ['topic', 'paper', 'attendance', 'manual'],
+        )
+        self.assertTrue(all(action['kind'] in self.backend.INTERVENTION_SOURCES for action in actions))
 
     def test_teacher_learning_profile_requires_subject_and_teacher_role(self):
         self.login('teacher')

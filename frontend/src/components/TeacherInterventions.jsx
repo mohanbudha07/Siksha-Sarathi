@@ -26,6 +26,18 @@ const metricRows = () => [
   { key: 'attendance_percent', label: 'Attendance', count: 'attendance_days' },
 ]
 
+const interventionSourceKind = (suggestion) => {
+  const kind = suggestion?.recommendation_kind || suggestion?.kind
+  return {
+    topic_review: 'topic',
+    topic: 'topic',
+    paper_review: 'paper',
+    paper: 'paper',
+    attendance_catch_up: 'attendance',
+    attendance: 'attendance',
+  }[kind] || 'manual'
+}
+
 function TeacherInterventions({ studentId, subject, suggestions }) {
   const [plans, setPlans] = useState([])
   const [draft, setDraft] = useState(() => emptyPlan(subject))
@@ -60,7 +72,7 @@ function TeacherInterventions({ studentId, subject, suggestions }) {
   const beginPlan = (suggestion) => {
     setDraft({
       ...emptyPlan(subject),
-      source_kind: suggestion?.kind || 'manual',
+      source_kind: interventionSourceKind(suggestion),
       focus_area: suggestion?.title || '',
       evidence: suggestion?.evidence || '',
       action_plan: suggestion?.suggestion || '',
@@ -125,14 +137,22 @@ function TeacherInterventions({ studentId, subject, suggestions }) {
       {error && <p className="intervention-message error" role="alert">{error}</p>}
       {message && <p className="intervention-message success">{message}</p>}
 
-      {suggestions.length > 0 && <div className="intervention-suggestions">
-        <h3>Evidence-based suggestions</h3>
+      <div className="intervention-suggestions">
+        <h3>PERSONALIZED LEARNING RECOMMENDATIONS</h3>
+        {suggestions.length === 0 && <p>No current personalized recommendations are supported by the available observed evidence.</p>}
         {suggestions.map((item, index) => <article key={`${item.kind}-${index}`}>
           <span className={`tla-action-kind tla-action-${item.kind}`}>{item.kind}</span>
-          <div><strong>{item.title}</strong><small>{item.evidence}</small><p>{item.suggestion}</p></div>
+          <div>
+            <strong>{item.title}</strong>
+            <small>{item.evidence}</small>
+            <p>{item.suggestion}</p>
+            {item.resources?.notes?.length > 0 && <small>Matching notes: {item.resources.notes.map((note) => note.title).join(', ')}</small>}
+            {item.resources?.note_message && <small>{item.resources.note_message}</small>}
+            {item.resources?.quizzes?.length > 0 && <small>Matching practice quizzes: {item.resources.quizzes.map((quiz) => quiz.title).join(', ')}</small>}
+          </div>
           <button onClick={() => beginPlan(item)}>Create plan</button>
         </article>)}
-      </div>}
+      </div>
 
       {showForm && <form className="intervention-form" onSubmit={createPlan}>
         <div className="intervention-form-title"><h3>New support plan</h3><button type="button" onClick={() => setShowForm(false)}>×</button></div>

@@ -24,6 +24,7 @@
 .practice-plan-message p { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
 .practice-plan-message small, .practice-plan-evidence { color: #64748b; }
 .practice-plan-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 18px; }
+.practice-plan-recommendations-heading { grid-column: 1 / -1; margin: 22px 0 0; font-size: 22px; }
 .practice-plan-card { margin-top: 22px; }
 .practice-plan-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
 .practice-plan-rank { color: #5b35ae; font-size: 12px; font-weight: 800; letter-spacing: .6px; }
