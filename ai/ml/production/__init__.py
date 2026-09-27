@@ -13,6 +13,7 @@ from .feature_builder import (
     generate_diagnostics,
     build_live_feature_row,
 )
+from .decision_support import DECISION_SUPPORT_VERSION, build_teacher_decision_support
 
 __all__ = [
     "OUTPUT_COLUMNS",
@@ -24,4 +25,6 @@ __all__ = [
     "count_feature_evidence",
     "generate_diagnostics",
     "build_live_feature_row",
+    "DECISION_SUPPORT_VERSION",
+    "build_teacher_decision_support",
 ]

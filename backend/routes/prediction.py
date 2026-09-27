@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from flask import Blueprint, current_app, request, session
 
 from ai.ml.production.feature_contract import FEATURE_CONTRACT_VERSION
+from ai.ml.production.decision_support import build_teacher_decision_support
 from ai.ml.production.prediction_service import PredictionService
 
 NEPAL_TIMEZONE = ZoneInfo("Asia/Kathmandu")
@@ -30,6 +31,78 @@ def parse_as_of_date(value, today):
     if parsed > today:
         return None, "as_of_date cannot be in the future"
     return parsed, None
+
+
+def fetch_observed_academic_summary(cur, teacher_id, student_id, class_id, subject):
+    """Read only the authorized academic summary needed for alignment."""
+    cur.execute(
+        """
+        SELECT COUNT(qar.id) AS total_questions,
+               COALESCE(SUM(qar.is_correct), 0) AS correct_answers,
+               COALESCE(SUM(qar.is_skipped), 0) AS skipped_answers
+        FROM quiz_results qr
+        INNER JOIN quizzes q ON q.id = qr.quiz_id
+        INNER JOIN quiz_sessions qs ON qs.id = qr.quiz_session_id
+        LEFT JOIN quiz_answer_results qar ON qar.quiz_result_id = qr.id
+        WHERE qr.student_id = %s
+          AND qs.class_id = %s
+          AND LOWER(TRIM(q.subject)) = LOWER(TRIM(%s))
+        """,
+        (student_id, class_id, subject),
+    )
+    quiz = cur.fetchone() or {}
+    total_questions = int(quiz.get("total_questions") or 0)
+    correct_answers = int(quiz.get("correct_answers") or 0)
+    skipped_answers = int(quiz.get("skipped_answers") or 0)
+    accuracy = round(100 * correct_answers / total_questions, 2) if total_questions else 0
+    skip_percent = round(100 * skipped_answers / total_questions, 2) if total_questions else 0
+    if total_questions == 0:
+        quiz_status = "No activity"
+    elif accuracy < 50 or skip_percent >= 25:
+        quiz_status = "Needs attention"
+    elif accuracy < 75:
+        quiz_status = "Developing"
+    else:
+        quiz_status = "On track"
+
+    cur.execute(
+        """
+        SELECT COUNT(CASE WHEN pas.is_absent = FALSE
+                          AND pas.marks_obtained IS NOT NULL THEN 1 END)
+                   AS graded_assessments,
+               COALESCE(SUM(CASE WHEN pas.is_absent = FALSE
+                                  AND pas.marks_obtained IS NOT NULL
+                                 THEN pas.marks_obtained ELSE 0 END), 0)
+                   AS marks_obtained,
+               COALESCE(SUM(CASE WHEN pas.is_absent = FALSE
+                                  AND pas.marks_obtained IS NOT NULL
+                                 THEN pa.max_marks ELSE 0 END), 0)
+                   AS maximum_marks
+        FROM paper_assessments pa
+        LEFT JOIN paper_assessment_scores pas
+          ON pas.assessment_id = pa.id AND pas.student_id = %s
+        WHERE pa.teacher_user_id = %s
+          AND pa.class_id = %s
+          AND LOWER(TRIM(pa.subject)) = LOWER(TRIM(%s))
+          AND pa.is_published = TRUE
+        """,
+        (student_id, teacher_id, class_id, subject),
+    )
+    paper = cur.fetchone() or {}
+    maximum = float(paper.get("maximum_marks") or 0)
+    marks = float(paper.get("marks_obtained") or 0)
+    return {
+        "quiz": {
+            "total_questions": total_questions,
+            "accuracy_percent": accuracy,
+            "skip_percent": skip_percent,
+            "status": quiz_status,
+        },
+        "paper": {
+            "graded_assessments": int(paper.get("graded_assessments") or 0),
+            "average_percent": round(100 * marks / maximum, 2) if maximum else 0,
+        },
+    }
 
 
 def create_prediction_blueprint(
@@ -117,6 +190,26 @@ def create_prediction_blueprint(
         except Exception:
             return {"error": "Prediction service is unavailable"}, 500
 
+        observed_cur = mysql.connection.cursor()
+        try:
+            observed = fetch_observed_academic_summary(
+                observed_cur,
+                session["user_id"],
+                int(scope["student_id"]),
+                int(scope["class_id"]),
+                str(scope["subject"]).strip(),
+            )
+        except Exception:
+            return {"error": "Unable to read observed learning evidence"}, 500
+        finally:
+            observed_cur.close()
+
+        decision_support = build_teacher_decision_support(
+            result.get("status"),
+            result.get("prediction_percent"),
+            observed,
+        )
+
         prediction_result = {
             "status": result.get("status", "model_unavailable"),
             "prediction_percent": result.get("prediction_percent"),
@@ -150,6 +243,7 @@ def create_prediction_blueprint(
             },
             "as_of_date": cutoff.isoformat(),
             "prediction": prediction_result,
+            "decision_support": decision_support,
             "evidence": safe_evidence,
         }, 200
 

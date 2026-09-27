@@ -31,3 +31,11 @@ returns an observed-analytics fallback. It does not expose an HTTP endpoint.
 
 The service reports evidence quality from observable evidence counts only. It
 does not claim calibrated statistical confidence.
+
+Teacher decision support is versioned separately as `DECISION_SUPPORT_VERSION
+= "1"`. When a validated forecast exists, its deterministic product bands are
+`review` below 50, `monitor` from 50 through below 75, and
+`stronger_outlook` at 75 or above. These are product heuristics, not official
+grade or pass boundaries, probabilities, confidence values, diagnoses, or
+guarantees. Decision support is unavailable without a valid forecast, observed
+academic evidence remains primary, and no intervention is created automatically.
