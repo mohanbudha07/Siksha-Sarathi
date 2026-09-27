@@ -208,6 +208,29 @@ class PredictionApiTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json["prediction"]["status"], status)
                 self.assertEqual(response.json["prediction"]["prediction_percent"], percent)
+                self.assertIn("decision_support", response.json)
+                self.assertEqual(
+                    response.json["decision_support"]["available"],
+                    status == "prediction_available",
+                )
+
+    def test_valid_prediction_gets_deterministic_decision_support(self):
+        self.login("teacher")
+        self.service.result = {
+            "status": "prediction_available",
+            "prediction_percent": 50,
+            "fallback": None,
+            "reason": None,
+            "evidence": {"academic_evidence_count": 1},
+        }
+        response = self.request_prediction()
+        self.assertEqual(response.status_code, 200)
+        decision = response.json["decision_support"]
+        self.assertTrue(decision["available"])
+        self.assertEqual(decision["attention_level"], "monitor")
+        self.assertIn(decision["evidence_alignment"], {"limited", "mixed", "supporting"})
+        self.assertEqual(decision["version"], "1")
+        self.assertEqual(decision["rule_basis"], "deterministic_forecast_interpretation")
 
     def test_teacher_response_does_not_expose_features_or_artifact_metadata(self):
         self.login("teacher")

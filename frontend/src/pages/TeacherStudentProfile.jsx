@@ -133,6 +133,7 @@ function TeacherStudentProfile() {
   const actions = data?.teacher_actions || []
   const forecast = prediction?.prediction || {}
   const forecastEvidence = prediction?.evidence || {}
+  const decisionSupport = prediction?.decision_support || {}
   const predictionPercent = forecast.prediction_percent
   const validPrediction =
     typeof predictionPercent === 'number' &&
@@ -175,6 +176,26 @@ function TeacherStudentProfile() {
     </div>
   )
 
+  const decisionLabel = {
+    review: 'Review recommended',
+    monitor: 'Monitor',
+    stronger_outlook: 'Stronger forecast outlook',
+  }[decisionSupport.attention_level]
+
+  const renderDecisionSupport = () => {
+    if (!decisionSupport.available || !decisionLabel) return null
+    return (
+      <div className={`tla-decision-support tla-decision-${decisionSupport.attention_level}`}>
+        <div className="tla-decision-heading">
+          <p className="tla-eyebrow tla-decision-eyebrow">TEACHER DECISION SUPPORT</p>
+          <strong>{decisionLabel}</strong>
+        </div>
+        <p>{decisionSupport.message}</p>
+        <small>Rule-based interpretation of the model estimate · not model confidence</small>
+      </div>
+    )
+  }
+
   const renderForecastState = () => {
     if (predictionLoading) {
       return <p className="tla-muted" role="status">Checking forecast availability…</p>
@@ -211,6 +232,7 @@ function TeacherStudentProfile() {
             {forecast.model_type && <div><dt>Model type</dt><dd>{forecast.model_type}</dd></div>}
           </dl>
           {renderForecastEvidence()}
+          {renderDecisionSupport()}
         </div>
       )
     }
@@ -221,6 +243,7 @@ function TeacherStudentProfile() {
           <strong>ML forecast not available yet.</strong>
           <p>No validated school prediction model is currently deployed.</p>
           <p>Observed quiz, paper and attendance evidence remains available below.</p>
+          <small className="tla-forecast-note">Decision support becomes available when a validated forecast is available.</small>
         </div>
       )
     }
@@ -243,6 +266,7 @@ function TeacherStudentProfile() {
         <div className="tla-forecast-message" role="status">
           <strong>Forecast temporarily unavailable.</strong>
           <p>The prediction output did not pass validation, so Siksha Sarathi is using observed learning evidence instead.</p>
+          <small className="tla-forecast-note">Decision support requires a valid forecast.</small>
         </div>
       )
     }
