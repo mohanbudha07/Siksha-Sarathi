@@ -216,3 +216,65 @@ no estimator fit, and create no staging bundle, manifest, model, or production
 artifact directory. Synthetic DataFrames in automated tests verify code paths
 only; they do not demonstrate school-model accuracy, validate Nepalese student
 outcomes, or make the real database ready.
+
+## Phase 10 observed-evidence learning recommendations
+
+Phase 10 uses one framework-independent deterministic engine,
+`ai/ml/production/learning_recommendations.py`, with
+`LEARNING_RECOMMENDATION_VERSION = "1"`. It consumes normalized observed quiz,
+paper, attendance, topic, repeated-mistake, and authorized-resource evidence.
+Its provenance is `observed_academic_evidence`; neither student nor teacher
+recommendations depend on `PredictionService` or a deployed model. A forecast
+may appear separately on the teacher profile, but it is never a recommendation
+cause or ranking input.
+
+The existing topic heuristic is preserved: at least three question
+observations across at least two distinct tagged questions, and accuracy below
+60%, before a topic review is suggested. Topic suggestions sort by lowest
+observed accuracy, then greater evidence volume, then stable subject/topic
+order. Duplicate topic recommendations are removed. These are Siksha Sarathi
+project heuristics, not universal education rules. At most the three highest
+priority topic reviews are returned, preserving the existing student plan
+limit. Repeated incorrect responses
+may add a topic-level evidence detail, but never produce a card per question or
+expose another student's answers.
+
+Other observed-evidence rules preserve existing behavior: at least four quiz
+questions and a skip rate of 25% or more can suggest reviewing unanswered
+questions; the wording states that a skipped answer does not identify why it
+was unanswered. At least two graded paper assessments and an average below 60%
+can suggest reviewing recent marked work against lesson objectives; this is not
+a pass/fail label or a causal claim. Attendance context can suggest checking
+for lessons to catch up when at least five days and two absences are recorded.
+Attendance never changes topic accuracy or diagnoses why academic performance
+changed.
+
+Resources are attached only when they exist and match the observed subject and
+topic. Student notes are limited to subjects assigned to the student's current
+class. Teacher-profile resources are limited to the assigned class and subject.
+Quizzes must be published, parse as valid quiz content, match the subject and
+tagged topic, and have no scheduled/active protected lab session. Missing
+resources are stated plainly; normal notes and quiz browsing remains available.
+
+`GET /api/student/practice-plan` retains the legacy `topics` field as a derived
+compatibility view and adds the recommendation version, status, provenance, and
+canonical `recommendations`. It reads only the authenticated student's own
+recent evidence. The teacher learning profile includes the same recommendation
+contract while preserving its existing topic, difficulty, paper, attendance,
+attempt, mistake, forecast, and decision-support displays. Teacher support
+plans are still created only after an explicit teacher action and remain
+editable before submission. Recommendation kinds map to the existing
+intervention source values (`topic`, `paper`, `attendance`, or `manual`);
+recommendations are never written to a table.
+
+Recommendations are recalculated from current records on GET and are not
+persisted. These routes do not create interventions, predictions, or
+artifacts. Phase 10 uses no Gemini, OpenAI, or other external language model.
+Reasons describe recorded counts and do not infer understanding, motivation,
+confidence, ability, or causation.
+
+The current real database has three registered students and no quiz attempts,
+paper evidence, or attendance evidence. It is expected to return `no_evidence`
+and no personalized recommendation cards until genuine school activity is
+recorded. The useful practice-quiz and learning-notes browsing paths remain
+available in that state.

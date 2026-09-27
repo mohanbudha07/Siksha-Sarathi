@@ -8,6 +8,7 @@ function StudentPracticePlan() {
   const [teacherPlans, setTeacherPlans] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const recommendations = plan?.recommendations || []
 
   useEffect(() => {
     Promise.all([
@@ -30,7 +31,7 @@ function StudentPracticePlan() {
       <section className="practice-plan-hero">
         <span>YOUR LEARNING PATH</span>
         <h1>My Practice Plan</h1>
-        <p>Pick one topic, read a helpful note, practise, then check your progress. Your plan uses your ten most recent quiz attempts.</p>
+        <p>Review observed learning evidence, choose a next step, then check your progress.</p>
       </section>
 
       {loading && <p className="practice-plan-state">Preparing your plan...</p>}
@@ -39,7 +40,7 @@ function StudentPracticePlan() {
         <>
           <section className="practice-plan-message">
             <p>{plan.message}</p>
-            <small>Topic suggestions appear after at least three answers across two different tagged questions in a topic.</small>
+            <small>Topic review suggestions use at least three observations across two distinct tagged questions and accuracy below 60%.</small>
           </section>
 
           <section className="student-support-plans">
@@ -66,10 +67,10 @@ function StudentPracticePlan() {
             </div>}
           </section>
 
-          {plan.topics.length === 0 ? (
+          {recommendations.length === 0 ? (
             <section className="practice-plan-empty">
               <h2>Keep building your learning record</h2>
-              <p>Your teacher's notes and practice quizzes are available even when there is not enough quiz evidence for a specific topic.</p>
+              <p>Your teacher's notes and practice quizzes are available even when there is not enough evidence for a specific next step.</p>
               <div>
                 <Link to="/student/notes">Read learning notes</Link>
                 <Link to="/student/quiz">Browse practice quizzes</Link>
@@ -77,31 +78,39 @@ function StudentPracticePlan() {
             </section>
           ) : (
             <div className="practice-plan-list">
-              {plan.topics.map((item, index) => (
-                <article key={`${item.subject}-${item.topic}`} className="practice-plan-card">
+              <h2 className="practice-plan-recommendations-heading">Recommended next steps</h2>
+              {recommendations.map((item, index) => (
+                <article key={`${item.kind}-${item.subject || 'all'}-${item.topic || item.title}`} className="practice-plan-card">
                   <div className="practice-plan-card-heading">
                     <div>
-                      <span className="practice-plan-rank">TOPIC {index + 1} · {item.subject}</span>
-                      <h2>{item.topic}</h2>
+                      <span className="practice-plan-rank">NEXT STEP {index + 1}{item.subject ? ` · ${item.subject}` : ''}</span>
+                      <h2>{item.title}</h2>
                     </div>
-                    <span className="practice-plan-score">{item.correct_answers}/{item.total_questions} correct</span>
+                    {item.evidence?.accuracy_percent !== undefined && (
+                      <span className="practice-plan-score">
+                        {item.evidence.correct_answers}/{item.evidence.total_questions} correct
+                      </span>
+                    )}
                   </div>
-                  <p className="practice-plan-evidence">{item.skipped_answers} unanswered · Based on recent quiz activity</p>
-                  <ol>
-                    {item.steps.map((step) => <li key={step}>{step}</li>)}
-                  </ol>
+                  <p className="practice-plan-evidence">{item.reason}</p>
+                  <p>{item.next_step}</p>
                   <div className="practice-plan-resources">
                     <div>
                       <h3>Read</h3>
-                      {item.notes.length ? item.notes.map((note) => (
+                      {item.resources?.notes?.length ? item.resources.notes.map((note) => (
                         <Link key={note.id} to={`/student/notes?${new URLSearchParams({ subject: item.subject, search: item.topic })}`}>
                           {note.title} · {note.chapter} →
                         </Link>
-                      )) : <Link to={`/student/notes?${new URLSearchParams({ subject: item.subject })}`}>Browse {item.subject} notes →</Link>}
+                      )) : <>
+                        <p className="practice-plan-evidence">{item.resources?.note_message || 'No matching note is currently available.'}</p>
+                        <Link to={`/student/notes?${new URLSearchParams(item.subject ? { subject: item.subject } : {})}`}>
+                          {item.subject ? `Browse ${item.subject} notes →` : 'Browse learning notes →'}
+                        </Link>
+                      </>}
                     </div>
                     <div>
                       <h3>Practice</h3>
-                      {item.quizzes.length ? item.quizzes.map((quiz) => (
+                      {item.resources?.quizzes?.length ? item.resources.quizzes.map((quiz) => (
                         <Link key={quiz.id} to={`/student/quiz?quiz_id=${quiz.id}`}>
                           {quiz.title} →
                         </Link>

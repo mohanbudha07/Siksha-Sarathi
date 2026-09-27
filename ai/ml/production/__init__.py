@@ -32,6 +32,11 @@ from .model_training import (
     promote_candidate,
     run_training_pipeline,
 )
+from .learning_recommendations import (
+    LEARNING_RECOMMENDATION_VERSION,
+    build_learning_recommendations,
+    recommendation_source_kind,
+)
 
 __all__ = [
     "OUTPUT_COLUMNS",
@@ -59,4 +64,7 @@ __all__ = [
     "assess_candidate_approval",
     "run_training_pipeline",
     "promote_candidate",
+    "LEARNING_RECOMMENDATION_VERSION",
+    "build_learning_recommendations",
+    "recommendation_source_kind",
 ]
