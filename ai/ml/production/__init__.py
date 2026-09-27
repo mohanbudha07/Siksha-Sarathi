@@ -24,6 +24,14 @@ from .training_readiness import (
     build_training_readiness_report,
     evaluate_training_dataset,
 )
+from .model_training import (
+    MIN_MAE_IMPROVEMENT_VS_DUMMY,
+    MODEL_APPROVAL_POLICY_VERSION,
+    MODEL_TRAINING_VERSION,
+    assess_candidate_approval,
+    promote_candidate,
+    run_training_pipeline,
+)
 
 __all__ = [
     "OUTPUT_COLUMNS",
@@ -45,4 +53,10 @@ __all__ = [
     "MIN_VALIDATION_STUDENTS",
     "build_training_readiness_report",
     "evaluate_training_dataset",
+    "MODEL_TRAINING_VERSION",
+    "MODEL_APPROVAL_POLICY_VERSION",
+    "MIN_MAE_IMPROVEMENT_VS_DUMMY",
+    "assess_candidate_approval",
+    "run_training_pipeline",
+    "promote_candidate",
 ]
