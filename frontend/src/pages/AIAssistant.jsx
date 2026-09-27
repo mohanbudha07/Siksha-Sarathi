@@ -7,10 +7,33 @@ function AIAssistant() {
   const [answer, setAnswer] = useState('')
   const [fullAnswer, setFullAnswer] = useState('')
   const [subject, setSubject] = useState('')
+  const [selectedSubject, setSelectedSubject] = useState('')
+  const [availableSubjects, setAvailableSubjects] = useState([])
+  const [grounding, setGrounding] = useState(null)
   const [mode, setMode] = useState('')
   const [loading, setLoading] = useState(false)
   const [typing, setTyping] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    const loadSubjects = async () => {
+      try {
+        const response = await api.get('/student/ai/context-options')
+        const subjects = response.data?.subjects || []
+        const next = subjects.filter(Boolean)
+        setAvailableSubjects(next)
+      } catch (err) {
+        console.error(err)
+      }
+    }
+    loadSubjects()
+  }, [])
+
+  useEffect(() => {
+    if (availableSubjects.length > 0 && !selectedSubject) {
+      setSelectedSubject('')
+    }
+  }, [availableSubjects, selectedSubject])
 
   // Typing animation
   useEffect(() => {
@@ -45,16 +68,19 @@ function AIAssistant() {
     setAnswer('')
     setFullAnswer('')
     setSubject('')
+    setGrounding(null)
     setMode('')
 
     try {
       const response = await api.post('/student/ai', {
         question: question.trim(),
+        subject: selectedSubject || undefined,
       })
 
       setSubject(response.data.subject || '')
       setMode(response.data.mode || 'offline')
       setFullAnswer(response.data.answer || '')
+      setGrounding(response.data.grounding || null)
     } catch (err) {
       console.error(err)
 
@@ -171,6 +197,23 @@ function AIAssistant() {
                   </span>
                 </div>
 
+                <div className="grounding-indicator">
+                  {grounding?.status === 'grounded' && 'Grounded in school context'}
+                  {grounding?.status === 'partial_grounding' && 'Partly grounded'}
+                  {grounding?.status === 'general_only' && 'General tutor response'}
+                  {grounding?.status === 'offline' && 'Offline helper'}
+                </div>
+
+                {grounding?.sources?.length > 0 && (
+                  <div className="grounding-sources">
+                    {grounding.sources.map((source, index) => (
+                      <span key={`${source.kind}-${index}`} className="source-chip">
+                        {source.kind === 'note' ? 'Teacher note' : source.kind === 'recommendation' ? 'Recommendation' : source.kind === 'support_plan' ? 'Teacher plan' : 'General'} · {source.title || source.focus_area || 'Learning source'}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <div className="answer-text">
                   {answer}
                   {typing && (
@@ -197,6 +240,21 @@ function AIAssistant() {
           onSubmit={askAI}
           className="ai-input-area"
         >
+          <div className="subject-picker-wrap">
+            <label htmlFor="ai-subject-select">Subject</label>
+            <select
+              id="ai-subject-select"
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              disabled={loading || availableSubjects.length === 0}
+            >
+              <option value="">Auto / General</option>
+              {availableSubjects.map((subject) => (
+                <option key={subject} value={subject}>{subject}</option>
+              ))}
+            </select>
+          </div>
+
           <textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}

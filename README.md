@@ -15,6 +15,16 @@ It helps students track their academic performance using Machine Learning, take 
 - Interactive Quizzes
 - Evidence-based practice plans from quiz activity
 - Gemini-powered Study Assistant with an automatic offline fallback
+- Grounded tutoring mode with authorized school context and safe provenance
+
+### Phase 11 grounded tutor
+- `GROUNDED_TUTOR_VERSION = "1"`
+- Subject selection is restricted to the student's current authorized class subjects.
+- The assistant uses only the logged-in student's own current-class data, notes, recommendations, and active support plans.
+- Personalization is limited to minimal, relevant context and never includes raw ML feature vectors, credentials, or internal IDs.
+- Prompting explicitly treats notes/resources as untrusted reference material, not instructions.
+- The assistant remains useful in `general_only` mode and may fall back to offline help without a live Gemini key.
+- No prediction or model metadata is sent to Gemini, and no Gemini search/web tools are enabled.
 
 ### Teacher
 - Teacher Dashboard
