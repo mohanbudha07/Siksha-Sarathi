@@ -1,5 +1,8 @@
 import sqlite3
 import unittest
+from unittest.mock import patch
+
+import pandas as pd
 
 from ai.ml.production.feature_builder import (
     build_feature_row_for_target,
@@ -7,10 +10,50 @@ from ai.ml.production.feature_builder import (
     generate_diagnostics,
 )
 from ai.ml.production.build_training_dataset import repository_root
-from ai.ml.production.feature_contract import OUTPUT_COLUMNS
+from ai.ml.production.feature_contract import MODEL_FEATURE_COLUMNS, OUTPUT_COLUMNS, TARGET_COLUMN
+from ai.ml.production.training_readiness import (
+    MIN_ELIGIBLE_ROWS,
+    MIN_UNIQUE_STUDENTS,
+    MIN_UNIQUE_TARGET_DATES,
+    MIN_VALIDATION_ROWS,
+    MIN_VALIDATION_STUDENTS,
+    _candidate_models,
+    _evaluate_models,
+    _temporal_split,
+    build_training_readiness_report,
+    evaluate_training_dataset,
+)
 
 
 class ProductionFeaturePipelineTests(unittest.TestCase):
+    @staticmethod
+    def _readiness_dataset():
+        dates = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01"]
+        rows = []
+        for date_index, target_date in enumerate(dates):
+            for student_id in range(1, 31):
+                row_index = date_index * 30 + student_id
+                row = {
+                    "student_id": student_id,
+                    "subject": "Math",
+                    "target_assessment_id": 1000 + row_index,
+                    "target_assessment_date": target_date,
+                    "target_class_id": 7,
+                    "target_max_marks": 100.0,
+                    "target_marks_obtained": 45.0 + student_id * 0.5 + date_index * 2,
+                    "eligible_for_prediction": True,
+                    "ineligible_reason": "",
+                    TARGET_COLUMN: 45.0 + student_id * 0.5 + date_index * 2,
+                }
+                row.update(
+                    {
+                        column: float((student_id * 3 + date_index * 7 + feature_index) % 100)
+                        for feature_index, column in enumerate(MODEL_FEATURE_COLUMNS)
+                    }
+                )
+                rows.append(row)
+        return pd.DataFrame(rows)
+
     @staticmethod
     def _connect():
         connection = sqlite3.connect(":memory:")
@@ -238,6 +281,400 @@ class ProductionFeaturePipelineTests(unittest.TestCase):
         self.assertEqual(dataset.iloc[0]["target_assessment_id"], 2)
         self.assertEqual(dataset.iloc[0]["has_quiz_evidence"], 0.0)
         self.assertEqual(dataset.iloc[0]["has_prior_paper_evidence"], 1.0)
+
+    def test_training_readiness_reports_insufficient_data(self):
+        connection = self._connect()
+        self._seed_database(connection)
+        connection.execute(
+            "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (1, 7, 'Math', '2024-04-01', 100, 1)"
+        )
+        connection.execute(
+            "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (1, 11, 72, 0, '2024-04-01T08:00:00', '2024-04-01T08:00:00')"
+        )
+        connection.execute(
+            "INSERT INTO quiz_sessions (id, class_id, student_id) VALUES (1, 7, 11)"
+        )
+        connection.execute(
+            "INSERT INTO quizzes (id, subject) VALUES (1, 'Math')"
+        )
+        connection.execute(
+            "INSERT INTO quiz_results (id, quiz_id, quiz_session_id, student_id, score, total_questions, created_at) VALUES (1, 1, 1, 11, 7, 10, '2024-03-28T09:00:00')"
+        )
+        connection.execute(
+            "INSERT INTO quiz_answer_results (id, quiz_result_id, is_correct, is_skipped, created_at) VALUES (1, 1, 1, 0, '2024-03-28T09:00:00')"
+        )
+        connection.commit()
+
+        report = build_training_readiness_report(connection)
+        self.assertEqual(report["eligible_training_snapshots"], 1)
+        self.assertEqual(report["readiness_state"], "insufficient_data")
+        self.assertFalse(report["evaluation_ready"])
+
+    def test_training_readiness_runs_temporal_holdout_evaluation(self):
+        connection = self._connect()
+        self._seed_database(connection)
+
+        for student_id in range(1, 31):
+            training_target_id = 1000 + student_id
+            test_target_id = 2000 + student_id
+            later_training_target_id = 5000 + student_id
+            later_test_target_id = 6000 + student_id
+            prior_training_id = 3000 + student_id
+            prior_test_id = 4000 + student_id
+
+            connection.execute(
+                "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (?, 7, 'Math', '2024-01-01', 100, 1)",
+                (prior_training_id,),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (?, ?, 62, 0, '2024-01-01T08:00:00', '2024-01-01T08:00:00')",
+                (prior_training_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (?, 7, 'Math', '2024-01-15', 100, 1)",
+                (training_target_id,),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (?, ?, 70, 0, '2024-01-15T08:00:00', '2024-01-15T08:00:00')",
+                (training_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (?, 7, 'Math', '2024-02-01', 100, 1)",
+                (prior_test_id,),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (?, ?, 68, 0, '2024-02-01T08:00:00', '2024-02-01T08:00:00')",
+                (prior_test_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (?, 7, 'Math', '2024-02-15', 100, 1)",
+                (test_target_id,),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (?, ?, 78, 0, '2024-02-15T08:00:00', '2024-02-15T08:00:00')",
+                (test_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (?, 7, 'Math', '2024-03-01', 100, 1)",
+                (later_training_target_id,),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (?, ?, 74, 0, '2024-03-01T08:00:00', '2024-03-01T08:00:00')",
+                (later_training_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessments (id, class_id, subject, assessment_date, max_marks, is_published) VALUES (?, 7, 'Math', '2024-03-15', 100, 1)",
+                (later_test_target_id,),
+            )
+            connection.execute(
+                "INSERT INTO paper_assessment_scores (assessment_id, student_id, marks_obtained, is_absent, created_at, updated_at) VALUES (?, ?, 80, 0, '2024-03-15T08:00:00', '2024-03-15T08:00:00')",
+                (later_test_target_id, student_id),
+            )
+
+            connection.execute(
+                "INSERT INTO quiz_sessions (id, class_id, student_id) VALUES (?, 7, ?)",
+                (training_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO quizzes (id, subject) VALUES (?, 'Math')",
+                (training_target_id,),
+            )
+            connection.execute(
+                "INSERT INTO quiz_results (id, quiz_id, quiz_session_id, student_id, score, total_questions, created_at) VALUES (?, ?, ?, ?, 8, 10, '2024-01-10T07:00:00')",
+                (training_target_id, training_target_id, training_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO quiz_answer_results (id, quiz_result_id, is_correct, is_skipped, created_at) VALUES (?, ?, 1, 0, '2024-01-10T07:00:00')",
+                (training_target_id, training_target_id),
+            )
+
+            connection.execute(
+                "INSERT INTO quiz_sessions (id, class_id, student_id) VALUES (?, 7, ?)",
+                (test_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO quizzes (id, subject) VALUES (?, 'Math')",
+                (test_target_id,),
+            )
+            connection.execute(
+                "INSERT INTO quiz_results (id, quiz_id, quiz_session_id, student_id, score, total_questions, created_at) VALUES (?, ?, ?, ?, 9, 10, '2024-02-10T07:00:00')",
+                (test_target_id, test_target_id, test_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO quiz_answer_results (id, quiz_result_id, is_correct, is_skipped, created_at) VALUES (?, ?, 1, 0, '2024-02-10T07:00:00')",
+                (test_target_id, test_target_id),
+            )
+
+            connection.execute(
+                "INSERT INTO quiz_sessions (id, class_id, student_id) VALUES (?, 7, ?)",
+                (later_training_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO quizzes (id, subject) VALUES (?, 'Math')",
+                (later_training_target_id,),
+            )
+            connection.execute(
+                "INSERT INTO quiz_results (id, quiz_id, quiz_session_id, student_id, score, total_questions, created_at) VALUES (?, ?, ?, ?, 8, 10, '2024-03-05T07:00:00')",
+                (later_training_target_id, later_training_target_id, later_training_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO quiz_answer_results (id, quiz_result_id, is_correct, is_skipped, created_at) VALUES (?, ?, 1, 0, '2024-03-05T07:00:00')",
+                (later_training_target_id, later_training_target_id),
+            )
+
+            connection.execute(
+                "INSERT INTO quiz_sessions (id, class_id, student_id) VALUES (?, 7, ?)",
+                (later_test_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO quizzes (id, subject) VALUES (?, 'Math')",
+                (later_test_target_id,),
+            )
+            connection.execute(
+                "INSERT INTO quiz_results (id, quiz_id, quiz_session_id, student_id, score, total_questions, created_at) VALUES (?, ?, ?, ?, 9, 10, '2024-03-20T07:00:00')",
+                (later_test_target_id, later_test_target_id, later_test_target_id, student_id),
+            )
+            connection.execute(
+                "INSERT INTO quiz_answer_results (id, quiz_result_id, is_correct, is_skipped, created_at) VALUES (?, ?, 1, 0, '2024-03-20T07:00:00')",
+                (later_test_target_id, later_test_target_id),
+            )
+        connection.commit()
+
+        report = build_training_readiness_report(connection)
+        self.assertGreaterEqual(report["eligible_training_snapshots"], 20)
+        self.assertEqual(report["readiness_state"], "evaluation_ready")
+        self.assertTrue(report["evaluation_ready"])
+        self.assertIn("dummy_mae", report["baseline_evaluation"])
+        self.assertIn("ridge_mae", report["baseline_evaluation"])
+
+    def test_phase_7_minimum_guardrails_are_explicit(self):
+        self.assertEqual(MIN_ELIGIBLE_ROWS, 100)
+        self.assertEqual(MIN_UNIQUE_STUDENTS, 30)
+        self.assertEqual(MIN_UNIQUE_TARGET_DATES, 4)
+        self.assertEqual(MIN_VALIDATION_ROWS, 20)
+        self.assertEqual(MIN_VALIDATION_STUDENTS, 10)
+
+    def test_readiness_blocks_a_missing_feature_column(self):
+        dataset = self._readiness_dataset().drop(columns=[MODEL_FEATURE_COLUMNS[0]])
+        report = evaluate_training_dataset(dataset)
+        self.assertIn("missing_feature_columns", report["blockers"])
+
+    def test_readiness_blocks_a_non_numeric_feature(self):
+        dataset = self._readiness_dataset()
+        dataset[MODEL_FEATURE_COLUMNS[0]] = dataset[MODEL_FEATURE_COLUMNS[0]].astype(object)
+        dataset.loc[0, MODEL_FEATURE_COLUMNS[0]] = "not-a-number"
+        report = evaluate_training_dataset(dataset)
+        self.assertIn("non_finite_features", report["blockers"])
+
+    def test_readiness_blocks_a_nan_feature(self):
+        dataset = self._readiness_dataset()
+        dataset.loc[0, MODEL_FEATURE_COLUMNS[0]] = float("nan")
+        report = evaluate_training_dataset(dataset)
+        self.assertIn("non_finite_features", report["blockers"])
+
+    def test_readiness_blocks_an_infinite_feature(self):
+        dataset = self._readiness_dataset()
+        dataset.loc[0, MODEL_FEATURE_COLUMNS[0]] = float("inf")
+        report = evaluate_training_dataset(dataset)
+        self.assertIn("non_finite_features", report["blockers"])
+
+    def test_readiness_blocks_a_non_finite_target(self):
+        dataset = self._readiness_dataset()
+        dataset.loc[0, TARGET_COLUMN] = float("nan")
+        report = evaluate_training_dataset(dataset)
+        self.assertIn("non_finite_target", report["blockers"])
+
+    def test_readiness_blocks_a_target_below_zero(self):
+        dataset = self._readiness_dataset()
+        dataset.loc[0, TARGET_COLUMN] = -0.1
+        report = evaluate_training_dataset(dataset)
+        self.assertIn("invalid_target_range", report["blockers"])
+
+    def test_readiness_blocks_a_target_above_100(self):
+        dataset = self._readiness_dataset()
+        dataset.loc[0, TARGET_COLUMN] = 100.1
+        report = evaluate_training_dataset(dataset)
+        self.assertIn("invalid_target_range", report["blockers"])
+
+    def test_readiness_blocks_a_missing_target_date(self):
+        dataset = self._readiness_dataset()
+        dataset.loc[0, "target_assessment_date"] = None
+        report = evaluate_training_dataset(dataset)
+        self.assertIn("missing_target_dates", report["blockers"])
+
+    def test_readiness_blocks_duplicate_snapshot_identity(self):
+        dataset = self._readiness_dataset()
+        dataset.loc[1, "target_assessment_id"] = dataset.loc[0, "target_assessment_id"]
+        dataset.loc[1, "student_id"] = dataset.loc[0, "student_id"]
+        dataset.loc[1, "subject"] = dataset.loc[0, "subject"]
+        report = evaluate_training_dataset(dataset)
+        self.assertIn("duplicate_snapshot_identity", report["blockers"])
+
+    def test_sufficient_dataset_is_ready_for_temporal_evaluation(self):
+        report = evaluate_training_dataset(self._readiness_dataset())
+        self.assertTrue(report["training_ready"])
+        self.assertTrue(report["evaluation_ready"])
+        self.assertEqual(report["readiness_state"], "evaluation_ready")
+
+    def test_temporal_split_keeps_train_dates_strictly_before_validation_dates(self):
+        split = _temporal_split(self._readiness_dataset())
+        self.assertTrue(split["split_ready"])
+        self.assertLess(max(split["train_dates"]), min(split["validation_dates"]))
+
+    def test_temporal_split_has_no_date_overlap(self):
+        split = _temporal_split(self._readiness_dataset())
+        self.assertTrue(split["split_ready"])
+        self.assertSetEqual(set(split["train_dates"]) & set(split["validation_dates"]), set())
+
+    def test_temporal_split_keeps_whole_target_dates_together(self):
+        dataset = self._readiness_dataset()
+        split = _temporal_split(dataset)
+        self.assertTrue(split["split_ready"])
+        self.assertEqual(len(split["train"]) + len(split["validation"]), len(dataset))
+        for target_date, date_rows in dataset.groupby("target_assessment_date"):
+            in_train = date_rows.index.isin(split["train"].index).all()
+            in_validation = date_rows.index.isin(split["validation"].index).all()
+            self.assertNotEqual(in_train, in_validation, target_date)
+
+    def test_temporal_split_enforces_minimum_validation_rows(self):
+        split = _temporal_split(self._readiness_dataset(), min_validation_rows=121)
+        self.assertFalse(split["split_ready"])
+        self.assertIn("below minimum required threshold (121)", split["reason"])
+
+    def test_temporal_split_enforces_minimum_validation_students(self):
+        split = _temporal_split(self._readiness_dataset(), min_validation_students=31)
+        self.assertFalse(split["split_ready"])
+        self.assertIn("below minimum required threshold (31)", split["reason"])
+
+    def test_temporal_split_is_deterministic(self):
+        dataset = self._readiness_dataset()
+        first = _temporal_split(dataset)
+        second = _temporal_split(dataset)
+        self.assertEqual(first["train_dates"], second["train_dates"])
+        self.assertEqual(first["validation_dates"], second["validation_dates"])
+        self.assertEqual(first["train"].index.tolist(), second["train"].index.tolist())
+        self.assertEqual(first["validation"].index.tolist(), second["validation"].index.tolist())
+
+    def test_baseline_candidates_include_all_required_estimators(self):
+        from sklearn.dummy import DummyRegressor
+        from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
+        from sklearn.linear_model import Ridge
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import StandardScaler
+
+        candidates = {name: estimator for name, estimator, _ in _candidate_models()}
+        self.assertSetEqual(
+            set(candidates),
+            {"DummyRegressor", "Ridge", "RandomForestRegressor", "GradientBoostingRegressor"},
+        )
+        self.assertIsInstance(candidates["DummyRegressor"], DummyRegressor)
+        self.assertIsInstance(candidates["Ridge"], Pipeline)
+        self.assertIsInstance(candidates["Ridge"].named_steps["standardscaler"], StandardScaler)
+        self.assertIsInstance(candidates["Ridge"].named_steps["ridge"], Ridge)
+        self.assertIsInstance(candidates["RandomForestRegressor"], RandomForestRegressor)
+        self.assertIsInstance(candidates["GradientBoostingRegressor"], GradientBoostingRegressor)
+
+    def test_baseline_models_use_the_same_temporal_split(self):
+        class RecordingEstimator:
+            def __init__(self):
+                self.fit_columns = None
+                self.fit_indices = None
+                self.predict_columns = None
+                self.predict_indices = None
+
+            def fit(self, features, target):
+                self.fit_columns = list(features.columns)
+                self.fit_indices = features.index.tolist()
+                return self
+
+            def predict(self, features):
+                self.predict_columns = list(features.columns)
+                self.predict_indices = features.index.tolist()
+                return [60.0] * len(features)
+
+        split = _temporal_split(self._readiness_dataset())
+        estimators = [RecordingEstimator() for _ in range(4)]
+        candidates = [
+            ("DummyRegressor" if index == 0 else f"candidate_{index}", estimator, {})
+            for index, estimator in enumerate(estimators)
+        ]
+        with patch("ai.ml.production.training_readiness._candidate_models", return_value=candidates):
+            _evaluate_models(split["train"], split["validation"])
+
+        for estimator in estimators:
+            self.assertEqual(estimator.fit_indices, split["train"].index.tolist())
+            self.assertEqual(estimator.predict_indices, split["validation"].index.tolist())
+
+    def test_baseline_reports_mae_rmse_r2_and_improvement_vs_dummy(self):
+        split = _temporal_split(self._readiness_dataset())
+        report = _evaluate_models(split["train"], split["validation"])
+        self.assertEqual(report["status"], "evaluated")
+        self.assertEqual(len(report["models"]), 4)
+        dummy_mae = next(model["mae"] for model in report["models"] if model["model_name"] == "DummyRegressor")
+        for model in report["models"]:
+            self.assertIn("mae", model)
+            self.assertIn("rmse", model)
+            self.assertIn("r2", model)
+            self.assertIn("mae_improvement_vs_dummy", model)
+            expected_improvement = 0.0 if dummy_mae == 0 else round(dummy_mae - model["mae"], 4)
+            self.assertEqual(model["mae_improvement_vs_dummy"], expected_improvement)
+
+    def test_estimators_receive_only_ordered_model_features(self):
+        class RecordingEstimator:
+            def __init__(self):
+                self.fit_columns = None
+                self.predict_columns = None
+
+            def fit(self, features, target):
+                self.fit_columns = list(features.columns)
+                return self
+
+            def predict(self, features):
+                self.predict_columns = list(features.columns)
+                return [60.0] * len(features)
+
+        split = _temporal_split(self._readiness_dataset())
+        estimators = [RecordingEstimator() for _ in range(4)]
+        candidates = [
+            ("DummyRegressor" if index == 0 else f"candidate_{index}", estimator, {})
+            for index, estimator in enumerate(estimators)
+        ]
+        with patch("ai.ml.production.training_readiness._candidate_models", return_value=candidates):
+            _evaluate_models(split["train"], split["validation"])
+
+        forbidden_columns = {
+            "student_id", "subject", "target_percent", "target_marks_obtained",
+            "target_max_marks", "target_assessment_id", "target_assessment_date",
+            "target_class_id", "eligible_for_prediction", "ineligible_reason",
+        }
+        for estimator in estimators:
+            self.assertEqual(estimator.fit_columns, MODEL_FEATURE_COLUMNS)
+            self.assertEqual(estimator.predict_columns, MODEL_FEATURE_COLUMNS)
+            self.assertTrue(forbidden_columns.isdisjoint(estimator.fit_columns))
+            self.assertTrue(forbidden_columns.isdisjoint(estimator.predict_columns))
+
+    def test_repeated_evaluation_reproduces_split_metrics_and_report_metadata(self):
+        dataset = self._readiness_dataset()
+        first = evaluate_training_dataset(dataset)
+        second = evaluate_training_dataset(dataset)
+
+        self.assertEqual(first["TRAINING_READINESS_VERSION"], second["TRAINING_READINESS_VERSION"])
+        self.assertEqual(first["FEATURE_CONTRACT_VERSION"], second["FEATURE_CONTRACT_VERSION"])
+        for key in ("python_version", "pandas_version", "sklearn_version", "split_strategy",
+                    "training_date_range", "validation_date_range", "model_parameters", "feature_names"):
+            self.assertEqual(first["reproducibility"][key], second["reproducibility"][key])
+        self.assertEqual(first["reproducibility"]["python_version"], __import__("sys").version.split()[0])
+        self.assertEqual(first["reproducibility"]["pandas_version"], pd.__version__)
+        self.assertIsNotNone(first["reproducibility"]["sklearn_version"])
+        self.assertEqual(first["reproducibility"]["feature_names"], MODEL_FEATURE_COLUMNS)
+        self.assertTrue(first["reproducibility"]["evaluation_timestamp"].endswith("Z"))
+        self.assertEqual(first["eligible_training_snapshots"], second["eligible_training_snapshots"])
+        self.assertEqual(first["unique_students"], second["unique_students"])
+        self.assertEqual(first["unique_target_dates"], second["unique_target_dates"])
+        first_models = first["baseline_evaluation"]["models"]
+        second_models = second["baseline_evaluation"]["models"]
+        self.assertEqual([model["model_name"] for model in first_models], [model["model_name"] for model in second_models])
+        self.assertEqual(first_models, second_models)
 
     def test_missing_target_date_has_distinct_reason(self):
         connection = self._connect()

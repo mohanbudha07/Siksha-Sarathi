@@ -1,41 +1,100 @@
 # Production ML Runtime Foundation
 
-The production runtime is intentionally model-unavailable until a validated
-local Siksha Sarathi artifact exists. The legacy files under `ai/ml/`,
-including `performance_model.pkl` and `label_encoder.pkl`, are never selected
-by this runtime.
+## Phase 7 local readiness boundary
 
-A future artifact must live under `ai/ml/production/artifacts/` beside a
-manifest named `manifest.json`. The manifest must match the exact feature
-contract version and ordered `MODEL_FEATURE_COLUMNS` defined in
-`feature_contract.py`, describe the `target_percent` percentage target, and
-include a required SHA-256 checksum for the declared model file. SHA-256
-provides artifact integrity, not authenticity; the artifact directory is
-trusted application-controlled storage.
+This repository intentionally does not create or load a production artifact during
+Phase 7. The runtime remains read-only and evaluation-only: it can inspect the
+canonical feature dataset, apply the strict local readiness guardrails, and
+report whether the current MySQL data is suitable for serious model evaluation.
+It does not train, save, or deploy a model.
 
-Pickle, joblib, and sklearn artifacts can execute code during deserialization.
-Only artifacts generated through the trusted training and deployment workflow
-may be placed there. Runtime must never load user-supplied model files, and no
-artifact-upload functionality exists. Checksum verification occurs before any
-deserialization. No artifact is currently committed.
+The project explicitly forbids creating:
 
-`ProductionArtifactLoader` validates the manifest, model path, required SHA-256
-checksum, and model `predict` interface before loading. It caches the result;
-call `reset()` or `load(force_reload=True)` after an intentional artifact
-replacement. Missing or invalid artifacts return structured unavailable states.
+- `ai/ml/production/artifacts/manifest.json`
+- any production model pickle/joblib artifact in the production directory
+- any deployment or in-place model replacement from the local readiness CLI
 
-`PredictionService` first builds target-free, time-safe features for an
-explicit student, class, subject, and calendar-date cutoff. It requires prior
-academic evidence, validates model output in the 0-100 range, and otherwise
-returns an observed-analytics fallback. It does not expose an HTTP endpoint.
+The only allowed Phase 7 actions are to build features in memory, evaluate
+training-readiness, and report honest structured results.
 
-The service reports evidence quality from observable evidence counts only. It
-does not claim calibrated statistical confidence.
+## Required readiness guardrails
 
-Teacher decision support is versioned separately as `DECISION_SUPPORT_VERSION
-= "1"`. When a validated forecast exists, its deterministic product bands are
-`review` below 50, `monitor` from 50 through below 75, and
-`stronger_outlook` at 75 or above. These are product heuristics, not official
-grade or pass boundaries, probabilities, confidence values, diagnoses, or
-guarantees. Decision support is unavailable without a valid forecast, observed
-academic evidence remains primary, and no intervention is created automatically.
+The readiness engine must enforce the following project guardrails:
+
+- `MIN_ELIGIBLE_ROWS = 100`
+- `MIN_UNIQUE_STUDENTS = 30`
+- `MIN_UNIQUE_TARGET_DATES = 4`
+- `MIN_VALIDATION_ROWS = 20`
+- `MIN_VALIDATION_STUDENTS = 10`
+
+These thresholds are not lowered to make local data pass. If the database does
+not meet them, the report returns `insufficient_data` or `data_quality_blocked`
+with the blocking reasons instead of claiming evaluation readiness.
+
+## Temporal validation contract
+
+The evaluation path uses a time-safe holdout that keeps training and validation
+separated by target date. It requires at least two distinct dates and then
+selects the most recent dates for validation while preserving a non-overlapping
+train/validation split. The validation split must also satisfy the minimum row
+and student counts above.
+
+The public readiness states are:
+
+- `pipeline_only`
+- `data_quality_blocked`
+- `insufficient_data`
+- `evaluation_ready`
+
+The corresponding uppercase summary state remains `PIPELINE_ONLY`,
+`DATA_QUALITY_BLOCKED`, `INSUFFICIENT_DATA`, and `EVALUATED_NOT_DEPLOYED` when
+needed by existing callers, while the primary readiness state stays lowercase for
+API compatibility and tests.
+
+## Privacy-safe reporting
+
+The report includes a privacy-safe aggregate summary with:
+
+- eligible rows
+- unique students
+- unique target dates
+- subjects represented
+- classes represented
+- earliest/latest target dates
+- rows by subject, class, and target date
+- evidence coverage ratios
+- snapshots per student summary
+
+The readiness report is aggregate-only and never exposes individual student
+records or row-level predictions.
+
+## Local CLI
+
+Run the read-only local evaluation from the project root with:
+
+`python -m ai.ml.production.evaluate_local_training`
+
+Optional JSON output:
+
+`python -m ai.ml.production.evaluate_local_training --json /tmp/training_readiness.json`
+
+This command reads the canonical dataset from the configured MySQL connection and
+prints the privacy-safe training-readiness result. It never writes a model or
+artifact file.
+
+## Artifact boundary and deployment state
+
+`ProductionArtifactLoader` is intentionally fail-closed. It is for future trusted
+artifacts only and does not load anything from the local runtime until the
+workflow produces a valid manifest and model file under the controlled artifact
+directory. Until then, `deployment_ready` remains `False` and no production model
+is claimed as available.
+
+`PredictionService` still builds time-safe features for forecast requests, but it
+uses the observed-analytics fallback unless a valid artifact is available.
+
+Teacher decision support is versioned separately as `DECISION_SUPPORT_VERSION =
+"1"`. When a validated forecast exists, its deterministic product bands are
+`review` below 50, `monitor` from 50 through below 75, and `stronger_outlook` at
+75 or above. These are product heuristics, not official grade or pass
+boundaries, probabilities, confidence values, diagnoses, or guarantees.
