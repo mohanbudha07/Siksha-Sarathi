@@ -1,7 +1,16 @@
 import importlib
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from werkzeug.security import check_password_hash
+
+from ai.ml.production.training_readiness import (
+    MIN_ELIGIBLE_ROWS,
+    MIN_UNIQUE_STUDENTS,
+    MIN_UNIQUE_TARGET_DATES,
+    MIN_VALIDATION_ROWS,
+    MIN_VALIDATION_STUDENTS,
+    build_admin_training_readiness_report,
+)
 
 
 try:
@@ -424,10 +433,97 @@ class AuthAndCoreRouteTests(unittest.TestCase):
         self.clear_session()
         self.assertEqual(self.client.get('/api/admin/dashboard').status_code, 401)
 
+    def test_ml_readiness_endpoint_rejects_anonymous_student_and_teacher(self):
+        path = '/api/admin/ml/training-readiness'
+        self.clear_session()
+        self.assertEqual(self.client.get(path).status_code, 401)
+        for role in ('student', 'teacher'):
+            with self.subTest(role=role):
+                self.login_through_api(role)
+                self.assertEqual(self.client.get(path).status_code, 403)
+
+    def test_admin_ml_readiness_returns_safe_canonical_read_only_report(self):
+        self.login_through_api('admin')
+        self.db.execute(
+            'ALTER TABLE quiz_answer_results ADD COLUMN created_at TEXT'
+        )
+        changes_before = self.db.total_changes
+
+        response = self.client.get('/api/admin/ml/training-readiness')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.total_changes, changes_before)
+        report = response.json
+        self.assertEqual(report['readiness']['state'], 'pipeline_only')
+        self.assertFalse(report['readiness']['training_ready'])
+        self.assertFalse(report['readiness']['evaluation_ready'])
+        self.assertFalse(report['readiness']['deployment_ready'])
+        self.assertEqual(report['readiness']['blockers'], ['empty_dataset'])
+        self.assertTrue(any('eligible historical training snapshots' in message
+                            for message in report['readiness']['blocker_messages']))
+        self.assertEqual(report['progress']['eligible_snapshots'], {
+            'current': 0, 'required': MIN_ELIGIBLE_ROWS,
+            'met': False, 'available': True,
+        })
+        self.assertEqual(
+            report['progress']['unique_students']['required'],
+            MIN_UNIQUE_STUDENTS,
+        )
+        self.assertEqual(
+            report['progress']['unique_target_dates']['required'],
+            MIN_UNIQUE_TARGET_DATES,
+        )
+        self.assertEqual(report['progress']['validation_rows'], {
+            'current': None, 'required': MIN_VALIDATION_ROWS,
+            'met': False, 'available': False,
+        })
+        self.assertEqual(report['progress']['validation_students'], {
+            'current': None, 'required': MIN_VALIDATION_STUDENTS,
+            'met': False, 'available': False,
+        })
+        self.assertEqual(report['source_evidence']['total_students'], 2)
+        self.assertEqual(report['source_evidence']['quiz_attempts'], 0)
+        self.assertTrue(report['guidance'])
+
+        forbidden = {
+            'student_id', 'user_id', 'teacher_user_id', 'student_name', 'full_name',
+            'username', 'email', 'marks_obtained', 'features', 'feature_vector',
+            'artifact_checksum', 'checksum_sha256',
+        }
+        response_text = response.get_data(as_text=True).lower()
+        self.assertTrue(forbidden.isdisjoint(report))
+        self.assertFalse(any(field in response_text for field in forbidden))
+        self.assertNotIn('/mnt/', response_text)
+        self.assertNotIn('manifest', response_text)
+
+    def test_admin_ml_readiness_failure_is_generic(self):
+        self.login_through_api('admin')
+        route = self.backend.app.view_functions[
+            'admin.admin_ml_training_readiness_api'
+        ]
+        handler = route.__wrapped__.__wrapped__
+        with patch.dict(
+            handler.__globals__,
+            {
+                'build_admin_training_readiness_report': Mock(
+                    side_effect=RuntimeError(
+                        'sensitive database or filesystem details'
+                    )
+                )
+            },
+        ):
+            response = self.client.get('/api/admin/ml/training-readiness')
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json, {
+            'error': 'Unable to load ML readiness information.'
+        })
+
     def test_admin_routes_reject_anonymous_and_wrong_roles(self):
         routes = [
             ('GET', '/api/admin/users'),
             ('GET', '/api/admin/school-setup'),
+            ('GET', '/api/admin/ml/training-readiness'),
             ('POST', '/api/admin/admins'),
             ('POST', '/api/admin/students'),
         ]

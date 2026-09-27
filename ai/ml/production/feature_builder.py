@@ -6,6 +6,7 @@ event timing is not consistently available across the source tables.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
@@ -632,6 +633,74 @@ def count_feature_evidence(connection, subject=None):
     }
     summary.update(_readiness_breakdown(training))
     return summary
+
+
+def build_source_evidence_summary(connection):
+    """Return aggregate source-evidence counts without exposing row identities."""
+    paper_rows, quiz_rows, _question_rows, attendance_rows = _fetch_evidence(connection)
+    valid_paper_rows = []
+    for row in paper_rows:
+        row = _normalize_row(row)
+        published = str(row.get("is_published") or "").strip().lower() in {
+            "1", "true", "yes",
+        }
+        try:
+            finite_marks = math.isfinite(float(row.get("marks_obtained")))
+            finite_max_marks = math.isfinite(float(row.get("max_marks")))
+        except (TypeError, ValueError):
+            finite_marks = False
+            finite_max_marks = False
+        if (
+            published
+            and finite_marks
+            and finite_max_marks
+            and _is_valid_target_assessment(row)
+            and _as_date(row.get("assessment_date")) is not None
+        ):
+            valid_paper_rows.append(row)
+
+    quiz_students = {
+        int(row["student_id"])
+        for row in quiz_rows
+        if row.get("student_id") is not None
+    }
+    paper_students = {
+        int(row["student_id"])
+        for row in valid_paper_rows
+        if row.get("student_id") is not None
+    }
+    academic_subjects = {
+        str(row.get("subject") or "").strip()
+        for row in quiz_rows + valid_paper_rows
+        if str(row.get("subject") or "").strip()
+    }
+    academic_classes = {
+        int(row["class_id"])
+        for row in quiz_rows + valid_paper_rows
+        if row.get("class_id") is not None
+    }
+    scored_dates = {
+        _as_date(row.get("assessment_date")).isoformat()
+        for row in valid_paper_rows
+    }
+
+    return {
+        "total_students": _database_counts(connection)["total_db_students"],
+        "quiz_attempts": len(quiz_rows),
+        "students_with_quiz_attempts": len(quiz_students),
+        "published_paper_assessments": int(
+            _scalar_query(
+                connection,
+                "SELECT COUNT(DISTINCT id) FROM paper_assessments WHERE is_published = TRUE",
+            )
+        ),
+        "valid_scored_paper_rows": len(valid_paper_rows),
+        "students_with_valid_paper_evidence": len(paper_students),
+        "distinct_scored_paper_dates": len(scored_dates),
+        "attendance_records": len(attendance_rows),
+        "subjects_with_academic_evidence": len(academic_subjects),
+        "classes_with_academic_evidence": len(academic_classes),
+    }
 
 
 def generate_diagnostics(connection, subject=None):

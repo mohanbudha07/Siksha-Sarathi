@@ -17,6 +17,7 @@ import AIAssistant from './pages/AIAssistant'
 import TeacherDashboard from './pages/TeacherDashboard'
 import TeacherNotes from './pages/TeacherNotes'
 import AdminDashboard from './pages/AdminDashboard'
+import AdminMLReadiness from './pages/AdminMLReadiness'
 import AdminUsers from './pages/AdminUsers'
 import AdminSchoolSetup from './pages/AdminSchoolSetup'
 import TeacherUploadNote from './pages/TeacherUploadNote'
@@ -209,6 +210,9 @@ function App() {
         } />
         <Route path="/admin/school-setup" element={
           <AdminPage><AdminSchoolSetup /></AdminPage>
+        } />
+        <Route path="/admin/ml-readiness" element={
+          <AdminPage><AdminMLReadiness /></AdminPage>
         } />
 
         {/* Fallback */}

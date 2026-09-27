@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 from flask import Blueprint, request
 from werkzeug.security import generate_password_hash
 
+from ai.ml.production.training_readiness import build_admin_training_readiness_report
+
 NEPAL_TIMEZONE = ZoneInfo("Asia/Kathmandu")
 
 
@@ -27,6 +29,16 @@ def serialize_nepal_datetime(value):
 
 def create_admin_blueprint(mysql, login_required, role_required, admin_role):
     admin = Blueprint("admin", __name__)
+
+    @admin.get("/api/admin/ml/training-readiness")
+    @login_required
+    @role_required(admin_role)
+    def admin_ml_training_readiness_api():
+        try:
+            report = build_admin_training_readiness_report(mysql.connection)
+        except Exception:
+            return {"error": "Unable to load ML readiness information."}, 500
+        return report, 200
 
     @admin.get("/api/admin/users")
     @login_required
