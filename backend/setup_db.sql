@@ -275,6 +275,37 @@ CREATE TABLE IF NOT EXISTS predictions (
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 );
 
+-- Immutable audit table for production forecast requests. The system is
+-- fail-closed when no production artifact exists; this table records only real
+-- metadata and never fabricates model health.
+CREATE TABLE IF NOT EXISTS ml_prediction_audits (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    student_id INT NOT NULL,
+    teacher_user_id INT NOT NULL,
+    class_id INT NOT NULL,
+    subject VARCHAR(100) NOT NULL,
+    as_of_date DATE NOT NULL,
+    prediction_status VARCHAR(40) NOT NULL DEFAULT 'model_unavailable',
+    prediction_percent DECIMAL(5,2) NULL,
+    fallback VARCHAR(50) NULL,
+    reason VARCHAR(255) NULL,
+    model_version VARCHAR(64) NOT NULL,
+    model_type VARCHAR(64) NULL,
+    artifact_version VARCHAR(64) NULL,
+    feature_contract_version VARCHAR(32) NULL,
+    validation_mae DECIMAL(10,4) NULL,
+    model_training_timestamp DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_ml_prediction_audit_identity (student_id, class_id, subject, as_of_date, model_version),
+    INDEX idx_ml_prediction_audits_student_date (student_id, as_of_date),
+    INDEX idx_ml_prediction_audits_status (prediction_status, as_of_date),
+    INDEX idx_ml_prediction_audits_subject (subject, as_of_date),
+    INDEX idx_ml_prediction_audits_model_version (model_version, model_training_timestamp),
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (teacher_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
+);
+
 -- Optional: create a default admin (password: admin123 - change later)
 -- INSERT INTO users (username, email, password, role)
 -- VALUES ('admin', 'admin@siksha.com', 'pbkdf2:sha256:...', 'admin');

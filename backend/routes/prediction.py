@@ -6,8 +6,10 @@ from zoneinfo import ZoneInfo
 
 from flask import Blueprint, current_app, request, session
 
+from backend.ml_prediction_audit import normalize_audit_subject, record_prediction_audit
 from ai.ml.production.feature_contract import FEATURE_CONTRACT_VERSION
 from ai.ml.production.decision_support import build_teacher_decision_support
+from ai.ml.production.model_monitoring import summarize_monitoring_status
 from ai.ml.production.prediction_service import PredictionService
 
 NEPAL_TIMEZONE = ZoneInfo("Asia/Kathmandu")
@@ -235,6 +237,30 @@ def create_prediction_blueprint(
             )
             if key in evidence
         }
+
+        if prediction_result.get("status") == "prediction_available":
+            manifest = None
+            try:
+                loaded = get_service().loader.load()
+                manifest = getattr(loaded, "manifest", None)
+            except Exception:
+                manifest = None
+            if isinstance(manifest, dict):
+                try:
+                    record_prediction_audit(
+                        mysql.connection,
+                        teacher_user_id=session["user_id"],
+                        student_id=int(scope["student_id"]),
+                        class_id=int(scope["class_id"]),
+                        subject=str(scope["subject"]).strip(),
+                        as_of_date=cutoff.isoformat(),
+                        prediction_result=prediction_result,
+                        validated_manifest=manifest,
+                        model_version=result.get("model_version") or manifest.get("artifact_version"),
+                    )
+                except Exception:
+                    print("Prediction monitoring audit could not be recorded")
+
         return {
             "student": {
                 "id": int(scope["student_id"]),
@@ -276,5 +302,18 @@ def create_prediction_blueprint(
         else:
             response["reason"] = "no validated production artifact is available"
         return response, 200
+
+    @prediction.get("/api/admin/ml/monitoring-status")
+    @login_required
+    @role_required(admin_role)
+    def admin_ml_monitoring_status_api():
+        service = get_service()
+        try:
+            load_result = service.loader.load()
+        except Exception:
+            load_result = None
+
+        report = summarize_monitoring_status(load_result)
+        return report, 200
 
     return prediction
