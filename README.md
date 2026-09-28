@@ -92,6 +92,16 @@ Authentication portal summary:
 - There is no public registration flow and no `super_admin` role in the
   current single-school release.
 
+Public website summary:
+- The root path `/` is a public institution landing page with sections for Home,
+  About, Academics, Faculty, Notices, and Contact.
+- The page keeps Student/Teacher and Admin portal buttons available without
+  requiring authentication on the public site.
+- Public content is intentionally config-driven from the frontend profile file
+  so the institution can update the landing page without a separate notice-management backend.
+- The protected portal and admin dashboards remain separate from the public
+  website and continue to enforce the role-based access rules.
+
 Login attempts are rate-limited per client IP and email. The default in-memory
 storage is appropriate for this single-process prototype. A multi-worker
 deployment should set `RATELIMIT_STORAGE_URI` to a shared backend such as Redis.
