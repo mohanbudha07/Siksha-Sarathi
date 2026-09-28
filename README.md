@@ -84,6 +84,14 @@ School administrators provision all administrator, teacher, and student
 accounts. Teachers and students sign in with accounts issued by the school;
 public account registration is not available.
 
+Authentication portal summary:
+- Student/Teacher portal: `/login` and `POST /api/login`
+- Admin/Principal portal: `/admin/login` and `POST /api/admin/login`
+- The submitted portal role is a UI choice only; the persisted database role is
+  authoritative when the backend checks credentials.
+- There is no public registration flow and no `super_admin` role in the
+  current single-school release.
+
 Login attempts are rate-limited per client IP and email. The default in-memory
 storage is appropriate for this single-process prototype. A multi-worker
 deployment should set `RATELIMIT_STORAGE_URI` to a shared backend such as Redis.

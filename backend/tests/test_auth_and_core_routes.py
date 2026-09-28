@@ -62,9 +62,11 @@ class AuthAndCoreRouteTests(unittest.TestCase):
         row = self.db.execute(
             'SELECT email FROM users WHERE id=?', (user_id,)
         ).fetchone()
-        response = self.client.post('/api/login', json={
-            'email': row['email'], 'password': password
-        })
+        endpoint = '/api/admin/login' if role == 'admin' else '/api/login'
+        payload = {'email': row['email'], 'password': password}
+        if role != 'admin':
+            payload['role'] = role
+        response = self.client.post(endpoint, json=payload)
         self.assertEqual(response.status_code, 200)
         return response
 
@@ -87,15 +89,186 @@ class AuthAndCoreRouteTests(unittest.TestCase):
             self.assertEqual(session['username'], 'Student')
             self.assertEqual(session['role'], 'student')
 
+    def test_student_login_with_matching_role_succeeds(self):
+        self.set_password(1, 'Password123')
+        response = self.client.post('/api/login', json={
+            'email': '  S@Example.Test  ',
+            'password': 'Password123',
+            'role': 'student',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['user']['role'], 'student')
+
+    def test_teacher_login_with_matching_role_succeeds(self):
+        self.set_password(2, 'Password123')
+        response = self.client.post('/api/login', json={
+            'email': 't@example.test',
+            'password': 'Password123',
+            'role': 'teacher',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['user']['role'], 'teacher')
+
+    def test_student_login_rejects_teacher_selected_role(self):
+        self.set_password(1, 'Password123')
+        response = self.client.post('/api/login', json={
+            'email': 's@example.test',
+            'password': 'Password123',
+            'role': 'teacher',
+        })
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json['error'], 'Invalid email or password')
+        with self.client.session_transaction() as session:
+            self.assertNotIn('user_id', session)
+
+    def test_teacher_login_rejects_student_selected_role(self):
+        self.set_password(2, 'Password123')
+        response = self.client.post('/api/login', json={
+            'email': 't@example.test',
+            'password': 'Password123',
+            'role': 'student',
+        })
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json['error'], 'Invalid email or password')
+        with self.client.session_transaction() as session:
+            self.assertNotIn('user_id', session)
+
+    def test_admin_cannot_login_through_student_teacher_portal(self):
+        self.set_password(3, 'Password123')
+        for selected_role in ('student', 'teacher'):
+            with self.subTest(selected_role=selected_role):
+                response = self.client.post('/api/login', json={
+                    'email': 'a@example.test',
+                    'password': 'Password123',
+                    'role': selected_role,
+                })
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response.json['error'], 'Invalid email or password')
+
+    def test_login_rejects_admin_selected_role(self):
+        self.set_password(1, 'Password123')
+        response = self.client.post('/api/login', json={
+            'email': 's@example.test',
+            'password': 'Password123',
+            'role': 'admin',
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json['error'], 'Role must be student or teacher')
+
+    def test_login_rejects_missing_role(self):
+        self.set_password(1, 'Password123')
+        response = self.client.post('/api/login', json={
+            'email': 's@example.test',
+            'password': 'Password123',
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json['error'], 'Role must be student or teacher')
+
+    def test_login_rejects_unknown_role(self):
+        self.set_password(1, 'Password123')
+        response = self.client.post('/api/login', json={
+            'email': 's@example.test',
+            'password': 'Password123',
+            'role': 'unknown',
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json['error'], 'Role must be student or teacher')
+
+    def test_wrong_credentials_remain_rejected(self):
+        self.set_password(1, 'Password123')
+        response = self.client.post('/api/login', json={
+            'email': 's@example.test',
+            'password': 'wrong-password',
+            'role': 'student',
+        })
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json['error'], 'Invalid email or password')
+
+    def test_role_mismatch_does_not_create_session(self):
+        self.set_password(1, 'Password123')
+        response = self.client.post('/api/login', json={
+            'email': 's@example.test',
+            'password': 'Password123',
+            'role': 'teacher',
+        })
+        self.assertEqual(response.status_code, 401)
+        with self.client.session_transaction() as session:
+            self.assertNotIn('user_id', session)
+
+    def test_admin_login_with_valid_admin_credentials_succeeds(self):
+        self.set_password(3, 'Password123')
+        response = self.client.post('/api/admin/login', json={
+            'email': 'a@example.test',
+            'password': 'Password123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['user']['role'], 'admin')
+        with self.client.session_transaction() as session:
+            self.assertEqual(session['role'], 'admin')
+
+    def test_student_cannot_use_admin_login_endpoint(self):
+        self.set_password(1, 'Password123')
+        response = self.client.post('/api/admin/login', json={
+            'email': 's@example.test',
+            'password': 'Password123',
+        })
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json['error'], 'Invalid email or password')
+        with self.client.session_transaction() as session:
+            self.assertNotIn('user_id', session)
+
+    def test_teacher_cannot_use_admin_login_endpoint(self):
+        self.set_password(2, 'Password123')
+        response = self.client.post('/api/admin/login', json={
+            'email': 't@example.test',
+            'password': 'Password123',
+        })
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json['error'], 'Invalid email or password')
+        with self.client.session_transaction() as session:
+            self.assertNotIn('user_id', session)
+
+    def test_wrong_admin_password_rejected(self):
+        self.set_password(3, 'Password123')
+        response = self.client.post('/api/admin/login', json={
+            'email': 'a@example.test',
+            'password': 'wrong-password',
+        })
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json['error'], 'Invalid email or password')
+
+    def test_admin_login_preserves_must_change_password(self):
+        self.set_password(3, 'Password123')
+        self.db.execute('UPDATE users SET must_change_password = 1 WHERE id = 3')
+        self.db.commit()
+        response = self.client.post('/api/admin/login', json={
+            'email': 'a@example.test',
+            'password': 'Password123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json['user']['must_change_password'])
+
+    def test_student_and_teacher_login_preserve_must_change_password(self):
+        self.set_password(1, 'Password123')
+        self.db.execute('UPDATE users SET must_change_password = 1 WHERE id = 1')
+        self.db.commit()
+        response = self.client.post('/api/login', json={
+            'email': 's@example.test',
+            'password': 'Password123',
+            'role': 'student',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json['user']['must_change_password'])
+
     def test_failed_login_rejects_wrong_unknown_and_invalid_credentials(self):
         self.set_password(1, 'Password123')
         wrong_password = self.client.post('/api/login', json={
-            'email': 's@example.test', 'password': 'wrong-password'
+            'email': 's@example.test', 'password': 'wrong-password', 'role': 'student'
         })
         self.assertEqual(wrong_password.status_code, 401)
 
         unknown_email = self.client.post('/api/login', json={
-            'email': 'unknown@example.test', 'password': 'Password123'
+            'email': 'unknown@example.test', 'password': 'Password123', 'role': 'student'
         })
         self.assertEqual(unknown_email.status_code, 401)
 
@@ -175,6 +348,7 @@ class AuthAndCoreRouteTests(unittest.TestCase):
         response = self.client.post('/api/login', json={
             'email': 'temporary.login@example.test',
             'password': 'Temporary123',
+            'role': 'teacher',
         })
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json['user']['must_change_password'])
@@ -226,10 +400,10 @@ class AuthAndCoreRouteTests(unittest.TestCase):
         ))
         self.assertEqual(self.client.post('/api/logout').status_code, 200)
         self.assertEqual(self.client.post('/api/login', json={
-            'email': 's@example.test', 'password': 'Password123'
+            'email': 's@example.test', 'password': 'Password123', 'role': 'student'
         }).status_code, 401)
         new_login = self.client.post('/api/login', json={
-            'email': 's@example.test', 'password': 'NewPassword123'
+            'email': 's@example.test', 'password': 'NewPassword123', 'role': 'student'
         })
         self.assertEqual(new_login.status_code, 200)
         self.assertFalse(new_login.json['user']['must_change_password'])
@@ -289,6 +463,7 @@ class AuthAndCoreRouteTests(unittest.TestCase):
         self.client.post('/api/login', json={
             'email': 'blocked.teacher@example.test',
             'password': 'Temporary123',
+            'role': 'teacher',
         })
         self.assertEqual(self.client.get('/api/teacher/dashboard').status_code, 403)
         self.assertEqual(created.status_code, 201)
@@ -301,7 +476,7 @@ class AuthAndCoreRouteTests(unittest.TestCase):
             'password': 'Temporary123',
         })
         self.clear_session()
-        self.client.post('/api/login', json={
+        self.client.post('/api/admin/login', json={
             'email': 'blocked.admin@example.test',
             'password': 'Temporary123',
         })

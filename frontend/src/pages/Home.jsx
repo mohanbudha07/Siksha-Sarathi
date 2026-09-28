@@ -13,12 +13,20 @@ function Home() {
           <span>Siksha Sarathi</span>
         </div>
 
-        <button
-          className="home-login-button"
-          onClick={() => navigate('/login')}
-        >
-          Sign In
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            className="home-login-button"
+            onClick={() => navigate('/admin/login')}
+          >
+            Admin Portal
+          </button>
+          <button
+            className="home-login-button"
+            onClick={() => navigate('/login')}
+          >
+            Sign In
+          </button>
+        </div>
       </nav>
 
       <main className="home-content">
