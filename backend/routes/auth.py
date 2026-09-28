@@ -18,6 +18,68 @@ def _login_rate_limit_key():
 
 def create_auth_blueprint(mysql, limiter, login_required):
     auth = Blueprint("auth", __name__)
+    VALID_PORTAL_ROLES = {"student", "teacher"}
+    INVALID_PORTAL_ROLE_ERROR = "Role must be student or teacher"
+
+    def _normalize_email(value):
+        return str(value or "").strip().lower()
+
+    def _serialize_user(user):
+        return {
+            "id": user["id"],
+            "username": user["username"],
+            "email": user["email"],
+            "role": user["role"],
+            "must_change_password": bool(user["must_change_password"])
+        }
+
+    def _create_session_for_user(user):
+        session.clear()
+        session["user_id"] = user["id"]
+        session["username"] = user["username"]
+        session["role"] = user["role"]
+        session["must_change_password"] = bool(user["must_change_password"])
+        return {
+            "message": "Login successful",
+            "user": _serialize_user(user)
+        }
+
+    def _load_user_by_email(email):
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                """SELECT id, username, email, password, role,
+                          must_change_password
+                   FROM users WHERE email = %s""",
+                (email,)
+            )
+            return cur.fetchone()
+        finally:
+            cur.close()
+
+    def _validate_password_and_role(email, password, expected_role=None):
+        normalized_email = _normalize_email(email)
+        if not normalized_email or not password:
+            return None, {"error": "Email and password are required"}, 400
+
+        user = _load_user_by_email(normalized_email)
+        if not user or not check_password_hash(user["password"], password):
+            session.clear()
+            return None, {"error": "Invalid email or password"}, 401
+
+        if expected_role is not None:
+            if expected_role not in VALID_PORTAL_ROLES:
+                session.clear()
+                return None, {"error": INVALID_PORTAL_ROLE_ERROR}, 400
+            if user["role"] != expected_role:
+                session.clear()
+                return None, {"error": "Invalid email or password"}, 401
+
+        if expected_role is None and user["role"] != "admin":
+            session.clear()
+            return None, {"error": "Invalid email or password"}, 401
+
+        return user, None, None
 
     @auth.post("/api/login")
     @limiter.limit(
@@ -29,41 +91,41 @@ def create_auth_blueprint(mysql, limiter, login_required):
         if not isinstance(data, dict):
             return {"error": "Login data is required"}, 400
 
-        email = data.get("email")
-        password = data.get("password")
+        email = _normalize_email(data.get("email"))
+        password = str(data.get("password") or "")
+        role = _normalize_email(data.get("role"))
+
+        if not email or not password:
+            return {"error": "Email and password are required"}, 400
+        if role not in VALID_PORTAL_ROLES:
+            return {"error": INVALID_PORTAL_ROLE_ERROR}, 400
+
+        user, error, status = _validate_password_and_role(email, password, expected_role=role)
+        if error is not None:
+            return error, status
+
+        return _create_session_for_user(user), 200
+
+    @auth.post("/api/admin/login")
+    @limiter.limit(
+        lambda: os.getenv("LOGIN_RATE_LIMIT", "10 per minute"),
+        key_func=_login_rate_limit_key
+    )
+    def api_admin_login():
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return {"error": "Login data is required"}, 400
+
+        email = _normalize_email(data.get("email"))
+        password = str(data.get("password") or "")
         if not email or not password:
             return {"error": "Email and password are required"}, 400
 
-        cur = mysql.connection.cursor()
-        try:
-            cur.execute(
-                """SELECT id, username, email, password, role,
-                          must_change_password
-                   FROM users WHERE email = %s""",
-                (email,)
-            )
-            user = cur.fetchone()
-        finally:
-            cur.close()
+        user, error, status = _validate_password_and_role(email, password, expected_role=None)
+        if error is not None:
+            return error, status
 
-        if not user or not check_password_hash(user["password"], password):
-            return {"error": "Invalid email or password"}, 401
-
-        session.clear()
-        session["user_id"] = user["id"]
-        session["username"] = user["username"]
-        session["role"] = user["role"]
-        session["must_change_password"] = bool(user["must_change_password"])
-        return {
-            "message": "Login successful",
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "email": user["email"],
-                "role": user["role"],
-                "must_change_password": bool(user["must_change_password"])
-            }
-        }, 200
+        return _create_session_for_user(user), 200
 
     @auth.post("/api/logout")
     @login_required

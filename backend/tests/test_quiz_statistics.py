@@ -216,18 +216,18 @@ class QuizStatisticsTests(unittest.TestCase):
         self.db.commit()
         for _ in range(10):
             response = self.client.post('/api/login', json={
-                'email': 's@example.test', 'password': 'wrong-password'
+                'email': 's@example.test', 'password': 'wrong-password', 'role': 'student'
             })
             self.assertEqual(response.status_code, 401)
 
         blocked = self.client.post('/api/login', json={
-            'email': 's@example.test', 'password': 'wrong-password'
+            'email': 's@example.test', 'password': 'wrong-password', 'role': 'student'
         })
         self.assertEqual(blocked.status_code, 429)
         self.assertIn('Too many login attempts', blocked.json['error'])
 
         other_account = self.client.post('/api/login', json={
-            'email': 'different@example.test', 'password': 'wrong-password'
+            'email': 'different@example.test', 'password': 'wrong-password', 'role': 'student'
         })
         self.assertEqual(other_account.status_code, 401)
 

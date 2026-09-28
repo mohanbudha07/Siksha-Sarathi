@@ -6,6 +6,7 @@ import './Login.css'
 function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState('student')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -19,28 +20,25 @@ function Login() {
 
     try {
       const response = await api.post('/login', {
-  email,
-  password,
-})
+        email,
+        password,
+        role,
+      })
 
-const role = response.data.user.role
+      const user = response.data.user
 
-if (response.data.user.must_change_password) {
-  navigate('/change-password')
-} else if (role === 'teacher') {
-  navigate('/teacher/dashboard')
-} else if (role === 'student') {
-  navigate('/student/dashboard')
-} else if (role === 'admin') {
-  navigate('/admin/dashboard')
-} else {
-  setError('Unknown user role.')
-}
-    } catch (error) {
-      console.error(error)
-
+      if (user.must_change_password) {
+        navigate('/change-password', { replace: true })
+      } else if (user.role === 'teacher') {
+        navigate('/teacher/dashboard', { replace: true })
+      } else if (user.role === 'student') {
+        navigate('/student/dashboard', { replace: true })
+      } else {
+        setError('Unknown user role.')
+      }
+    } catch (requestError) {
       setError(
-        error.response?.data?.error ||
+        requestError.response?.data?.error ||
           'Login failed. Please check your email and password.'
       )
     } finally {
@@ -85,6 +83,19 @@ if (response.data.user.must_change_password) {
                 onChange={(event) => setEmail(event.target.value)}
                 required
               />
+            </div>
+
+            <div className="input-group">
+              <label htmlFor="role">Login as</label>
+              <select
+                id="role"
+                value={role}
+                onChange={(event) => setRole(event.target.value)}
+                aria-label="Select login role"
+              >
+                <option value="student">Student</option>
+                <option value="teacher">Teacher</option>
+              </select>
             </div>
 
             <div className="input-group">

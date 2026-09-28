@@ -4,6 +4,7 @@ import api from './api'
 
 import Home from './pages/Home'
 import Login from './pages/Login'
+import AdminLogin from './pages/AdminLogin'
 import ChangePassword from './pages/ChangePassword'
 
 import StudentLayout from './components/StudentLayout'
@@ -39,8 +40,7 @@ function useAuthCheck() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Only check auth if we are not on public pages
-    const publicPaths = ['/', '/login']
+    const publicPaths = ['/', '/login', '/admin/login']
     if (publicPaths.includes(window.location.pathname)) {
       setLoading(false)
       return
@@ -76,6 +76,9 @@ function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (!user) {
+    if (allowedRoles && allowedRoles.includes('admin')) {
+      return <Navigate to="/admin/login" replace />
+    }
     return <Navigate to="/login" replace />
   }
 
@@ -126,6 +129,7 @@ function App() {
         {/* Public routes */}
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/change-password" element={
           <ProtectedRoute><ChangePassword /></ProtectedRoute>
         } />

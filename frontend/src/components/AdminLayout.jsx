@@ -21,7 +21,7 @@ function AdminLayout({ children }) {
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
-      navigate('/login')
+      navigate('/admin/login')
     }
   }
 
