@@ -1,0 +1,26 @@
+.ml-monitoring-page {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  color: var(--color-text);
+}
+
+.ml-monitoring-header {
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ml-monitoring-header p:first-child {
+  margin: 0 0 var(--space-2);
+  color: var(--color-blue);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.ml-monitoring-header h1 { margin: 0 0 var(--space-2); color: var(--color-primary-dark); }
+.ml-monitoring-header p:last-child { margin: 0; color: var(--color-muted); }
+.ml-monitoring-grid { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
+.ml-monitoring-card { padding: 16px 18px; border: 1px solid var(--color-border); border-left: 3px solid var(--color-blue); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-sm); line-height: 1.6; }
+.ml-monitoring-card strong { color: var(--color-primary); }
+.ml-monitoring-state { padding: 24px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-muted); }
+.ml-monitoring-state.is-error { border-color: #fecdca; background: #fef3f2; color: var(--color-danger); }

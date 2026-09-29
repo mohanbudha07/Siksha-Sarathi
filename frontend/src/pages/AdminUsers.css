@@ -158,3 +158,16 @@
     grid-column: auto;
   }
 }
+
+.admin-users-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0 12px; padding: 4px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: #eef1f6; }
+.admin-users-tabs button { min-height: 36px; padding: 7px 12px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-size: 13px; font-weight: 650; cursor: pointer; }
+.admin-users-tabs button.active { border-color: var(--color-border); background: var(--color-surface); color: var(--color-primary); box-shadow: var(--shadow-sm); }
+.admin-users-form-grid { grid-template-columns: minmax(0, 1fr); margin-top: 0; }
+.admin-users-form-grid .admin-users-form { max-width: 700px; }
+.admin-users-lists { grid-template-columns: minmax(0, 1fr); }
+.admin-users-form button { background: var(--color-primary); }
+
+@media (max-width: 520px) {
+  .admin-users-tabs button { flex: 1 1 auto; }
+  .admin-users-form { padding: 17px; }
+}

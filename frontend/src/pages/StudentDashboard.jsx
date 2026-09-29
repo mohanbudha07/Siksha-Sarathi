@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined'
+import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined'
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined'
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined'
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined'
 import api from '../api'
 import './StudentDashboard.css'
 
@@ -11,27 +16,30 @@ function StudentDashboard() {
   const [recentActivity, setRecentActivity] = useState([])
   const [subjectPerformance, setSubjectPerformance] = useState([])
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
 
   const navigate = useNavigate()
 
-  useEffect(() => {
-    api
-      .get('/student/dashboard')
-      .then((response) => {
-        setStudent(response.data.student)
-        setStats(response.data.stats)
-        setCurrentClass(response.data.current_class)
-        setSubjects(response.data.subjects || [])
-        setRecentActivity(response.data.recent_activity || [])
-        setSubjectPerformance(response.data.subject_performance || [])
-      })
-      .catch((error) => {
-        console.error(error)
-        setError(
-          `API error: ${error.response?.status || error.message}`
-        )
-      })
-  }, [])
+  const loadDashboard = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await api.get('/student/dashboard')
+      setStudent(response.data.student)
+      setStats(response.data.stats)
+      setCurrentClass(response.data.current_class)
+      setSubjects(response.data.subjects || [])
+      setRecentActivity(response.data.recent_activity || [])
+      setSubjectPerformance(response.data.subject_performance || [])
+    } catch (requestError) {
+      console.error('Student dashboard error:', requestError)
+      setError('Unable to load your learning dashboard. Check your connection and try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { loadDashboard() }, [])
 
   const formatActivityDate = (value) => {
     if (!value) return ''
@@ -44,89 +52,56 @@ function StudentDashboard() {
 
       <header className="dashboard-header">
         <div>
-          <h1>Your learning</h1>
+          <p className="dashboard-eyebrow">STUDENT OVERVIEW</p>
+          <h1>{student ? `Welcome back, ${student.full_name}` : 'Your learning'}</h1>
           <p>Keep practising one topic at a time.</p>
-        </div>
-
-        <div className="student-info">
-          {student ? (
-            <>
-              <strong>{student.full_name}</strong>
-              <span>{currentClass?.name || `Grade ${student.grade}`}</span>
-            </>
-          ) : (
-            <span>Loading...</span>
-          )}
         </div>
       </header>
 
       <main className="dashboard-content">
 
-        <section className="welcome-section">
-          <div>
-            <h2>
-              {student
-                ? `Welcome back, ${student.full_name}!`
-                : 'Welcome!'}
-            </h2>
-
-            <p>
-              Continue learning, take quizzes, and track your academic progress.
-            </p>
-          </div>
-
-          <div className="welcome-badge">
-            🎓 {currentClass?.name || 'No class assigned'}
-          </div>
-        </section>
-
-        {error && (
-          <div className="dashboard-error">
-            {error}
-          </div>
-        )}
+        {error && <div className="dashboard-error" role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={loadDashboard}>Try again</button>
+        </div>}
 
         {/* Statistics */}
         <section className="stats-grid">
-
           <div className="stat-card">
-            <div className="stat-icon">📝</div>
+            <div className="stat-icon"><SchoolOutlinedIcon aria-hidden="true" /></div>
             <div>
-              <span>Completed Quizzes</span>
-              <strong>
-                {stats ? stats.completed_quizzes : '--'}
-              </strong>
+              <span>Current class</span>
+              <strong>{loading ? '—' : currentClass?.name || 'Unassigned'}</strong>
             </div>
           </div>
-
           <div className="stat-card">
-            <div className="stat-icon">📊</div>
-            <div>
-              <span>Average Quiz Score</span>
-              <strong>
-                {stats ? `${stats.average_quiz_score}%` : '--'}
-              </strong>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">📚</div>
-            <div>
-              <span>Learning Notes</span>
-              <strong>
-                {stats ? stats.available_notes : '--'}
-              </strong>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon">📚</div>
+            <div className="stat-icon"><SchoolOutlinedIcon aria-hidden="true" /></div>
             <div>
               <span>Subjects</span>
-              <strong>{stats ? stats.subject_count : '--'}</strong>
+              <strong>{loading ? '—' : stats?.subject_count ?? 0}</strong>
             </div>
           </div>
-
+          <div className="stat-card">
+            <div className="stat-icon"><QuizOutlinedIcon aria-hidden="true" /></div>
+            <div>
+              <span>Completed Quizzes</span>
+              <strong>{loading ? '—' : stats?.completed_quizzes ?? 0}</strong>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon"><AutoAwesomeOutlinedIcon aria-hidden="true" /></div>
+            <div>
+              <span>Average quiz score</span>
+              <strong>{loading ? '—' : `${stats?.average_quiz_score ?? 0}%`}</strong>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-icon"><MenuBookOutlinedIcon aria-hidden="true" /></div>
+            <div>
+              <span>Learning notes</span>
+              <strong>{loading ? '—' : stats?.available_notes ?? 0}</strong>
+            </div>
+          </div>
         </section>
 
         {!currentClass && <section className="dashboard-empty"><strong>No class assigned yet</strong><span>Your class subjects, notes, and quizzes will appear here once your school assigns you to a class.</span></section>}
@@ -166,41 +141,49 @@ function StudentDashboard() {
 
         <section className="dashboard-cards">
 
-          <div
+          <button
+            type="button"
             className="dashboard-card"
             onClick={() => navigate('/student/quiz')}
           >
-            <div className="card-icon">🧠</div>
+            <div className="card-icon"><QuizOutlinedIcon aria-hidden="true" /></div>
             <h3>Quizzes</h3>
-            <p>
-              Test your knowledge and improve your understanding.
-            </p>
-            <button>Take a Quiz →</button>
-          </div>
+            <p>Test your knowledge and improve your understanding.</p>
+            <span className="dashboard-card-action">Take a quiz <span aria-hidden="true">→</span></span>
+          </button>
 
-          <div
+          <button
+            type="button"
             className="dashboard-card"
             onClick={() => navigate('/student/notes')}
           >
-            <div className="card-icon">📖</div>
+            <div className="card-icon"><MenuBookOutlinedIcon aria-hidden="true" /></div>
             <h3>Learning Notes</h3>
-            <p>
-              Read study materials and notes uploaded by your teacher.
-            </p>
-            <button>Open Notes →</button>
-          </div>
+            <p>Read study materials and notes uploaded by your teacher.</p>
+            <span className="dashboard-card-action">Open notes <span aria-hidden="true">→</span></span>
+          </button>
 
-          <div
+          <button
+            type="button"
+            className="dashboard-card"
+            onClick={() => navigate('/student/practice-plan')}
+          >
+            <div className="card-icon"><EventNoteOutlinedIcon aria-hidden="true" /></div>
+            <h3>My Practice Plan</h3>
+            <p>Choose a next step based on your recent learning evidence.</p>
+            <span className="dashboard-card-action">View my plan <span aria-hidden="true">→</span></span>
+          </button>
+
+          <button
+            type="button"
             className="dashboard-card"
             onClick={() => navigate('/student/ai')}
           >
-            <div className="card-icon">🤖</div>
+            <div className="card-icon"><AutoAwesomeOutlinedIcon aria-hidden="true" /></div>
             <h3>AI Assistant</h3>
-            <p>
-              Ask questions and get help with your secondary-level subjects.
-            </p>
-            <button>Ask AI →</button>
-          </div>
+            <p>Ask questions and get help with your subjects.</p>
+            <span className="dashboard-card-action">Ask a question <span aria-hidden="true">→</span></span>
+          </button>
 
         </section>
 

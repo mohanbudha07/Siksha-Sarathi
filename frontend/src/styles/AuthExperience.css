@@ -1,0 +1,162 @@
+.login-page,
+.admin-login-page,
+.change-password-page {
+  min-height: 100vh;
+  padding: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+.login-layout,
+.admin-login-layout {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: minmax(300px, 0.9fr) minmax(420px, 1.1fr);
+}
+
+.login-intro-panel,
+.admin-login-intro {
+  position: relative;
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: clamp(28px, 5vw, 72px);
+  background: var(--color-primary-dark);
+  color: white;
+}
+
+.login-intro-panel::after,
+.admin-login-intro::after {
+  position: absolute;
+  right: -80px;
+  bottom: -120px;
+  width: 360px;
+  height: 360px;
+  border: 1px solid rgb(242 201 76 / 32%);
+  border-radius: 50%;
+  content: '';
+}
+
+.login-intro-panel::before,
+.admin-login-intro::before {
+  position: absolute;
+  right: -26px;
+  bottom: -66px;
+  width: 250px;
+  height: 250px;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 50%;
+  content: '';
+}
+
+.auth-brand {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 11px;
+  color: white;
+  text-decoration: none;
+}
+
+.auth-brand-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgb(242 201 76 / 70%);
+  border-radius: var(--radius-md);
+  color: var(--color-gold);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.auth-brand > span:last-child { display: grid; gap: 1px; }
+.auth-brand strong { font-size: 15px; }
+.auth-brand small { color: rgb(255 255 255 / 65%); font-size: 11px; }
+.auth-eyebrow { margin: 0 0 9px; color: var(--color-blue); font-size: 11px; font-weight: 800; letter-spacing: 0.1em; }
+.login-intro-panel .auth-eyebrow,
+.admin-login-intro .auth-eyebrow { color: var(--color-gold); }
+.login-intro-copy,
+.admin-login-intro-copy { position: relative; z-index: 1; max-width: 470px; margin: auto 0; padding: 56px 0; }
+.login-intro-copy h1,
+.admin-login-intro-copy h1 { max-width: 440px; margin: 0 0 16px; color: white; font-size: clamp(2.25rem, 4vw, 3.6rem); line-height: 1.08; }
+.login-intro-copy > p:last-child,
+.admin-login-intro-copy > p:last-child { max-width: 390px; margin: 0; color: rgb(255 255 255 / 76%); font-size: 15px; line-height: 1.7; }
+.auth-home-link { position: relative; z-index: 1; width: fit-content; color: rgb(255 255 255 / 78%); font-size: 13px; font-weight: 600; text-decoration: none; }
+.auth-home-link:hover { color: var(--color-gold); }
+.login-card,
+.admin-login-card {
+  width: min(100%, 510px);
+  align-self: center;
+  justify-self: center;
+  padding: clamp(26px, 5vw, 58px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.login-heading,
+.admin-login-heading { margin: 0 0 30px; }
+.login-heading h2,
+.admin-login-heading h2 { margin: 0 0 8px; color: var(--color-primary-dark); font-size: 30px; }
+.login-heading p:last-child,
+.admin-login-heading p:last-child { margin: 0; color: var(--color-muted); line-height: 1.6; }
+.login-card :is(.input-group, .admin-input-group) { margin-bottom: 19px; }
+.login-card :is(.input-group label, .admin-input-group label) { display: block; margin: 0 0 7px; color: var(--color-text); font-size: 13px; font-weight: 700; }
+.login-card :is(.input-group input, .admin-input-group input, .input-group select) { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid #c9d2e0; border-radius: var(--radius-sm); background: white; color: var(--color-text); font: inherit; }
+.login-role-group { min-width: 0; margin: 0 0 19px; padding: 0; border: 0; }
+.login-role-group legend { margin-bottom: 7px; color: var(--color-text); font-size: 13px; font-weight: 700; }
+.login-role-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.login-role-options label { display: flex; min-height: 44px; align-items: center; gap: 8px; padding: 9px 11px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: white; color: var(--color-muted); cursor: pointer; font-size: 13px; font-weight: 650; }
+.login-role-options label.is-selected { border-color: var(--color-blue); background: var(--color-primary-soft); color: var(--color-primary); }
+.login-role-options input { width: 15px; height: 15px; accent-color: var(--color-primary); }
+.login-button,
+.admin-login-button,
+.change-password-card button { display: flex; width: 100%; min-height: 46px; align-items: center; justify-content: center; gap: 8px; padding: 11px 15px; border: 0; border-radius: var(--radius-sm); background: var(--color-primary); color: white; font-size: 14px; font-weight: 700; cursor: pointer; }
+.login-button:hover:not(:disabled),
+.admin-login-button:hover:not(:disabled),
+.change-password-card button:hover:not(:disabled) { background: var(--color-blue); }
+.login-button:disabled,
+.admin-login-button:disabled,
+.change-password-card button:disabled { cursor: not-allowed; opacity: 0.62; }
+.login-error,
+.admin-login-error,
+.change-password-error { margin: 0 0 16px; padding: 10px 12px; border: 1px solid #fecdca; border-radius: var(--radius-sm); background: #fef3f2; color: var(--color-danger); font-size: 13px; line-height: 1.5; }
+.login-success { padding: 10px 12px; border: 1px solid #a6f4c5; border-radius: var(--radius-sm); background: #ecfdf3; color: var(--color-success); font-size: 13px; }
+.login-security-note,
+.admin-login-security-note { margin: 18px 0 0; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+.login-copyright,
+.login-footer,
+.login-brand,
+.admin-login-brand { display: none; }
+
+.change-password-page { display: grid; grid-template-columns: minmax(260px, 0.7fr) minmax(360px, 1fr); align-items: center; gap: clamp(24px, 8vw, 120px); padding: clamp(24px, 7vw, 90px); }
+.change-password-page::before { align-self: center; max-width: 380px; color: var(--color-primary); font-size: clamp(2rem, 4vw, 3.4rem); font-weight: 750; line-height: 1.12; content: 'Secure your account before continuing.'; }
+.change-password-card { width: min(100%, 510px); justify-self: start; padding: clamp(22px, 4vw, 42px); border: 1px solid var(--color-border); border-top: 4px solid var(--color-gold); border-radius: var(--radius-md); background: white; box-shadow: var(--shadow-md); }
+.change-password-card h1 { color: var(--color-primary-dark); font-size: 26px; }
+.change-password-card .change-password-description { color: var(--color-muted); }
+.change-password-card form { gap: 14px; }
+.change-password-card input { width: 100%; min-height: 44px; border-radius: var(--radius-sm); }
+
+@media (max-width: 760px) {
+  .login-layout,
+  .admin-login-layout { grid-template-columns: minmax(0, 1fr); }
+  .login-intro-panel,
+  .admin-login-intro { min-height: 240px; padding: 20px 22px; }
+  .login-intro-copy,
+  .admin-login-intro-copy { margin: auto 0; padding: 32px 0 25px; }
+  .login-intro-copy h1,
+  .admin-login-intro-copy h1 { max-width: 360px; font-size: 30px; }
+  .login-intro-copy > p:last-child,
+  .admin-login-intro-copy > p:last-child { font-size: 13px; }
+  .login-card,
+  .admin-login-card { width: 100%; padding: 30px 22px 40px; }
+  .change-password-page { grid-template-columns: minmax(0, 1fr); gap: 18px; padding: 20px; }
+  .change-password-page::before { font-size: 25px; }
+  .change-password-card { justify-self: center; }
+}

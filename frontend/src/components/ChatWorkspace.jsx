@@ -22,11 +22,18 @@ function ChatWorkspace({ role }) {
   const [messages, setMessages] = useState([])
   const [hasMore, setHasMore] = useState(false)
   const [loadingRooms, setLoadingRooms] = useState(true)
+  const [currentUserId, setCurrentUserId] = useState(null)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [sending, setSending] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.get('/auth/me')
+      .then((response) => setCurrentUserId(response.data.user.id))
+      .catch(() => setCurrentUserId(null))
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -241,7 +248,10 @@ function ChatWorkspace({ role }) {
                 {loadingMessages && messages.length === 0 && <p className="chat-empty-state">Loading messages...</p>}
                 {!loadingMessages && messages.length === 0 && <p className="chat-empty-state">No messages yet. Start the conversation.</p>}
                 {messages.map((message) => (
-                  <article className="chat-message" key={message.id}>
+                  <article
+                    className={`chat-message${message.sender.id === currentUserId ? ' is-own' : ''}`}
+                    key={message.id}
+                  >
                     <div className="chat-message-meta">
                       <strong>{message.sender.display_name}</strong>
                       <span>{message.sender.role}</span>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import './ChangePassword.css'
+import '../styles/AuthExperience.css'
 
 function ChangePassword() {
   const navigate = useNavigate()
@@ -49,7 +50,7 @@ function ChangePassword() {
         <p className="change-password-eyebrow">ACCOUNT SECURITY</p>
         <h1>Choose a new password</h1>
         <p className="change-password-description">
-          Your school provided a temporary password. Set a personal password to continue.
+          For security, you must create a new password before continuing.
         </p>
         <form onSubmit={handleSubmit}>
           <label>

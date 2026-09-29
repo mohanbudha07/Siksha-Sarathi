@@ -94,7 +94,7 @@ function TeacherAssessments() {
   }
 
   const deleteAssessment = async (assessment) => {
-    if (!window.confirm(`Delete “${assessment.title}” and all recorded marks?`)) return
+    if (!window.confirm(`Delete “${assessment.title}”? Assessments with recorded marks are protected.`)) return
     try {
       setDeletingId(assessment.id)
       setError('')
