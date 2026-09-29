@@ -250,8 +250,9 @@ def create_notices_blueprint(
     @role_required(teacher_role)
     def teacher_notice_options_api():
         teacher_id = session["user_id"]
-        cur = mysql.connection.cursor()
+        cur = None
         try:
+            cur = mysql.connection.cursor()
             cur.execute(
                 """SELECT c.id AS class_id, c.name AS class_name,
                           c.grade, c.section
@@ -275,22 +276,26 @@ def create_notices_blueprint(
             )
             subject_assignments = cur.fetchall()
             cur.execute(
-                """SELECT DISTINCT s.id AS student_id, s.full_name,
-                          sce.class_id, c.name AS class_name
-                   FROM students s
-                   INNER JOIN student_class_enrollments sce
-                     ON sce.student_id = s.id AND sce.ended_at IS NULL
-                   INNER JOIN classes c ON c.id = sce.class_id
-                   WHERE EXISTS (
-                       SELECT 1 FROM class_teacher_assignments cta
-                       WHERE cta.teacher_user_id = %s
-                         AND cta.class_id = sce.class_id AND cta.ended_at IS NULL
-                   ) OR EXISTS (
-                       SELECT 1 FROM teacher_class_subjects tcs
-                       WHERE tcs.teacher_user_id = %s
-                         AND tcs.class_id = sce.class_id
-                   )
-                   ORDER BY c.grade, c.section, s.full_name""",
+                                """SELECT student_id, full_name, class_id, class_name
+                                     FROM (
+                                             SELECT DISTINCT s.id AS student_id, s.full_name,
+                                                            sce.class_id, c.name AS class_name,
+                                                            c.grade, c.section
+                                             FROM students s
+                                             INNER JOIN student_class_enrollments sce
+                                                 ON sce.student_id = s.id AND sce.ended_at IS NULL
+                                             INNER JOIN classes c ON c.id = sce.class_id
+                                             WHERE EXISTS (
+                                                     SELECT 1 FROM class_teacher_assignments cta
+                                                     WHERE cta.teacher_user_id = %s
+                                                         AND cta.class_id = sce.class_id AND cta.ended_at IS NULL
+                                             ) OR EXISTS (
+                                                     SELECT 1 FROM teacher_class_subjects tcs
+                                                     WHERE tcs.teacher_user_id = %s
+                                                         AND tcs.class_id = sce.class_id
+                                             )
+                                     ) AS eligible_students
+                                     ORDER BY grade, section, full_name""",
                 (teacher_id, teacher_id)
             )
             students = cur.fetchall()
@@ -299,8 +304,15 @@ def create_notices_blueprint(
                 "subject_assignments": subject_assignments,
                 "students": students
             }, 200
+        except Exception as error:
+            print("Teacher notice options failed:", type(error).__name__)
+            return {"error": "Unable to load notice options"}, 500
         finally:
-            cur.close()
+            if cur is not None:
+                try:
+                    cur.close()
+                except Exception as error:
+                    print("Teacher notice options cursor close failed:", type(error).__name__)
 
     @notices.post("/api/teacher/notices")
     @login_required
