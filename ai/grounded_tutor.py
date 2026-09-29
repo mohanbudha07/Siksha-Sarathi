@@ -147,24 +147,25 @@ def get_topic(
 
 INTENT_GUIDANCE = {
     "explain": (
-        "Explain the concept clearly in simple language. "
-        "Use a short example when helpful, then ask one brief understanding-check question."
+        "Structure the response as: a simple explanation, one short real-life or worked example, "
+        "then one brief understanding-check question. Do not overload the student with too many details."
     ),
     "example": (
-        "Focus on one clear worked example. "
-        "Show the reasoning in simple steps and connect the example to the concept."
+        "Give one clear worked example. Explain each important step briefly, then connect the example "
+        "back to the main concept. End by offering a similar problem for the student to try."
     ),
     "practice": (
-        "Give a small set of age-appropriate practice questions. "
-        "Do not immediately reveal all answers unless the student asks for them. "
-        "Offer a hint or one question at a time when useful."
+        "Act like a tutor giving practice. Give 3 short age-appropriate questions unless the student "
+        "asks for a different number. Do not reveal the answers immediately. Invite the student to "
+        "answer, and offer hints if they struggle."
     ),
     "revise": (
-        "Give a concise revision-oriented response using key ideas, important facts, "
-        "and a short memory check or recap question."
+        "Create a compact revision response with key points, important terms or formulas, one memory aid "
+        "when useful, and a short recap question at the end."
     ),
     "general": (
-        "Answer the student's request directly and teach the concept in a clear, concise way."
+        "Answer directly in a teaching style. Keep the response concise, use simple language, and include "
+        "an example or follow-up learning prompt when it helps."
     ),
 }
 
