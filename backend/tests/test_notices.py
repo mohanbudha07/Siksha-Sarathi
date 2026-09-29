@@ -4,6 +4,7 @@ import importlib
 from pathlib import Path
 import sqlite3
 import unittest
+from unittest.mock import patch
 
 
 try:
@@ -382,12 +383,59 @@ class NoticeTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/public/notices").status_code, 200)
 
     def test_teacher_options_only_include_assigned_scopes_and_students(self):
+        self.db.execute(
+            "INSERT INTO classes VALUES(3,'Grade 8','8','A','2026-01-01')"
+        )
+        self.db.execute(
+            "UPDATE student_class_enrollments SET class_id=3 WHERE student_id=2"
+        )
+        self.db.execute(
+            "INSERT INTO student_class_enrollments"
+            "(id, student_id, class_id, academic_year, started_at, ended_at, transfer_note, created_at)"
+            " VALUES(3,1,3,NULL,'2025-01-01','2025-12-31',NULL,'2025-01-01')"
+        )
+        self.db.execute(
+            "INSERT INTO teacher_class_subjects VALUES(2,2,3,1,'2026-01-01')"
+        )
+        self.db.execute(
+            "INSERT INTO class_teacher_assignments"
+            "(id, teacher_user_id, class_id, academic_year, started_at, ended_at, created_at)"
+            " VALUES(2,2,2,'2025/26','2025-01-01','2025-12-31','2025-01-01')"
+        )
+        self.db.commit()
         self.login("teacher")
         response = self.client.get("/api/teacher/notices/options")
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["class_id"] for item in response.json["class_teacher_classes"]], [1])
-        self.assertEqual([item["subject_id"] for item in response.json["subject_assignments"]], [1])
-        self.assertEqual([item["student_id"] for item in response.json["students"]], [1])
+        self.assertEqual(
+            {(item["class_id"], item["subject_id"])
+             for item in response.json["subject_assignments"]},
+            {(1, 1), (3, 1)}
+        )
+        students = response.json["students"]
+        self.assertEqual(
+            {(item["student_id"], item["class_id"]) for item in students},
+            {(1, 1), (2, 3)}
+        )
+        for student in students:
+            self.assertEqual(set(student), {
+                "student_id", "full_name", "class_id", "class_name"
+            })
+
+    def test_teacher_options_database_failure_returns_generic_json(self):
+        self.login("teacher")
+        connection = self.backend.mysql.connection
+        original_cursor = connection.cursor
+        with patch.object(
+            connection,
+            "cursor",
+            side_effect=[original_cursor(), RuntimeError("private SQL details")]
+        ):
+            response = self.client.get("/api/teacher/notices/options")
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json, {"error": "Unable to load notice options"})
+        self.assertNotIn("private SQL details", response.get_data(as_text=True))
 
     def test_admin_notice_options_exclude_sensitive_account_fields(self):
         self.login("admin")
