@@ -740,6 +740,87 @@ class AuthAndCoreRouteTests(unittest.TestCase):
             2
         )
 
+    def test_admin_student_creation_explicitly_sets_enrollment_started_at(self):
+        self.login_through_api('admin')
+        enrollment_inserts = []
+        original_execute = fixture.CursorAdapter.execute
+
+        def record_enrollment_insert(cursor, query, args=()):
+            if 'INSERT INTO student_class_enrollments' in query:
+                enrollment_inserts.append(query)
+            return original_execute(cursor, query, args)
+
+        with patch.object(
+            fixture.CursorAdapter, 'execute', new=record_enrollment_insert
+        ):
+            response = self.client.post('/api/admin/students', json={
+                'full_name': 'Timestamp Student',
+                'email': 'timestamp.student@example.test',
+                'password': 'Password123',
+                'class_id': 1,
+            })
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(enrollment_inserts), 1)
+        normalized_insert = ' '.join(enrollment_inserts[0].lower().split())
+        self.assertIn('(student_id, class_id, started_at)', normalized_insert)
+        self.assertIn('values (%s, %s, current_timestamp)', normalized_insert)
+
+        user = self.db.execute(
+            'SELECT id, must_change_password FROM users '
+            'WHERE email=?', ('timestamp.student@example.test',)
+        ).fetchone()
+        self.assertIsNotNone(user)
+        self.assertEqual(user['must_change_password'], 1)
+        student = self.db.execute(
+            'SELECT id, full_name, grade FROM students WHERE user_id=?',
+            (user['id'],)
+        ).fetchone()
+        self.assertEqual(
+            (student['full_name'], student['grade']), ('Timestamp Student', '10')
+        )
+        enrollments = self.db.execute(
+            'SELECT class_id, started_at FROM student_class_enrollments '
+            'WHERE student_id=? AND ended_at IS NULL',
+            (student['id'],)
+        ).fetchall()
+        self.assertEqual(len(enrollments), 1)
+        self.assertEqual(enrollments[0]['class_id'], 1)
+        self.assertTrue(enrollments[0]['started_at'])
+
+    def test_admin_student_enrollment_failure_rolls_back_user_and_profile(self):
+        self.login_through_api('admin')
+        original_execute = fixture.CursorAdapter.execute
+
+        def fail_enrollment_insert(cursor, query, args=()):
+            if 'INSERT INTO student_class_enrollments' in query:
+                raise RuntimeError('simulated enrollment insert failure')
+            return original_execute(cursor, query, args)
+
+        with patch.object(
+            fixture.CursorAdapter, 'execute', new=fail_enrollment_insert
+        ):
+            response = self.client.post('/api/admin/students', json={
+                'full_name': 'Rollback Enrollment Student',
+                'email': 'rollback.enrollment@example.test',
+                'password': 'Password123',
+                'class_id': 1,
+            })
+
+        self.assertEqual(response.status_code, 500)
+        self.assertIsNone(self.db.execute(
+            'SELECT id FROM users WHERE email=?',
+            ('rollback.enrollment@example.test',)
+        ).fetchone())
+        self.assertIsNone(self.db.execute(
+            'SELECT id FROM students WHERE full_name=?',
+            ('Rollback Enrollment Student',)
+        ).fetchone())
+        self.assertEqual(
+            self.db.execute('SELECT COUNT(*) FROM student_class_enrollments').fetchone()[0],
+            2
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
