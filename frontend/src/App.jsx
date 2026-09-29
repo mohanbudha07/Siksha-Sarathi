@@ -38,6 +38,7 @@ import StudentAttendance from './pages/StudentAttendance'
 import StudentNotices from './pages/StudentNotices'
 import TeacherNotices from './pages/TeacherNotices'
 import AdminNotices from './pages/AdminNotices'
+import AdminCsvManagement from './pages/AdminCsvManagement'
 
 // ---------- Auth Context Helper ----------
 function useAuthCheck() {
@@ -235,6 +236,9 @@ function App() {
         } />
         <Route path="/admin/notices" element={
           <AdminPage><AdminNotices /></AdminPage>
+        } />
+        <Route path="/admin/csv" element={
+          <AdminPage><AdminCsvManagement /></AdminPage>
         } />
         <Route path="/admin/ml-readiness" element={
           <AdminPage><AdminMLReadiness /></AdminPage>

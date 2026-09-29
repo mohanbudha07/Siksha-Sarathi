@@ -10,6 +10,7 @@ from backend.routes.assessments import create_assessments_blueprint
 from backend.routes.attendance import create_attendance_blueprint
 from backend.routes.auth import create_auth_blueprint
 from backend.routes.chatbot import create_chatbot_blueprint
+from backend.routes.csv_management import create_csv_management_blueprint
 from backend.routes.lab_quiz import create_lab_quiz_blueprint
 from backend.routes.notes import create_notes_blueprint
 from backend.routes.notices import create_notices_blueprint
@@ -259,6 +260,13 @@ app.register_blueprint(create_notices_blueprint(
     role_required=role_required,
     student_role=STUDENT,
     teacher_role=TEACHER,
+    admin_role=ADMIN
+))
+
+app.register_blueprint(create_csv_management_blueprint(
+    mysql=mysql,
+    login_required=login_required,
+    role_required=role_required,
     admin_role=ADMIN
 ))
 
