@@ -114,6 +114,34 @@
   background: #fafaff;
 }
 
+.teacher-material-audience {
+  display: block;
+  margin-top: 5px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.teacher-material-download {
+  display: flex;
+  max-width: 230px;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: #102a56;
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.teacher-material-download:disabled { opacity: .55; cursor: wait; }
+.teacher-material-download .material-file-badge { flex: 0 0 auto; }
+
 .note-actions {
   display: flex;
   gap: 8px;

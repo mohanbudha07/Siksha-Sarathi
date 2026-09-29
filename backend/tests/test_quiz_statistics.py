@@ -146,7 +146,13 @@ class QuizStatisticsTests(unittest.TestCase):
                 question TEXT, answer TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE notes(id INTEGER PRIMARY KEY, title TEXT, subject TEXT,
-                chapter TEXT, content TEXT, created_at TEXT, uploaded_by INTEGER);
+                chapter TEXT, content TEXT, created_at TEXT, uploaded_by INTEGER,
+                target_class_id INTEGER, target_student_id INTEGER);
+            CREATE TABLE note_attachments(id INTEGER PRIMARY KEY, note_id INTEGER NOT NULL,
+                original_filename TEXT NOT NULL, stored_filename TEXT NOT NULL UNIQUE,
+                mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE);
             INSERT INTO users VALUES(1,'Student','s@example.test','hash','student',0,'2026-01-01');
             INSERT INTO users VALUES(2,'Teacher','t@example.test','hash','teacher',0,'2026-01-01');
             INSERT INTO users VALUES(3,'Admin','a@example.test','hash','admin',0,'2026-01-01');
@@ -2720,7 +2726,7 @@ class QuizStatisticsTests(unittest.TestCase):
 
     def test_teacher_can_read_update_and_delete_own_note(self):
         self.db.execute(
-            'INSERT INTO notes VALUES(1,?,?,?,?,?,?)',
+            'INSERT INTO notes(id,title,subject,chapter,content,created_at,uploaded_by) VALUES(1,?,?,?,?,?,?)',
             ('Original', 'Science', '1', 'Original content', '2026-01-01', 2)
         )
         self.db.commit()
@@ -2735,6 +2741,7 @@ class QuizStatisticsTests(unittest.TestCase):
             'subject': ' Science ',
             'chapter': ' 2 ',
             'content': ' Updated content ',
+            'class_id': 1,
         })
         self.assertEqual(response.status_code, 200)
         row = self.db.execute(
@@ -2748,7 +2755,7 @@ class QuizStatisticsTests(unittest.TestCase):
 
     def test_teacher_cannot_manage_another_teachers_note(self):
         self.db.execute(
-            'INSERT INTO notes VALUES(1,?,?,?,?,?,?)',
+            'INSERT INTO notes(id,title,subject,chapter,content,created_at,uploaded_by) VALUES(1,?,?,?,?,?,?)',
             ('Private', 'Science', '1', 'Other teacher content', '2026-01-01', 4)
         )
         self.db.commit()
@@ -2765,7 +2772,7 @@ class QuizStatisticsTests(unittest.TestCase):
 
     def test_note_update_rejects_invalid_data(self):
         self.db.execute(
-            'INSERT INTO notes VALUES(1,?,?,?,?,?,?)',
+            'INSERT INTO notes(id,title,subject,chapter,content,created_at,uploaded_by) VALUES(1,?,?,?,?,?,?)',
             ('Original', 'Science', '1', 'Content', '2026-01-01', 2)
         )
         self.db.commit()

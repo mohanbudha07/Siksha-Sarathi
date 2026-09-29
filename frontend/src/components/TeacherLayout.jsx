@@ -8,7 +8,7 @@ const groups = [
     { to: '/teacher/dashboard', label: 'Dashboard', icon: 'dashboard' },
   ] },
   { label: 'Teaching', items: [
-    { to: '/teacher/notes', label: 'Learning Notes', icon: 'notes' },
+    { to: '/teacher/notes', label: 'Learning Materials', icon: 'notes' },
     { to: '/teacher/quizzes', label: 'Quizzes', icon: 'quizzes' },
     { to: '/teacher/lab-quizzes', label: 'Lab Sessions', icon: 'lab' },
     { to: '/teacher/assessments', label: 'Paper Marks', icon: 'marks' },

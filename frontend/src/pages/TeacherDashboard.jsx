@@ -7,7 +7,7 @@ const quickActions = [
   { title: 'Take attendance', text: 'Open today’s class register.', path: '/teacher/attendance', tone: 'green' },
   { title: 'Record paper marks', text: 'Enter exam or assignment results.', path: '/teacher/assessments', tone: 'orange' },
   { title: 'Run a lab quiz', text: 'Schedule a supervised computer-lab quiz.', path: '/teacher/lab-quizzes', tone: 'blue' },
-  { title: 'Share learning notes', text: 'Create or manage student materials.', path: '/teacher/notes', tone: 'purple' },
+  { title: 'Share learning materials', text: 'Create or manage class and individual resources.', path: '/teacher/notes', tone: 'purple' },
 ]
 
 function TeacherDashboard() {
@@ -114,8 +114,8 @@ function TeacherDashboard() {
       </section>
 
       <section className="teacher-overview-section">
-        <div className="teacher-overview-section-title"><div><h2>Recent notes</h2><p>Your latest learning materials.</p></div><button onClick={() => navigate('/teacher/notes')}>View all</button></div>
-        {recentNotes.length === 0 ? <div className="teacher-overview-empty">No notes uploaded yet.</div> : (
+        <div className="teacher-overview-section-title"><div><h2>Recent Learning Materials</h2><p>Your latest class and Student resources.</p></div><button onClick={() => navigate('/teacher/notes')}>View all</button></div>
+        {recentNotes.length === 0 ? <div className="teacher-overview-empty">No Learning Materials uploaded yet.</div> : (
           <div className="teacher-recent-list">{recentNotes.slice(0, 4).map((note) => (
             <article key={note.id}><span>{note.subject?.charAt(0) || 'N'}</span><div><strong>{note.title}</strong><small>{note.subject}{note.chapter ? ` · Chapter ${note.chapter}` : ''}</small></div></article>
           ))}</div>

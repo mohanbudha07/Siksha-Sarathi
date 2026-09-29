@@ -5,7 +5,9 @@ from functools import wraps
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from backend.routes.admin import create_admin_blueprint, serialize_nepal_datetime
+from werkzeug.exceptions import RequestEntityTooLarge
+from backend.routes.admin import create_admin_blueprint
+from backend.time_utils import serialize_nepal_datetime
 from backend.routes.assessments import create_assessments_blueprint
 from backend.routes.attendance import create_attendance_blueprint
 from backend.routes.auth import create_auth_blueprint
@@ -14,6 +16,10 @@ from backend.routes.chat import create_chat_blueprint
 from backend.routes.csv_management import create_csv_management_blueprint
 from backend.routes.lab_quiz import create_lab_quiz_blueprint
 from backend.routes.notes import create_notes_blueprint
+from backend.learning_materials import (
+    MAX_MATERIAL_REQUEST_BYTES,
+    configure_learning_material_upload_root,
+)
 from backend.routes.notices import create_notices_blueprint
 from backend.routes.prediction import create_prediction_blueprint
 from backend.routes.quiz import (
@@ -21,7 +27,11 @@ from backend.routes.quiz import (
     parse_quiz_questions,
     quiz_has_open_lab_session
 )
-from backend.student_access import fetch_student_context
+from backend.student_access import (
+    fetch_student_context,
+    student_note_visibility_clause,
+    student_note_visibility_params,
+)
 from ai.ml.production.prediction_service import PredictionService
 from ai.ml.production.learning_recommendations import (
     LEARNING_RECOMMENDATION_VERSION,
@@ -76,6 +86,10 @@ if not secret_key:
         raise RuntimeError("SECRET_KEY is required when APP_ENV=production")
     secret_key = secrets.token_hex(32)
 app.config["SECRET_KEY"] = secret_key
+app.config["LEARNING_MATERIAL_UPLOAD_DIR"] = configure_learning_material_upload_root(
+    repository_root
+)
+app.config["MAX_CONTENT_LENGTH"] = MAX_MATERIAL_REQUEST_BYTES
 
 # Session cookie settings (important for React + credentials)
 app.config["SESSION_COOKIE_SAMESITE"] = os.getenv(
@@ -206,6 +220,11 @@ def login_rate_limit_exceeded(_error):
     }, 429
 
 
+@app.errorhandler(RequestEntityTooLarge)
+def request_entity_too_large(_error):
+    return {"error": "Upload request exceeds the 100 MB limit."}, 413
+
+
 app.register_blueprint(create_auth_blueprint(
     mysql=mysql,
     limiter=limiter,
@@ -329,16 +348,10 @@ def student_dashboard_api():
         available_notes = 0
         if current_class and subject_names:
             cur.execute(
-                """SELECT COUNT(*) AS available_notes
-                   FROM notes n
-                   WHERE EXISTS (
-                       SELECT 1
-                       FROM teacher_class_subjects tcs
-                       INNER JOIN subjects sub ON sub.id = tcs.subject_id
-                       WHERE tcs.class_id = %s
-                         AND LOWER(TRIM(sub.name)) = LOWER(TRIM(n.subject))
-                   )""",
-                (current_class["id"],)
+                     f"""SELECT COUNT(*) AS available_notes
+                         FROM notes n
+                         WHERE {student_note_visibility_clause('n')}""",
+                     student_note_visibility_params(current_class["id"], student_id),
             )
             available_notes = int(cur.fetchone()["available_notes"] or 0)
 
@@ -452,21 +465,15 @@ def student_dashboard_api():
 # STUDENT NOTES
 # ============================================================
 
-def fetch_learning_recommendation_resources(cur, class_id, subject_names):
-    """Fetch only published resources visible in this class's assigned subjects."""
-    if class_id is None or not subject_names:
+def fetch_learning_recommendation_resources(cur, class_id, subject_names, student_id=None):
+    """Fetch only resources visible to this Student in their current class."""
+    if class_id is None or student_id is None or not subject_names:
         return [], []
     cur.execute(
-        """SELECT id, title, subject, chapter FROM notes
-           WHERE EXISTS (
-               SELECT 1
-               FROM teacher_class_subjects tcs
-               INNER JOIN subjects sub ON sub.id = tcs.subject_id
-               WHERE tcs.class_id = %s
-                 AND LOWER(TRIM(sub.name)) = LOWER(TRIM(notes.subject))
-           )
-           ORDER BY title, id""",
-        (class_id,),
+        f"""SELECT n.id, n.title, n.subject, n.chapter FROM notes n
+           WHERE {student_note_visibility_clause('n')}
+           ORDER BY n.title, n.id""",
+        student_note_visibility_params(class_id, student_id),
     )
     notes = [
         {
@@ -701,6 +708,7 @@ def student_practice_plan_api():
             cur,
             current_class["id"] if current_class else None,
             subject_names,
+            student_id,
         )
         result = build_learning_recommendations(
             {"subject_evidence": subject_evidence, "attendance_evidence": attendance},
@@ -1611,7 +1619,10 @@ def teacher_student_learning_profile_api(student_id):
             mistake["mistake_count"] = int(mistake["mistake_count"] or 0)
 
         available_notes, available_quizzes = fetch_learning_recommendation_resources(
-            cur, student["class_id"], {str(student["subject"]).strip().casefold()}
+            cur,
+            student["class_id"],
+            {str(student["subject"]).strip().casefold()},
+            student_id,
         )
         recommendation_result = build_teacher_recommendations(
             topics,

@@ -72,7 +72,7 @@ function StudentPracticePlan() {
               <h2>Keep building your learning record</h2>
               <p>Your teacher's notes and practice quizzes are available even when there is not enough evidence for a specific next step.</p>
               <div>
-                <Link to="/student/notes">Read learning notes</Link>
+                <Link to="/student/notes">Read Learning Materials</Link>
                 <Link to="/student/quiz">Browse practice quizzes</Link>
               </div>
             </section>
@@ -104,7 +104,7 @@ function StudentPracticePlan() {
                       )) : <>
                         <p className="practice-plan-evidence">{item.resources?.note_message || 'No matching note is currently available.'}</p>
                         <Link to={`/student/notes?${new URLSearchParams(item.subject ? { subject: item.subject } : {})}`}>
-                          {item.subject ? `Browse ${item.subject} notes →` : 'Browse learning notes →'}
+                          {item.subject ? `Browse ${item.subject} materials →` : 'Browse Learning Materials →'}
                         </Link>
                       </>}
                     </div>

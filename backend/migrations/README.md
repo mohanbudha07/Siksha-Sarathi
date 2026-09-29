@@ -288,3 +288,29 @@ Back up the database, stop the backend, and then apply migration 018:
 For new databases, `backend/setup_db.sql` includes both Chat tables. The
 migration only creates Chat structures; it does not modify enrollment,
 teacher-assignment, Attendance, Notice, or AI chat-history data.
+
+## Learning Material attachment migration
+
+Migration 019 adds nullable class and Student targeting to `notes` and creates
+`note_attachments`. Existing Notes remain unchanged with NULL targets; the
+migration does not infer historical classes or remove content. Target foreign
+keys use `ON DELETE RESTRICT` so removing a class or Student cannot silently
+widen a material's audience. Attachment metadata cascades when its Note is
+deleted; file bytes remain in the private backend upload directory and are
+removed by the application.
+
+The default private file root is the ignored repository-level
+`uploads/learning_materials` directory. Set `LEARNING_MATERIAL_UPLOAD_DIR` to
+an absolute path or a path relative to the repository root to choose another
+private location. Flask does not serve this directory as static content; file
+downloads always go through authenticated, object-authorized API routes.
+
+After migration 018, back up the database, stop the backend, then apply
+migration 019 manually from the repository root:
+
+    sudo mysqldump siksha_sarathi > backups/siksha_sarathi_before_019_$(date +%Y%m%d_%H%M%S).sql
+    sudo mysql siksha_sarathi < backend/migrations/019_learning_material_attachments.sql
+
+Do not run the migration automatically from the application or unit tests. For
+new databases, `backend/setup_db.sql` includes the target columns and attachment
+table.

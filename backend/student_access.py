@@ -53,3 +53,28 @@ def fetch_student_context(cur, user_id):
             for subject in subjects
         }
     }
+
+
+def student_note_visibility_clause(note_alias="n"):
+    """SQL predicate for current-class and optional individual material access."""
+    return f"""EXISTS (
+        SELECT 1
+        FROM teacher_class_subjects tcs
+        INNER JOIN subjects sub ON sub.id = tcs.subject_id
+        WHERE tcs.class_id = %s
+          AND LOWER(TRIM(sub.name)) = LOWER(TRIM({note_alias}.subject))
+    )
+    AND (
+        {note_alias}.target_class_id IS NULL
+        OR (
+            {note_alias}.target_class_id = %s
+            AND (
+                {note_alias}.target_student_id IS NULL
+                OR {note_alias}.target_student_id = %s
+            )
+        )
+    )"""
+
+
+def student_note_visibility_params(class_id, student_id):
+    return class_id, class_id, student_id

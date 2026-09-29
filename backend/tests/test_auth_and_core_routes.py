@@ -520,6 +520,7 @@ class AuthAndCoreRouteTests(unittest.TestCase):
             'subject': 'Science',
             'chapter': 'Force',
             'content': 'A force is a push or pull.',
+            'class_id': 1,
         })
         self.assertEqual(response.status_code, 201)
         stored = self.db.execute(

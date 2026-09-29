@@ -1,30 +1,10 @@
 """Administrator school setup and account-management API routes."""
 
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
-
 from flask import Blueprint, request
 from werkzeug.security import generate_password_hash
 
 from ai.ml.production.training_readiness import build_admin_training_readiness_report
-
-NEPAL_TIMEZONE = ZoneInfo("Asia/Kathmandu")
-
-
-def serialize_nepal_datetime(value):
-    if value is None:
-        return None
-    if isinstance(value, str):
-        normalized = value.replace("Z", "+00:00")
-        try:
-            value = datetime.fromisoformat(normalized)
-        except ValueError:
-            return value
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(NEPAL_TIMEZONE).strftime(
-        "%b %-d, %Y, %-I:%M %p NPT"
-    )
+from backend.time_utils import serialize_nepal_datetime
 
 
 def create_admin_blueprint(mysql, login_required, role_required, admin_role):

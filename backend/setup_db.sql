@@ -135,10 +135,34 @@ CREATE TABLE IF NOT EXISTS notes (
     title VARCHAR(200) NOT NULL,
     subject VARCHAR(100),
     chapter VARCHAR(100),
+    target_class_id INT NULL,
+    target_student_id INT NULL,
     content TEXT,
     uploaded_by INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_notes_target_class (target_class_id),
+    INDEX idx_notes_target_student (target_student_id),
+    CONSTRAINT fk_notes_target_class
+        FOREIGN KEY (target_class_id) REFERENCES classes(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_notes_target_student
+        FOREIGN KEY (target_student_id) REFERENCES students(id) ON DELETE RESTRICT,
+    CONSTRAINT chk_notes_student_requires_class
+        CHECK (target_student_id IS NULL OR target_class_id IS NOT NULL),
     FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS note_attachments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    note_id INT NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    stored_filename VARCHAR(64) NOT NULL,
+    mime_type VARCHAR(255) NOT NULL,
+    size_bytes BIGINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_note_attachments_stored_filename (stored_filename),
+    INDEX idx_note_attachments_note_id (note_id),
+    CONSTRAINT fk_note_attachments_note
+        FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS quizzes (
