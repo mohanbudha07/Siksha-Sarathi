@@ -10,6 +10,7 @@ from backend.routes.assessments import create_assessments_blueprint
 from backend.routes.attendance import create_attendance_blueprint
 from backend.routes.auth import create_auth_blueprint
 from backend.routes.chatbot import create_chatbot_blueprint
+from backend.routes.chat import create_chat_blueprint
 from backend.routes.csv_management import create_csv_management_blueprint
 from backend.routes.lab_quiz import create_lab_quiz_blueprint
 from backend.routes.notes import create_notes_blueprint
@@ -196,6 +197,10 @@ def health_check():
 
 @app.errorhandler(429)
 def login_rate_limit_exceeded(_error):
+    if request.path.startswith("/api/chat/"):
+        return {
+            "error": "Too many chat messages. Please wait before sending more."
+        }, 429
     return {
         "error": "Too many login attempts. Please wait before trying again."
     }, 429
@@ -220,6 +225,12 @@ app.register_blueprint(create_chatbot_blueprint(
     login_required=login_required,
     role_required=role_required,
     student_role=STUDENT
+))
+
+app.register_blueprint(create_chat_blueprint(
+    mysql=mysql,
+    login_required=login_required,
+    limiter=limiter
 ))
 
 app.register_blueprint(create_quiz_blueprint(

@@ -14,6 +14,7 @@ const navigation = [
     { to: '/teacher/assessments', icon: 'M', label: 'Paper Marks' },
     { to: '/teacher/attendance', icon: 'A', label: 'Attendance' },
     { to: '/teacher/notices', icon: '!', label: 'Notices' },
+    { to: '/teacher/chat', icon: 'C', label: 'Chat' },
   ] },
   { label: 'Insights', items: [{ to: '/teacher/analytics', icon: 'I', label: 'Learning Insights' }] },
 ]
