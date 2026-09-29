@@ -34,10 +34,18 @@ def normalized_content(data):
 
 
 def fetch_user_role(cur, user_id):
-    cur.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+    cur.execute(
+        "SELECT role, must_change_password FROM users WHERE id = %s",
+        (user_id,)
+    )
     row = cur.fetchone()
-    role = row["role"] if row else None
-    return role if role in NOTICE_ROLES else None
+    if not row or row["role"] not in NOTICE_ROLES:
+        return None, ({"error": "Authentication required"}, 401)
+    if bool(row["must_change_password"]):
+        return None, ({
+            "error": "Password change required before using this feature"
+        }, 403)
+    return row["role"], None
 
 
 def active_class_students(cur, class_id):
@@ -391,8 +399,9 @@ def create_notices_blueprint(
         cur = mysql.connection.cursor()
         try:
             user_id = session["user_id"]
-            if not fetch_user_role(cur, user_id):
-                return {"error": "Authentication required"}, 401
+            role, error = fetch_user_role(cur, user_id)
+            if error:
+                return error
             cur.execute(
                 """SELECT n.id, n.title, n.body, n.visibility,
                           n.audience_type, creator.username AS created_by,
@@ -427,8 +436,9 @@ def create_notices_blueprint(
         cur = mysql.connection.cursor()
         try:
             user_id = session["user_id"]
-            if not fetch_user_role(cur, user_id):
-                return {"error": "Authentication required"}, 401
+            role, error = fetch_user_role(cur, user_id)
+            if error:
+                return error
             cur.execute(
                 """SELECT COUNT(*) AS unread_count FROM notice_recipients
                    WHERE user_id = %s AND read_at IS NULL""",
@@ -444,8 +454,9 @@ def create_notices_blueprint(
         cur = mysql.connection.cursor()
         try:
             user_id = session["user_id"]
-            if not fetch_user_role(cur, user_id):
-                return {"error": "Authentication required"}, 401
+            role, error = fetch_user_role(cur, user_id)
+            if error:
+                return error
             cur.execute(
                 """SELECT id FROM notice_recipients
                    WHERE notice_id = %s AND user_id = %s""",
@@ -474,7 +485,10 @@ def create_notices_blueprint(
         cur = mysql.connection.cursor()
         try:
             user_id = session["user_id"]
-            if fetch_user_role(cur, user_id) not in {teacher_role, admin_role}:
+            role, error = fetch_user_role(cur, user_id)
+            if error:
+                return error
+            if role not in {teacher_role, admin_role}:
                 return {"error": "Access denied"}, 403
             cur.execute(
                 """SELECT n.id, n.title, n.body, n.visibility, n.audience_type,

@@ -231,6 +231,18 @@ def validate_teacher_quiz_payload(data):
     }
 
 
+def teacher_has_subject_assignment(cur, teacher_id, subject):
+    cur.execute(
+        """SELECT 1 FROM teacher_class_subjects tcs
+           INNER JOIN subjects sub ON sub.id = tcs.subject_id
+           WHERE tcs.teacher_user_id = %s
+             AND LOWER(TRIM(sub.name)) = LOWER(TRIM(%s))
+           LIMIT 1""",
+        (teacher_id, subject)
+    )
+    return cur.fetchone() is not None
+
+
 def create_quiz_blueprint(
     mysql,
     login_required,
@@ -524,10 +536,16 @@ def create_quiz_blueprint(
                        (SELECT COUNT(*) FROM quiz_results qr
                         WHERE qr.quiz_id = q.id) AS attempt_count
                 FROM quizzes q
-                WHERE q.created_by = %s
+                                        WHERE q.created_by = %s
+                                            AND EXISTS (
+                                                    SELECT 1 FROM teacher_class_subjects tcs
+                                                    INNER JOIN subjects sub ON sub.id = tcs.subject_id
+                                                    WHERE tcs.teacher_user_id = %s
+                                                        AND LOWER(TRIM(sub.name)) = LOWER(TRIM(q.subject))
+                                            )
                 ORDER BY q.id DESC
                 """,
-                (session["user_id"],)
+                                        (session["user_id"], session["user_id"])
             )
             response_quizzes = []
             for stored_quiz in cur.fetchall():
@@ -561,6 +579,10 @@ def create_quiz_blueprint(
 
         cur = mysql.connection.cursor()
         try:
+            if not teacher_has_subject_assignment(
+                cur, session["user_id"], stored_quiz["subject"]
+            ):
+                return {"error": "Teacher is not assigned to this subject"}, 403
             cur.execute(
                 """
                 INSERT INTO quizzes
@@ -602,7 +624,9 @@ def create_quiz_blueprint(
                 (quiz_id, session["user_id"])
             )
             stored_quiz = cur.fetchone()
-            if not stored_quiz:
+            if not stored_quiz or not teacher_has_subject_assignment(
+                cur, session["user_id"], stored_quiz["subject"]
+            ):
                 return {"error": "Quiz not found"}, 404
             try:
                 questions = json.loads(stored_quiz["questions"])
@@ -635,11 +659,18 @@ def create_quiz_blueprint(
         cur = mysql.connection.cursor()
         try:
             cur.execute(
-                "SELECT id FROM quizzes WHERE id = %s AND created_by = %s",
+                "SELECT id, subject FROM quizzes WHERE id = %s AND created_by = %s",
                 (quiz_id, session["user_id"])
             )
-            if not cur.fetchone():
+            existing = cur.fetchone()
+            if not existing or not teacher_has_subject_assignment(
+                cur, session["user_id"], existing["subject"]
+            ):
                 return {"error": "Quiz not found"}, 404
+            if not teacher_has_subject_assignment(
+                cur, session["user_id"], stored_quiz["subject"]
+            ):
+                return {"error": "Teacher is not assigned to this subject"}, 403
             cur.execute(
                 """
                 UPDATE quizzes
@@ -672,10 +703,13 @@ def create_quiz_blueprint(
         cur = mysql.connection.cursor()
         try:
             cur.execute(
-                "SELECT id FROM quizzes WHERE id = %s AND created_by = %s",
+                "SELECT id, subject FROM quizzes WHERE id = %s AND created_by = %s",
                 (quiz_id, session["user_id"])
             )
-            if not cur.fetchone():
+            existing = cur.fetchone()
+            if not existing or not teacher_has_subject_assignment(
+                cur, session["user_id"], existing["subject"]
+            ):
                 return {"error": "Quiz not found"}, 404
             cur.execute(
                 """SELECT COUNT(*) AS attempt_count FROM quiz_results

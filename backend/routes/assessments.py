@@ -81,6 +81,13 @@ def fetch_teacher_paper_assessment(cur, assessment_id, teacher_id):
         FROM paper_assessments pa
         INNER JOIN classes c ON c.id = pa.class_id
         WHERE pa.id = %s AND pa.teacher_user_id = %s
+                    AND EXISTS (
+                            SELECT 1 FROM teacher_class_subjects tcs
+                            INNER JOIN subjects sub ON sub.id = tcs.subject_id
+                            WHERE tcs.teacher_user_id = pa.teacher_user_id
+                                AND tcs.class_id = pa.class_id
+                                AND LOWER(TRIM(sub.name)) = LOWER(TRIM(pa.subject))
+                    )
         """,
         (assessment_id, teacher_id)
     )
@@ -179,6 +186,15 @@ def create_assessments_blueprint(
                 return {"error": "Paper assessment not found"}, 404
 
             if request.method == "DELETE":
+                cur.execute(
+                    "SELECT COUNT(*) AS score_count FROM paper_assessment_scores "
+                    "WHERE assessment_id = %s",
+                    (assessment_id,)
+                )
+                if int(cur.fetchone()["score_count"] or 0) > 0:
+                    return {
+                        "error": "Paper assessment with recorded marks cannot be deleted"
+                    }, 409
                 cur.execute(
                     "DELETE FROM paper_assessments WHERE id = %s AND teacher_user_id = %s",
                     (assessment_id, session["user_id"])
@@ -340,8 +356,15 @@ def create_assessments_blueprint(
                 return {"error": "Record marks or absence for every enrolled student before publishing"}, 400
 
             cur.execute(
-                "DELETE FROM paper_assessment_scores WHERE assessment_id = %s",
-                (assessment_id,)
+                                """DELETE FROM paper_assessment_scores
+                                     WHERE assessment_id = %s
+                                         AND student_id IN (
+                                                 SELECT s.id FROM students s
+                                                 INNER JOIN student_class_enrollments sce
+                                                     ON sce.student_id = s.id
+                                                 WHERE sce.class_id = %s AND sce.ended_at IS NULL
+                                         )""",
+                                (assessment_id, assessment["class_id"])
             )
             for student_id, marks, is_absent, remarks in normalized:
                 cur.execute(

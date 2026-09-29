@@ -4,6 +4,18 @@ from flask import Blueprint, request, session
 from backend.student_access import fetch_student_context
 
 
+def teacher_has_subject_assignment(cur, teacher_id, subject):
+        cur.execute(
+                """SELECT 1 FROM teacher_class_subjects tcs
+                     INNER JOIN subjects sub ON sub.id = tcs.subject_id
+                     WHERE tcs.teacher_user_id = %s
+                         AND LOWER(TRIM(sub.name)) = LOWER(TRIM(%s))
+                     LIMIT 1""",
+                (teacher_id, subject)
+        )
+        return cur.fetchone() is not None
+
+
 def create_notes_blueprint(
     mysql,
     login_required,
@@ -77,6 +89,10 @@ def create_notes_blueprint(
 
         cur = mysql.connection.cursor()
         try:
+            if not teacher_has_subject_assignment(
+                cur, session["user_id"], subject
+            ):
+                return {"error": "Teacher is not assigned to this subject"}, 403
             cur.execute(
                 """
                 INSERT INTO notes
@@ -141,6 +157,10 @@ def create_notes_blueprint(
             )
             if not cur.fetchone():
                 return {"error": "Note not found"}, 404
+            if not teacher_has_subject_assignment(
+                cur, session["user_id"], subject
+            ):
+                return {"error": "Teacher is not assigned to this subject"}, 403
 
             cur.execute(
                 """

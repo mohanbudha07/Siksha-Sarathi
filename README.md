@@ -145,6 +145,13 @@ Login attempts are rate-limited per client IP and email. The default in-memory
 storage is appropriate for this single-process prototype. A multi-worker
 deployment should set `RATELIMIT_STORAGE_URI` to a shared backend such as Redis.
 
+## Security / Permission Model
+
+- The backend is authoritative: protected routes re-check the persisted user role and forced-password-change state; frontend route guards are navigation convenience only.
+- Students' current class scope comes only from `student_class_enrollments.ended_at IS NULL`. Historical attendance, delivered notices, assessment evidence, and chat messages remain records, but do not grant current room or resource access.
+- Active class teachers manage class-scoped Attendance, class Notices, and class Chat. Subject-teacher capabilities require the corresponding class/subject assignment; subject assignment alone does not grant class-teacher powers.
+- Admins manage school setup and have read-only Attendance oversight plus institutional Notice, CSV, Chat, and ML administration. Admin does not inherit Teacher write permissions; this single-school system has no Super Admin role.
+
 Install and run the backend:
 
 ```bash
