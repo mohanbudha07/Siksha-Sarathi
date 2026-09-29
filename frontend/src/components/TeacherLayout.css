@@ -10,6 +10,7 @@
 .teacher-nav-link { display: flex; align-items: center; gap: 11px; padding: 10px 11px; margin: 3px 0; border-radius: 9px; color: #475569; font-size: 13px; font-weight: 700; text-decoration: none; transition: background .16s,color .16s; }
 .teacher-nav-link > span { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 8px; background: #f1f5f9; color: #64748b; font-size: 12px; font-weight: 900; }
 .teacher-nav-link:hover { background: #f8fafc; color: #0f766e; }.teacher-nav-link.active { background: var(--teacher-soft); color: #0f766e; }.teacher-nav-link.active > span { background: #ccfbf1; color: #0f766e; }
+.teacher-nav-link > span.nav-unread-badge { display: inline-flex; width: auto; height: auto; min-width: 18px; margin-left: auto; padding: 2px 5px; border-radius: 10px; background: #b45309; color: white; font-size: 10px; }
 .teacher-sidebar-footer { padding: 14px 8px 0; border-top: 1px solid #edf1f5; }.teacher-sidebar-footer > div { display: flex; align-items: center; gap: 9px; }
 .teacher-sidebar-footer > div > span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; background: #e2e8f0; font-weight: 800; }
 .teacher-sidebar-footer strong, .teacher-sidebar-footer small { display: block; }.teacher-sidebar-footer strong { font-size: 12px; }.teacher-sidebar-footer small { color: var(--teacher-muted); font-size: 10px; }

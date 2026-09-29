@@ -13,6 +13,7 @@ const navigation = [
   { label: 'School records', items: [
     { to: '/teacher/assessments', icon: 'M', label: 'Paper Marks' },
     { to: '/teacher/attendance', icon: 'A', label: 'Attendance' },
+    { to: '/teacher/notices', icon: '!', label: 'Notices' },
   ] },
   { label: 'Insights', items: [{ to: '/teacher/analytics', icon: 'I', label: 'Learning Insights' }] },
 ]
@@ -21,8 +22,17 @@ function TeacherLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => { setMenuOpen(false) }, [location.pathname])
+  useEffect(() => {
+    const loadUnreadCount = () => api.get('/notices/unread-count')
+      .then((response) => setUnreadCount(Number(response.data.unread_count) || 0))
+      .catch(() => setUnreadCount(0))
+    loadUnreadCount()
+    window.addEventListener('notice-read', loadUnreadCount)
+    return () => window.removeEventListener('notice-read', loadUnreadCount)
+  }, [])
 
   const handleLogout = async () => {
     try { await api.post('/logout') }
@@ -48,7 +58,7 @@ function TeacherLayout({ children }) {
               <p>{group.label}</p>
               {group.items.map((item) => (
                 <NavLink key={item.to} to={item.to} className={({ isActive }) => `teacher-nav-link ${isActive ? 'active' : ''}`}>
-                  <span>{item.icon}</span>{item.label}
+                  <span>{item.icon}</span>{item.label}{item.to === '/teacher/notices' && unreadCount > 0 && <span className="nav-unread-badge">{unreadCount}</span>}
                 </NavLink>
               ))}
             </section>

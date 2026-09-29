@@ -60,6 +60,7 @@
   background: #1e3a8a;
   color: white;
 }
+.admin-nav-link .nav-unread-badge { margin-left: 6px; background: #fbbf24; }
 
 .admin-logout {
   margin-left: 8px;

@@ -241,6 +241,24 @@ Run it after migration 015:
 The migration is safe to rerun after it has succeeded; existing ended periods
 are left unchanged and no enrollment rows are deleted.
 
+## Official notice system migration
+
+Migration 017 adds immutable one-way notices and a recipient snapshot for each
+published notice. Admins can publish institution, role, class, and individual
+notices, including public institution-wide notices. Teachers can publish only
+internal notices within their active class-teacher or assigned subject scope.
+Recipients are resolved from current enrollment and assignments at publication
+time; later class transfers do not change prior deliveries. Inbox read state is
+per recipient. The public feed returns only public institution-wide notices;
+Chat remains a separate feature.
+
+Back up the database, stop the backend, then run:
+
+    mysqldump -u siksha_user -p siksha_sarathi > ../siksha_sarathi_before_notice_system.sql
+    mysql -u siksha_user -p siksha_sarathi < migrations/017_notice_system.sql
+
+For a new database, `backend/setup_db.sql` includes both notice tables.
+
 Run it after migration 014:
 
     sudo mysql siksha_sarathi < migrations/015_ml_prediction_monitoring.sql

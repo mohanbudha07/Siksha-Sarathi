@@ -23,6 +23,7 @@
   white-space: nowrap;
 }
 .student-nav-link:hover, .student-nav-link.active { background: rgba(255,255,255,.15); color: white; }
+.nav-unread-badge { display: inline-flex; min-width: 18px; justify-content: center; margin-left: 6px; padding: 2px 5px; border-radius: 10px; background: #fbbf24; color: #422006; font-size: 10px; font-weight: 800; line-height: 1.2; }
 .student-logout {
   margin-left: 8px;
   padding: 9px 12px;

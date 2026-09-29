@@ -88,9 +88,9 @@ export const schoolProfile = {
   ],
   notices: [
     {
-      title: 'No public notices have been published through Siksha Sarathi yet.',
+      title: 'No public notices have been published.',
       date: 'Current public notice board',
-      summary: 'Official college notices will appear here once published by administration. This phase keeps the public site informational without a dynamic notice backend.',
+      summary: 'Official institution-wide notices will appear here when available.',
     },
   ],
 }
