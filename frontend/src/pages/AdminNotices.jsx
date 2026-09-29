@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
 import { notifyNoticeRead } from '../noticeEvents'
+import { useToast } from '../components/feedback/useToast'
 import './Notices.css'
 
 const displayDate = (value) => value ? new Date(value).toLocaleString() : '—'
 
 function AdminNotices() {
+  const { toast } = useToast()
   const [options, setOptions] = useState({ classes: [], students: [], teachers: [] })
   const [inbox, setInbox] = useState([])
   const [sent, setSent] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const [visibility, setVisibility] = useState('internal')
   const [audience, setAudience] = useState('all')
   const [target, setTarget] = useState('')
   const [title, setTitle] = useState('')
@@ -18,7 +19,6 @@ function AdminNotices() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [activeTab, setActiveTab] = useState('inbox')
 
   const load = async () => {
@@ -45,22 +45,22 @@ function AdminNotices() {
         : item))
       setUnreadCount((count) => Math.max(0, count - 1))
       notifyNoticeRead()
-    } catch (err) { setError(err.response?.data?.error || 'Unable to update notice status.') }
+    } catch { toast.error('Unable to update notice status.') }
   }
 
   const createNotice = async (event) => {
     event.preventDefault()
-    const payload = { title, body, visibility, audience_type: audience }
+    const payload = { title, body, visibility: 'internal', audience_type: audience }
     if (audience === 'class') payload.class_id = Number(target)
     if (audience === 'student') payload.student_id = Number(target)
     if (audience === 'teacher') payload.teacher_user_id = Number(target)
     try {
-      setSaving(true); setError(''); setSuccess('')
+      setSaving(true); setError('')
       const response = await api.post('/admin/notices', payload)
-      setSuccess(`Notice published to ${response.data.delivered_count} recipient${response.data.delivered_count === 1 ? '' : 's'}.`)
+      toast.success(`Notice published to ${response.data.delivered_count} recipient${response.data.delivered_count === 1 ? '' : 's'}.`)
       setTitle(''); setBody(''); setTarget('')
       await load()
-    } catch (err) { setError(err.response?.data?.error || 'Unable to publish notice.') }
+    } catch { toast.error('Unable to publish notice.') }
     finally { setSaving(false) }
   }
 
@@ -70,14 +70,13 @@ function AdminNotices() {
 
   return <div className="notice-page">
     <header className="notice-header"><div><p>INSTITUTIONAL COMMUNICATION</p><h1>Notices</h1><span>Publish official announcements and review delivery.</span></div><div className="notice-unread-total"><strong>{unreadCount}</strong><span>Unread</span></div></header>
-    {error && <div className="notice-error" role="alert">{error}</div>}{success && <div className="notice-success" role="status">{success}</div>}
+    {error && <div className="notice-error" role="alert">{error}</div>}
     <nav className="notice-view-tabs" role="tablist" aria-label="Notice views">
       {[['inbox', 'Inbox'], ['sent', 'Sent'], ['create', 'Create Notice']].map(([tab, label]) => <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>{label}</button>)}
     </nav>
-    <section hidden={activeTab !== 'create'} className="notice-compose-section"><h2>Create Notice</h2><form className="notice-form" onSubmit={createNotice}>
+    <section hidden={activeTab !== 'create'} className="notice-compose-section"><h2>Internal notice</h2><p>Published to selected school recipients.</p><form className="notice-form" onSubmit={createNotice}>
       <label>Title<input value={title} onChange={(event) => setTitle(event.target.value)} maxLength="200" required /></label>
-      <label>Visibility<select value={visibility} onChange={(event) => { const value = event.target.value; setVisibility(value); if (value === 'public') setAudience('all'); setTarget('') }}><option value="internal">Internal</option><option value="public">Public</option></select></label>
-      <label>Audience<select value={audience} disabled={visibility === 'public'} onChange={(event) => { setAudience(event.target.value); setTarget('') }}><option value="all">Entire institution</option><option value="students">All students</option><option value="teachers">All teachers</option><option value="class">Specific class</option><option value="student">Specific student</option><option value="teacher">Specific teacher</option></select></label>
+      <label>Audience<select value={audience} onChange={(event) => { setAudience(event.target.value); setTarget('') }}><option value="all">Entire institution</option><option value="students">All students</option><option value="teachers">All teachers</option><option value="class">Specific class</option><option value="student">Specific student</option><option value="teacher">Specific teacher</option></select></label>
       {audience !== 'all' && audience !== 'students' && audience !== 'teachers' && <label>Target<select value={target} onChange={(event) => setTarget(event.target.value)} required><option value="">Select target</option>{targetOptions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
       <label className="notice-form-wide">Message<textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength="5000" rows="5" required /></label>
       <button type="submit" disabled={saving}>{saving ? 'Publishing...' : 'Publish Notice'}</button>

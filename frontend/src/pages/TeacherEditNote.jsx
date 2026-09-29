@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherNotes.css'
 
 function TeacherEditNote() {
   const { noteId } = useParams()
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [form, setForm] = useState({
     title: '',
     subject: '',
@@ -15,7 +17,6 @@ function TeacherEditNote() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
 
   useEffect(() => {
     api
@@ -46,16 +47,15 @@ function TeacherEditNote() {
   const handleSubmit = async (event) => {
     event.preventDefault()
     setError('')
-    setSuccess('')
     setSaving(true)
 
     try {
       await api.put(`/teacher/notes/${noteId}`, form)
-      setSuccess('Note updated successfully!')
-      setTimeout(() => navigate('/teacher/notes'), 800)
+      toast.success('Note updated.')
+      navigate('/teacher/notes')
     } catch (err) {
       console.error('Update note error:', err)
-      setError(err.response?.data?.error || 'Unable to update this note.')
+      toast.error('Unable to update this note.')
     } finally {
       setSaving(false)
     }
@@ -111,8 +111,6 @@ function TeacherEditNote() {
             </div>
 
             {error && <div className="teacher-note-form-message error">⚠️ {error}</div>}
-            {success && <div className="teacher-note-form-message success">✅ {success}</div>}
-
             <div className="teacher-note-form-actions">
               <button className="teacher-note-save-button" type="submit" disabled={saving}>
                 {saving ? 'Saving...' : 'Save Changes'}

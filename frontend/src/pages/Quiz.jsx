@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './Quiz.css'
 
 const formatTime = (value) => new Intl.DateTimeFormat(undefined, {
@@ -9,6 +10,7 @@ const formatTime = (value) => new Intl.DateTimeFormat(undefined, {
 }).format(new Date(value))
 
 function Quiz() {
+  const { confirm, toast } = useToast()
   const [searchParams] = useSearchParams()
   const requestedQuizId = searchParams.get('quiz_id')
   const [quizzes, setQuizzes] = useState([])
@@ -103,9 +105,15 @@ function Quiz() {
 
   const handleSubmit = async () => {
     const unanswered = quiz.questions.length - Object.keys(answers).length
-    if (unanswered > 0 && !window.confirm(
-      `${unanswered} question${unanswered === 1 ? ' is' : 's are'} unanswered. Submit anyway?`
-    )) return
+    if (unanswered > 0) {
+      const accepted = await confirm({
+        title: 'Submit quiz with unanswered questions?',
+        description: `${unanswered} question${unanswered === 1 ? ' is' : 's are'} unanswered. They will be recorded as skipped.`,
+        confirmLabel: 'Submit Anyway',
+        cancelLabel: 'Continue Quiz',
+      })
+      if (!accepted) return
+    }
 
     try {
       setSubmitting(true)
@@ -114,8 +122,8 @@ function Quiz() {
       if (activeLabSessionId) payload.quiz_session_id = activeLabSessionId
       const response = await api.post('/student/quiz/submit', payload)
       setResult(response.data)
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to submit this quiz.')
+    } catch {
+      toast.error('Unable to submit this quiz.')
     } finally {
       setSubmitting(false)
     }

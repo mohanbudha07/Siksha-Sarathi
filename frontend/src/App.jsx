@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import api from './api'
 
 import Home from './pages/Home'
+import PortalGateway from './pages/PortalGateway'
 import Login from './pages/Login'
 import AdminLogin from './pages/AdminLogin'
 import ChangePassword from './pages/ChangePassword'
@@ -40,6 +41,8 @@ import TeacherNotices from './pages/TeacherNotices'
 import AdminNotices from './pages/AdminNotices'
 import AdminCsvManagement from './pages/AdminCsvManagement'
 import ChatWorkspace from './components/ChatWorkspace'
+import ToastProvider from './components/feedback/ToastProvider'
+import './components/feedback/feedback.css'
 
 // ---------- Auth Context Helper ----------
 function useAuthCheck() {
@@ -47,7 +50,7 @@ function useAuthCheck() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const publicPaths = ['/', '/login', '/admin/login']
+    const publicPaths = ['/', '/portal', '/login', '/admin/login']
     if (publicPaths.includes(window.location.pathname)) {
       setLoading(false)
       return
@@ -131,10 +134,12 @@ function AdminPage({ children }) {
 // ---------- App ----------
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <ToastProvider>
+      <BrowserRouter>
+        <Routes>
         {/* Public routes */}
         <Route path="/" element={<Home />} />
+        <Route path="/portal" element={<PortalGateway />} />
         <Route path="/login" element={<Login />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/change-password" element={
@@ -259,8 +264,9 @@ function App() {
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </ToastProvider>
   )
 }
 

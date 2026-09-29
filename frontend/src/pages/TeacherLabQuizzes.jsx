@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherLabQuizzes.css'
 
 const pad = (value) => String(value).padStart(2, '0')
@@ -17,6 +18,7 @@ function formatDate(value) {
 }
 
 function TeacherLabQuizzes() {
+  const { confirm, toast } = useToast()
   const initialStart = new Date(Date.now() + 5 * 60 * 1000)
   const initialEnd = new Date(Date.now() + 50 * 60 * 1000)
   const [quizzes, setQuizzes] = useState([])
@@ -105,22 +107,27 @@ function TeacherLabQuizzes() {
       await loadData()
     } catch (err) {
       console.error('Create lab session error:', err)
-      setError(err.response?.data?.error || 'Unable to schedule this lab quiz.')
+      toast.error('Unable to schedule this lab quiz.')
     } finally {
       setSaving(false)
     }
   }
 
   const handleClose = async (labSession) => {
-    if (!window.confirm(`Close “${labSession.title}” for ${labSession.class_name}?`)) return
+    if (!await confirm({
+      title: 'Close lab quiz session?',
+      description: `Close “${labSession.title}” for ${labSession.class_name}? Students will no longer be able to submit.`,
+      confirmLabel: 'Close Session',
+      variant: 'danger',
+    })) return
     try {
       setClosingId(labSession.id)
-      setError('')
       await api.post(`/teacher/quiz-sessions/${labSession.id}/close`)
       await loadData()
+      toast.success('Lab quiz session closed.')
     } catch (err) {
       console.error('Close lab session error:', err)
-      setError(err.response?.data?.error || 'Unable to close this lab session.')
+      toast.error('Unable to close this lab session.')
     } finally {
       setClosingId(null)
     }

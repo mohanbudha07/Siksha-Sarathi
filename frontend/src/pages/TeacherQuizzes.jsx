@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherQuizzes.css'
 
 function TeacherQuizzes() {
   const navigate = useNavigate()
+  const { confirm, toast } = useToast()
   const [quizzes, setQuizzes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -29,9 +31,12 @@ function TeacherQuizzes() {
   }, [])
 
   const handleDelete = async (quiz) => {
-    const confirmed = window.confirm(
-      `Delete “${quiz.title}”? This is allowed only when it has no student attempts.`
-    )
+    const confirmed = await confirm({
+      title: 'Delete quiz?',
+      description: `Delete “${quiz.title}”? This is allowed only when it has no student attempts.`,
+      confirmLabel: 'Delete Quiz',
+      variant: 'danger',
+    })
     if (!confirmed) return
 
     try {
@@ -39,9 +44,10 @@ function TeacherQuizzes() {
       setError('')
       await api.delete(`/teacher/quizzes/${quiz.id}`)
       setQuizzes((current) => current.filter((item) => item.id !== quiz.id))
+      toast.success('Quiz deleted.')
     } catch (err) {
       console.error('Delete quiz error:', err)
-      setError(err.response?.data?.error || 'Unable to delete this quiz.')
+      toast.error('Unable to delete this quiz.')
     } finally {
       setDeletingId(null)
     }

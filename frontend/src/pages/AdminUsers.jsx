@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './AdminUsers.css'
 
 const emptyAdminForm = { username: '', email: '', password: '' }
@@ -74,12 +75,12 @@ function AccountForm({ title, fields, form, setForm, onSubmit, busy, submitLabel
 }
 
 function AdminUsers() {
+  const { toast } = useToast()
   const [users, setUsers] = useState({ admins: [], teachers: [], students: [] })
   const [classes, setClasses] = useState([])
   const [loading, setLoading] = useState(true)
   const [busyForm, setBusyForm] = useState('')
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [activeView, setActiveView] = useState('create')
   const [accountRole, setAccountRole] = useState('student')
   const [adminForm, setAdminForm] = useState(emptyAdminForm)
@@ -109,13 +110,12 @@ function AdminUsers() {
     try {
       setBusyForm(formName)
       setError('')
-      setSuccess('')
       await request()
       reset()
-      setSuccess('Account created successfully.')
+      toast.success(`${formName === 'admin' ? 'Administrator' : formName[0].toUpperCase() + formName.slice(1)} created.`)
       await loadData()
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to create this account.')
+    } catch {
+      toast.error(`Unable to create ${formName === 'admin' ? 'administrator' : formName}.`)
     } finally {
       setBusyForm('')
     }
@@ -144,7 +144,6 @@ function AdminUsers() {
 
       {loading && <div className="admin-users-message">Loading users...</div>}
       {error && <div className="admin-users-message error" role="alert">{error}</div>}
-      {success && <div className="admin-users-message success" role="status">{success}</div>}
 
       <div className="admin-users-tabs" role="group" aria-label="User management view">
         <button type="button" className={activeView === 'create' ? 'active' : ''} aria-pressed={activeView === 'create'} onClick={() => setActiveView('create')}>Create accounts</button>

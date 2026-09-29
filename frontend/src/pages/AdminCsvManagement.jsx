@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './AdminCsvManagement.css'
 
 const sections = {
@@ -53,17 +54,17 @@ async function responseError(error) {
 }
 
 function AdminCsvManagement() {
+  const { toast } = useToast()
   const [active, setActive] = useState('students')
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState(null)
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const config = sections[active]
 
   const selectSection = (key) => {
     setActive(key); setFile(null); setPreview(null)
-    setError(''); setSuccess('')
+    setError('')
   }
 
   const download = async (endpoint, fallbackName) => {
@@ -77,7 +78,7 @@ function AdminCsvManagement() {
       link.href = objectUrl; link.download = filename
       document.body.appendChild(link); link.click(); link.remove()
       URL.revokeObjectURL(objectUrl)
-    } catch (err) { setError(await responseError(err)) }
+    } catch { toast.error('Unable to download CSV.') }
     finally { setBusy('') }
   }
 
@@ -90,36 +91,44 @@ function AdminCsvManagement() {
 
   const validateFile = async () => {
     try {
-      setBusy('preview'); setError(''); setSuccess(''); setPreview(null)
+      setBusy('preview'); setError(''); setPreview(null)
       const response = await sendFile(config.preview)
       setPreview(response.data)
+      toast.info('CSV validation completed.')
     } catch (err) {
-      setError(await responseError(err))
-      if (err.response?.data?.rows) setPreview(err.response.data)
+      if (err.response?.data?.rows) {
+        setError(await responseError(err))
+        setPreview(err.response.data)
+      } else {
+        toast.error('Unable to validate CSV file.')
+      }
     } finally { setBusy('') }
   }
 
   const importFile = async () => {
     try {
-      setBusy('import'); setError(''); setSuccess('')
+      setBusy('import'); setError('')
       const response = await sendFile(config.import)
       const count = response.data.imported_students
         ?? response.data.imported_teachers
         ?? response.data.imported_assignments
         ?? 0
       const skipped = response.data.skipped_existing || 0
-      setSuccess(`Imported ${count} row${count === 1 ? '' : 's'}${skipped ? `; skipped ${skipped} existing assignment${skipped === 1 ? '' : 's'}` : ''}.`)
+      toast.success(`Imported ${count} row${count === 1 ? '' : 's'}${skipped ? `; skipped ${skipped} existing assignment${skipped === 1 ? '' : 's'}` : ''}.`)
       setFile(null); setPreview(null)
     } catch (err) {
-      setError(await responseError(err))
-      if (err.response?.data?.rows) setPreview(err.response.data)
+      if (err.response?.data?.rows) {
+        setError(await responseError(err))
+        setPreview(err.response.data)
+      } else {
+        toast.error('Unable to import CSV data.')
+      }
     } finally { setBusy('') }
   }
 
   return <div className="admin-csv-page">
     <header className="admin-csv-heading"><div><p>ADMIN CONTROL</p><h1>CSV Management</h1><span>Preview every import before committing account or assignment changes.</span></div></header>
     {error && <div className="admin-csv-message error" role="alert">{error}</div>}
-    {success && <div className="admin-csv-message success" role="status">{success}</div>}
     <nav className="admin-csv-tabs" aria-label="CSV data type">
       {Object.entries(sections).map(([key, item]) => <button type="button" key={key} className={active === key ? 'active' : ''} aria-pressed={active === key} onClick={() => selectSection(key)}>{item.label}</button>)}
     </nav>
@@ -129,7 +138,7 @@ function AdminCsvManagement() {
         <button type="button" onClick={() => download(config.export, config.exportName)} disabled={Boolean(busy)}>Export Existing Data</button>
       </div>
       <div className="admin-csv-import">
-        <label>CSV file<input type="file" accept=".csv,text/csv" onChange={(event) => { setFile(event.target.files?.[0] || null); setPreview(null); setError(''); setSuccess('') }} /></label>
+        <label>CSV file<input type="file" accept=".csv,text/csv" onChange={(event) => { setFile(event.target.files?.[0] || null); setPreview(null); setError('') }} /></label>
         <span>{file ? file.name : 'No file selected'}</span>
         <button type="button" onClick={validateFile} disabled={!file || Boolean(busy)}>{busy === 'preview' ? 'Validating...' : 'Validate / Preview'}</button>
         <button type="button" className="primary" onClick={importFile} disabled={!file || !preview?.valid || Boolean(busy)}>{busy === 'import' ? 'Importing...' : 'Import Valid Rows'}</button>

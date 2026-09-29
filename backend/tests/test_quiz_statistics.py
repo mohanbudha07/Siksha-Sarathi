@@ -415,21 +415,37 @@ class QuizStatisticsTests(unittest.TestCase):
 
     def test_class_teacher_history_is_idempotent_and_preserved(self):
         self.login('admin')
-        missing_year = self.client.post('/api/admin/class-teacher-assignments', json={
+        existing = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 2, 'class_id': 1, 'academic_year': '2083/84'
+        })
+        self.assertEqual(existing.status_code, 200)
+        first = self.client.post('/api/admin/class-teacher-assignments', json={
             'teacher_user_id': 2, 'class_id': 1
         })
-        self.assertEqual(missing_year.status_code, 400)
-        first = self.client.post('/api/admin/class-teacher-assignments', json={
-            'teacher_user_id': 2, 'class_id': 1, 'academic_year': '2083/84'
-        })
-        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.status_code, 201)
+        self.assertIsNone(self.db.execute(
+            'SELECT academic_year FROM class_teacher_assignments WHERE id=?',
+            (first.json['assignment_id'],)
+        ).fetchone()['academic_year'])
         duplicate = self.client.post('/api/admin/class-teacher-assignments', json={
-            'teacher_user_id': 2, 'class_id': 1, 'academic_year': '2083/84'
+            'teacher_user_id': 2, 'class_id': 1, 'academic_year': '   '
         })
         self.assertEqual(duplicate.status_code, 200)
         self.assertEqual(self.db.execute(
             'SELECT COUNT(*) FROM class_teacher_assignments WHERE class_id=?', (1,)
-        ).fetchone()[0], 1)
+        ).fetchone()[0], 2)
+        supplied_year = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 2, 'class_id': 1, 'academic_year': '2083/84'
+        })
+        self.assertEqual(supplied_year.status_code, 201)
+        self.assertEqual(self.db.execute(
+            'SELECT academic_year FROM class_teacher_assignments WHERE id=?',
+            (supplied_year.json['assignment_id'],)
+        ).fetchone()['academic_year'], '2083/84')
+        too_long = self.client.post('/api/admin/class-teacher-assignments', json={
+            'teacher_user_id': 4, 'class_id': 1, 'academic_year': 'x' * 21
+        })
+        self.assertEqual(too_long.status_code, 400)
         replacement = self.client.post('/api/admin/class-teacher-assignments', json={
             'teacher_user_id': 4, 'class_id': 1, 'academic_year': '2084/85'
         })
@@ -438,13 +454,15 @@ class QuizStatisticsTests(unittest.TestCase):
             'SELECT teacher_user_id, academic_year, ended_at FROM class_teacher_assignments WHERE class_id=? ORDER BY id',
             (1,)
         ).fetchall()
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows), 4)
         self.assertIsNotNone(rows[0]['ended_at'])
-        self.assertIsNone(rows[1]['ended_at'])
-        self.assertEqual(rows[1]['teacher_user_id'], 4)
+        self.assertIsNotNone(rows[1]['ended_at'])
+        self.assertIsNotNone(rows[2]['ended_at'])
+        self.assertIsNone(rows[3]['ended_at'])
+        self.assertEqual(rows[3]['teacher_user_id'], 4)
         current = self.client.get('/api/admin/school-setup').json
         self.assertEqual(len(current['current_class_teachers']), 1)
-        self.assertEqual(len(current['class_teacher_history']), 2)
+        self.assertEqual(len(current['class_teacher_history']), 4)
         self.assertTrue(any(
             item['ended_at'] and 'NPT' in item['ended_at']
             for item in current['class_teacher_history']

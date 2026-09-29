@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherNotes.css'   // reuse existing styles
 
 function TeacherUploadNote() {
   const navigate = useNavigate()
+  const { toast } = useToast()
 
   const [form, setForm] = useState({
     title: '',
@@ -13,8 +15,6 @@ function TeacherUploadNote() {
     content: '',
   })
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
 
   const handleChange = (e) => {
     setForm({
@@ -25,24 +25,15 @@ function TeacherUploadNote() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
     setLoading(true)
 
     try {
       await api.post('/teacher/notes', form)
-      setSuccess('Note uploaded successfully!')
+      toast.success('Note uploaded.')
       setForm({ title: '', subject: '', chapter: '', content: '' })
-
-      // Optional: go back to notes list after 1.5 seconds
-      setTimeout(() => {
-        navigate('/teacher/notes')
-      }, 1500)
-    } catch (err) {
-      console.error(err)
-      setError(
-        err.response?.data?.error || 'Failed to upload note. Please try again.'
-      )
+      navigate('/teacher/notes')
+    } catch {
+      toast.error('Unable to upload note.')
     } finally {
       setLoading(false)
     }
@@ -112,9 +103,6 @@ function TeacherUploadNote() {
               style={{ width: '100%', padding: 10, marginTop: 4 }}
             />
           </div>
-
-          {error && <div style={{ color: 'red' }}>⚠️ {error}</div>}
-          {success && <div style={{ color: 'green' }}>✅ {success}</div>}
 
           <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
             <button

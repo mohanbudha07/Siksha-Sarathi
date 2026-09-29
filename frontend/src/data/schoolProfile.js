@@ -44,12 +44,6 @@ export const schoolProfile = {
   ],
   quickAccess: [
     {
-      title: 'Student / Teacher Portal',
-      description: 'Access the Siksha Sarathi learning and administration portal.',
-      href: '/login',
-      type: 'portal',
-    },
-    {
       title: 'Public Notices',
       description: 'Official updates and announcements for the college community.',
       href: '#notices',

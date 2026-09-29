@@ -33,14 +33,6 @@ function Home() {
             <a href={`mailto:${schoolProfile.email}`}>{schoolProfile.email}</a>
           </div>
 
-          <div className="utility-actions">
-            <button type="button" className="utility-btn" onClick={() => navigate('/login')}>
-              Student / Teacher Portal
-            </button>
-            <button type="button" className="utility-btn utility-btn-muted" onClick={() => navigate('/admin/login')}>
-              Admin Portal
-            </button>
-          </div>
         </div>
       </div>
 
@@ -65,11 +57,8 @@ function Home() {
           </div>
 
           <div className="nav-actions">
-            <button type="button" className="btn btn-primary" onClick={() => navigate('/login')}>
-              Student / Teacher Portal
-            </button>
-            <button type="button" className="btn btn-link" onClick={() => navigate('/admin/login')}>
-              Admin Portal
+            <button type="button" className="btn btn-primary" onClick={() => navigate('/portal')}>
+              Portal Login
             </button>
           </div>
         </nav>
@@ -89,8 +78,8 @@ function Home() {
               <button type="button" className="btn btn-primary large" onClick={() => navigate('#academics')}>
                 Explore Programs
               </button>
-              <button type="button" className="btn btn-secondary large" onClick={() => navigate('/login')}>
-                Student / Teacher Portal
+              <button type="button" className="btn btn-secondary large" onClick={() => navigate('/portal')}>
+                Portal Login
               </button>
             </div>
 
@@ -245,28 +234,6 @@ function Home() {
           </div>
         </section>
 
-        <section className="portal-section" aria-label="Portal access">
-          <div className="container portal-inner">
-            <div className="portal-copy">
-              <p className="eyebrow">Texas Student &amp; Staff Portal</p>
-              <h2>Powered by Siksha Sarathi</h2>
-              <p>
-                Students and teachers can securely access learning resources, academic tools,
-                assessments, support flows, and institutional workflows through the Siksha Sarathi platform.
-              </p>
-            </div>
-
-            <div className="portal-actions">
-              <button type="button" className="btn btn-primary" onClick={() => navigate('/login')}>
-                Student / Teacher Portal
-              </button>
-              <button type="button" className="btn btn-secondary portal-secondary" onClick={() => navigate('/admin/login')}>
-                Administration Portal
-              </button>
-            </div>
-          </div>
-        </section>
-
         <section className="content-section container" id="contact">
           <div className="section-header narrow">
             <p className="eyebrow">Get in Touch</p>
@@ -317,8 +284,7 @@ function Home() {
 
           <div className="footer-links">
             <h4>Portals</h4>
-            <a href="/login">Student / Teacher Portal</a>
-            <a href="/admin/login">Admin Portal</a>
+            <a href="/portal">Portal Login</a>
           </div>
 
           <div className="footer-links">

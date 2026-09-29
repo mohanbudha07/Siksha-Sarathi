@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherQuizEditor.css'
 
 const emptyQuestion = () => ({
@@ -15,7 +16,10 @@ const emptyQuestion = () => ({
 function TeacherQuizEditor() {
   const { quizId } = useParams()
   const navigate = useNavigate()
+  const { confirm, toast } = useToast()
   const editing = Boolean(quizId)
+  const questionFieldRefs = useRef([])
+  const pendingFocusIndex = useRef(null)
   const [form, setForm] = useState({
     title: '',
     subject: '',
@@ -24,6 +28,15 @@ function TeacherQuizEditor() {
   const [loading, setLoading] = useState(editing)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (pendingFocusIndex.current === null) return
+    const field = questionFieldRefs.current[pendingFocusIndex.current]
+    if (!field) return
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    field.focus({ preventScroll: true })
+    pendingFocusIndex.current = null
+  }, [form.questions.length])
 
   useEffect(() => {
     if (!editing) return
@@ -76,14 +89,24 @@ function TeacherQuizEditor() {
   }
 
   const addQuestion = () => {
+    pendingFocusIndex.current = form.questions.length
     setForm((current) => ({
       ...current,
       questions: [...current.questions, emptyQuestion()],
     }))
   }
 
-  const removeQuestion = (questionIndex) => {
+  const removeQuestion = async (questionIndex) => {
     if (form.questions.length === 1) return
+    const question = form.questions[questionIndex]
+    const hasContent = question.question.trim() || question.topic.trim()
+      || question.explanation.trim() || question.options.some((option) => option.trim())
+    if (hasContent && !await confirm({
+      title: 'Remove question?',
+      description: 'This question has entered content. Removing it will discard that content.',
+      confirmLabel: 'Remove Question',
+      variant: 'danger',
+    })) return
     setForm((current) => ({
       ...current,
       questions: current.questions.filter((_, index) => index !== questionIndex),
@@ -138,10 +161,11 @@ function TeacherQuizEditor() {
       } else {
         await api.post('/teacher/quizzes', payload)
       }
+      toast.success(isPublished ? 'Quiz published.' : 'Quiz saved.')
       navigate('/teacher/quizzes')
     } catch (err) {
       console.error('Save quiz error:', err)
-      setError(err.response?.data?.error || 'Unable to save this quiz.')
+      toast.error('Unable to save quiz.')
     } finally {
       setSaving(false)
     }
@@ -200,6 +224,7 @@ function TeacherQuizEditor() {
           <div>
             <h2>Questions</h2>
             <p>{form.questions.length} question{form.questions.length === 1 ? '' : 's'}</p>
+            {form.questions.length > 50 && <p className="quiz-large-set-hint">For very large question sets, bulk Question Bank import is recommended.</p>}
           </div>
           <button type="button" onClick={addQuestion}>+ Add Question</button>
         </div>
@@ -220,6 +245,7 @@ function TeacherQuizEditor() {
             <label>
               Question text
               <textarea
+                ref={(field) => { questionFieldRefs.current[questionIndex] = field }}
                 value={question.question}
                 onChange={(event) => updateQuestion(questionIndex, 'question', event.target.value)}
                 required
@@ -321,6 +347,9 @@ function TeacherQuizEditor() {
         ))}
 
         <footer className="quiz-editor-actions">
+          <button type="button" className="add-question-sticky-button" onClick={addQuestion}>
+            + Add Question
+          </button>
           <button
             type="button"
             className="save-draft-button"

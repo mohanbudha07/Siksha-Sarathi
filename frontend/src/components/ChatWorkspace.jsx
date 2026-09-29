@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
+import { useToast } from './feedback/useToast'
 import './ChatWorkspace.css'
 
 const POLL_INTERVAL_MS = 4000
@@ -17,6 +18,7 @@ function formatTimestamp(value) {
 }
 
 function ChatWorkspace({ role }) {
+  const { toast } = useToast()
   const [rooms, setRooms] = useState([])
   const [activeRoomId, setActiveRoomId] = useState(null)
   const [messages, setMessages] = useState([])
@@ -171,7 +173,7 @@ function ChatWorkspace({ role }) {
       } else if (requestError.response?.status === 401) {
         setError('Your session has expired. Sign in again.')
       } else {
-        setError(requestError.response?.data?.error || 'Unable to send message.')
+        toast.error('Unable to send message.')
       }
     } finally {
       setSending(false)
