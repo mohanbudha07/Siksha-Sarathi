@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
 import { notifyNoticeRead } from '../noticeEvents'
+import { useToast } from '../components/feedback/useToast'
 import './Notices.css'
 
 const displayDate = (value) => value ? new Date(value).toLocaleString() : '—'
 
 function StudentNotices() {
+  const { toast } = useToast()
   const [notices, setNotices] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -31,9 +33,7 @@ function StudentNotices() {
         : item))
       setUnreadCount((count) => Math.max(0, count - 1))
       notifyNoticeRead()
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to update notice status.')
-    }
+    } catch { toast.error('Unable to update notice status.') }
   }
 
   return <div className="notice-page">

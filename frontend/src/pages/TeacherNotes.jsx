@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherNotes.css'
 
 function TeacherNotes() {
   const navigate = useNavigate()
+  const { confirm, toast } = useToast()
 
   const [notes, setNotes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [actionError, setActionError] = useState('')
   const [deletingId, setDeletingId] = useState(null)
 
   useEffect(() => {
@@ -33,13 +34,14 @@ function TeacherNotes() {
   }, [])
 
   const handleDelete = async (note) => {
-    const confirmed = window.confirm(
-      `Delete "${note.title}"? This action cannot be undone.`
-    )
-
+    const confirmed = await confirm({
+      title: 'Delete note?',
+      description: `Delete "${note.title}"? This action cannot be undone.`,
+      confirmLabel: 'Delete Note',
+      variant: 'danger',
+    })
     if (!confirmed) return
 
-    setActionError('')
     setDeletingId(note.id)
 
     try {
@@ -47,11 +49,10 @@ function TeacherNotes() {
       setNotes((currentNotes) =>
         currentNotes.filter((item) => item.id !== note.id)
       )
+      toast.success('Note removed.')
     } catch (err) {
       console.error('Delete note error:', err)
-      setActionError(
-        err.response?.data?.error || 'Unable to delete this note.'
-      )
+      toast.error('Unable to delete this note.')
     } finally {
       setDeletingId(null)
     }
@@ -116,10 +117,6 @@ function TeacherNotes() {
             + Upload Note
           </button>
         </div>
-
-        {actionError && (
-          <div className="teacher-notes-action-error">⚠️ {actionError}</div>
-        )}
 
         {notes.length === 0 ? (
           <section className="teacher-notes-empty">

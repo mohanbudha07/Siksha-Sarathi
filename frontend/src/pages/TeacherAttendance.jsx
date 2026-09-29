@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherAttendance.css'
 
 const currentMonth = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
@@ -11,6 +12,7 @@ const monthLabel = (value) => new Intl.DateTimeFormat(undefined, {
 
 function TeacherAttendance() {
   const navigate = useNavigate()
+  const { confirm, toast } = useToast()
   const [classes, setClasses] = useState([])
   const [summaries, setSummaries] = useState([])
   const [classId, setClassId] = useState('')
@@ -49,20 +51,27 @@ function TeacherAttendance() {
         class_id: Number(classId), attendance_month: month,
         total_school_days: Number(schoolDays),
       })
+      toast.success('Attendance register created.')
       navigate(`/teacher/attendance/${response.data.attendance_summary_id}`)
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to create monthly attendance.')
+    } catch {
+      toast.error('Unable to create monthly attendance.')
     } finally { setSaving(false) }
   }
 
   const remove = async (item) => {
-    if (!window.confirm(`Delete ${monthLabel(item.attendance_month)} attendance for ${item.class_name}?`)) return
+    if (!await confirm({
+      title: 'Delete monthly attendance?',
+      description: `Delete ${monthLabel(item.attendance_month)} attendance for ${item.class_name}?`,
+      confirmLabel: 'Delete Attendance',
+      variant: 'danger',
+    })) return
     try {
-      setDeletingId(item.id); setError('')
+      setDeletingId(item.id)
       await api.delete(`/teacher/monthly-attendance/${item.id}`)
       setSummaries((items) => items.filter((summary) => summary.id !== item.id))
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to delete monthly attendance.')
+      toast.success('Monthly attendance removed.')
+    } catch {
+      toast.error('Unable to delete monthly attendance.')
     } finally { setDeletingId(null) }
   }
 

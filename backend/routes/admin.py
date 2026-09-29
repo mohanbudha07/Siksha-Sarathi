@@ -594,10 +594,8 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             class_id = int(data.get("class_id"))
         except (TypeError, ValueError):
             return {"error": "Teacher and class are required"}, 400
-        academic_year = str(data.get("academic_year") or "").strip()
-        if not academic_year:
-            return {"error": "Academic year is required"}, 400
-        if len(academic_year) > 20:
+        academic_year = str(data.get("academic_year") or "").strip() or None
+        if academic_year is not None and len(academic_year) > 20:
             return {"error": "Academic year must be at most 20 characters"}, 400
         cur = mysql.connection.cursor()
         try:

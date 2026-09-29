@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherAssessments.css'
 
 function TeacherAssessmentScores() {
   const { assessmentId } = useParams()
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [assessment, setAssessment] = useState(null)
   const [rows, setRows] = useState([])
   const [published, setPublished] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
 
   useEffect(() => {
     const loadAssessment = async () => {
@@ -59,7 +60,6 @@ function TeacherAssessmentScores() {
       ? { ...row, [field]: value }
       : row))
     setError('')
-    setSuccess('')
     if (field === 'marks_obtained' && value !== '' && assessment
       && (!Number.isFinite(Number(value)) || Number(value) < 0 || Number(value) > assessment.max_marks)) {
       setError(`Marks must be between 0 and ${assessment.max_marks}. Correct this before saving.`)
@@ -71,7 +71,6 @@ function TeacherAssessmentScores() {
       ? { ...row, is_absent: checked, marks_obtained: checked ? '' : row.marks_obtained }
       : row))
     setError('')
-    setSuccess('')
   }
 
   const saveScores = async () => {
@@ -92,7 +91,6 @@ function TeacherAssessmentScores() {
     try {
       setSaving(true)
       setError('')
-      setSuccess('')
       await api.put(`/teacher/paper-assessments/${assessmentId}/scores`, {
         is_published: published,
         scores: rows.map((row) => ({
@@ -103,15 +101,14 @@ function TeacherAssessmentScores() {
         })),
       })
       if (published) {
-        navigate('/teacher/assessments', {
-          state: { notice: `${assessment.title}: marks saved and results published.` },
-        })
+        toast.success('Marks saved and results published.')
+        navigate('/teacher/assessments')
       } else {
         setAssessment((current) => ({ ...current, is_published: false }))
-        setSuccess('Draft marks saved. You can publish them when ready.')
+        toast.success('Draft marks saved.')
       }
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to save assessment marks.')
+    } catch {
+      toast.error('Unable to save assessment marks.')
     } finally {
       setSaving(false)
     }
@@ -136,7 +133,6 @@ function TeacherAssessmentScores() {
       </section>
 
       {error && <div className="paper-assessment-error">⚠️ {error}</div>}
-      {success && <div className="paper-assessment-success">✓ {success}</div>}
 
       <section className="paper-marks-section">
         <div className="paper-marks-heading"><div><h2>Class marks sheet</h2><p>Enter every present student’s marks or mark the student absent.</p></div><span>{assessment.academic_year} {assessment.term}</span></div>

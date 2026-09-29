@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherAttendance.css'
 
 const monthLabel = (value) => new Intl.DateTimeFormat(undefined, {
@@ -10,12 +11,12 @@ const monthLabel = (value) => new Intl.DateTimeFormat(undefined, {
 function TeacherAttendanceRegister() {
   const { attendanceId } = useParams()
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [summary, setSummary] = useState(null)
   const [records, setRecords] = useState([])
   const [schoolDays, setSchoolDays] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
   const loadRegister = useCallback(async () => {
@@ -43,11 +44,11 @@ function TeacherAttendanceRegister() {
 
   const update = (studentId, field, value) => {
     setRecords((items) => items.map((item) => item.student_id === studentId ? { ...item, [field]: value } : item))
-    setMessage(''); setError('')
+    setError('')
   }
   const fillAllPresent = () => {
     setRecords((items) => items.map((item) => ({ ...item, present_days: String(summary.total_school_days) })))
-    setMessage(''); setError('')
+    setError('')
   }
   const updateSchoolDays = async () => {
     const value = Number(schoolDays)
@@ -55,14 +56,14 @@ function TeacherAttendanceRegister() {
       return setError('Total school days must be a whole number from 1 to 31.')
     }
     try {
-      setSaving(true); setError(''); setMessage('')
+      setSaving(true); setError('')
       await api.put(`/teacher/monthly-attendance/${attendanceId}`, {
         total_school_days: value,
       })
       setSummary((item) => ({ ...item, total_school_days: value }))
-      setMessage('Total school days updated.')
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to update total school days.')
+      toast.success('Total school days updated.')
+    } catch {
+      toast.error('Unable to update total school days.')
     } finally { setSaving(false) }
   }
   const save = async () => {
@@ -75,9 +76,9 @@ function TeacherAttendanceRegister() {
       await api.put(`/teacher/monthly-attendance/${attendanceId}/records`, {
         records: records.map(({ student_id, present_days, note }) => ({ student_id, present_days: Number(present_days), note })),
       })
-      setMessage('Monthly attendance saved successfully.')
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to save monthly attendance.')
+      toast.success('Monthly attendance saved.')
+    } catch {
+      toast.error('Unable to save monthly attendance.')
     } finally { setSaving(false) }
   }
 
@@ -86,7 +87,7 @@ function TeacherAttendanceRegister() {
   return <div className="attendance-page attendance-register-page">
     <button className="attendance-back" onClick={() => navigate('/teacher/attendance')}>← Back to Attendance</button>
     <section className="attendance-register-hero"><div><p>MONTHLY CLASS REGISTER</p><h1>{summary.class_name}</h1><span>{monthLabel(summary.attendance_month)} · {summary.total_school_days} school days</span></div>{canManage && <div className="attendance-register-actions"><label>School days<input type="number" min="1" max="31" step="1" value={schoolDays} onChange={(event) => setSchoolDays(event.target.value)} /></label><button onClick={updateSchoolDays} disabled={saving}>Update Days</button><button onClick={fillAllPresent}>Set All Fully Present</button></div>}</section>
-    {error && <div className="attendance-message error">{error}</div>}{message && <div className="attendance-message success">{message}</div>}{!canManage && <div className="attendance-message attendance-read-only">Read-only register. Only the active class teacher can make changes.</div>}
+    {error && <div className="attendance-message error">{error}</div>}{!canManage && <div className="attendance-message attendance-read-only">Read-only register. Only the active class teacher can make changes.</div>}
     <section className="attendance-summary"><article className="status-present"><span>Students entered</span><strong>{totals.entered}/{records.length}</strong></article><article className="status-present"><span>Present days</span><strong>{totals.present}</strong></article><article className="status-absent"><span>Absent days</span><strong>{totals.absent}</strong></article><article className="status-excused"><span>Attendance</span><strong>{totals.rate}%</strong></article></section>
     <section className="attendance-roster-card"><div className="attendance-section-heading"><div><h2>Monthly totals from paper register</h2><p>Enter present days; absence and percentage are calculated automatically.</p></div><span>{records.length} students</span></div>
       <div className="attendance-table-wrap"><table className="attendance-table"><thead><tr><th>#</th><th>Student</th><th>Present / {summary.total_school_days}</th><th>Absent</th><th>Percentage</th><th>Optional note</th></tr></thead><tbody>{records.map((record, index) => {

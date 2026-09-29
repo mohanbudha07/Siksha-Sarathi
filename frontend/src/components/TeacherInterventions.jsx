@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import api from '../api'
+import { useToast } from './feedback/useToast'
 import './TeacherInterventions.css'
 
 const reviewDate = () => {
@@ -39,6 +40,7 @@ const interventionSourceKind = (suggestion) => {
 }
 
 function TeacherInterventions({ studentId, subject, suggestions }) {
+  const { confirm, toast } = useToast()
   const [plans, setPlans] = useState([])
   const [draft, setDraft] = useState(() => emptyPlan(subject))
   const [showForm, setShowForm] = useState(false)
@@ -113,14 +115,19 @@ function TeacherInterventions({ studentId, subject, suggestions }) {
   }
 
   const deletePlan = async (plan) => {
-    if (!window.confirm(`Delete the support plan “${plan.focus_area}”?`)) return
+    if (!await confirm({
+      title: 'Delete support plan?',
+      description: `Delete the support plan “${plan.focus_area}”?`,
+      confirmLabel: 'Delete Plan',
+      variant: 'danger',
+    })) return
     try {
-      setSaving(true); setError(''); setMessage('')
+      setSaving(true)
       await api.delete(`/teacher/interventions/${plan.id}`)
       setPlans((items) => items.filter((item) => item.id !== plan.id))
-      setMessage('Support plan deleted.')
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to delete support plan.')
+      toast.success('Support plan deleted.')
+    } catch {
+      toast.error('Unable to delete support plan.')
     } finally { setSaving(false) }
   }
 

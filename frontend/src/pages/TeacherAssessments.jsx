@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import api from '../api'
+import { useToast } from '../components/feedback/useToast'
 import './TeacherAssessments.css'
 
 const assessmentTypes = [
@@ -25,6 +26,7 @@ const formatDate = (value) => {
 function TeacherAssessments() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { confirm, toast } = useToast()
   const notice = location.state?.notice
   const [assignments, setAssignments] = useState([])
   const [assessments, setAssessments] = useState([])
@@ -84,24 +86,30 @@ function TeacherAssessments() {
         subject: selectedAssignment.subject,
         max_marks: Number(form.max_marks),
       })
+      toast.success('Assessment created.')
       navigate(`/teacher/assessments/${response.data.assessment_id}/scores`)
     } catch (err) {
       console.error('Create paper assessment error:', err)
-      setError(err.response?.data?.error || 'Unable to create this assessment.')
+      toast.error('Unable to create this assessment.')
     } finally {
       setSaving(false)
     }
   }
 
   const deleteAssessment = async (assessment) => {
-    if (!window.confirm(`Delete “${assessment.title}”? Assessments with recorded marks are protected.`)) return
+    if (!await confirm({
+      title: 'Delete assessment?',
+      description: `Delete “${assessment.title}”? Assessments with recorded marks are protected.`,
+      confirmLabel: 'Delete Assessment',
+      variant: 'danger',
+    })) return
     try {
       setDeletingId(assessment.id)
-      setError('')
       await api.delete(`/teacher/paper-assessments/${assessment.id}`)
       setAssessments((current) => current.filter((item) => item.id !== assessment.id))
-    } catch (err) {
-      setError(err.response?.data?.error || 'Unable to delete this assessment.')
+      toast.success('Assessment deleted.')
+    } catch {
+      toast.error('Unable to delete this assessment.')
     } finally {
       setDeletingId(null)
     }

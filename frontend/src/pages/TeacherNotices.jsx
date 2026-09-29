@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
 import { notifyNoticeRead } from '../noticeEvents'
+import { useToast } from '../components/feedback/useToast'
 import './Notices.css'
 
 const displayDate = (value) => value ? new Date(value).toLocaleString() : '—'
 
 function TeacherNotices() {
+  const { toast } = useToast()
   const [inbox, setInbox] = useState([])
   const [sent, setSent] = useState([])
   const [options, setOptions] = useState({ class_teacher_classes: [], subject_assignments: [], students: [] })
@@ -19,7 +21,6 @@ function TeacherNotices() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [activeTab, setActiveTab] = useState('inbox')
 
   const load = async () => {
@@ -47,7 +48,7 @@ function TeacherNotices() {
         : item))
       setUnreadCount((count) => Math.max(0, count - 1))
       notifyNoticeRead()
-    } catch (err) { setError(err.response?.data?.error || 'Unable to update notice status.') }
+    } catch { toast.error('Unable to update notice status.') }
   }
 
   const createNotice = async (event) => {
@@ -61,17 +62,17 @@ function TeacherNotices() {
     }
     if (audience === 'student') payload.student_id = Number(studentId)
     try {
-      setSaving(true); setError(''); setSuccess('')
+      setSaving(true); setError('')
       await api.post('/teacher/notices', payload)
-      setTitle(''); setBody(''); setSuccess('Notice published.')
+      setTitle(''); setBody(''); toast.success('Notice published.')
       await load()
-    } catch (err) { setError(err.response?.data?.error || 'Unable to publish notice.') }
+    } catch { toast.error('Unable to publish notice.') }
     finally { setSaving(false) }
   }
 
   return <div className="notice-page">
     <header className="notice-header"><div><p>CLASS COMMUNICATION</p><h1>Notices</h1><span>Internal, one-way announcements within your teaching scope.</span></div><div className="notice-unread-total"><strong>{unreadCount}</strong><span>Unread</span></div></header>
-    {error && <div className="notice-error" role="alert">{error}</div>}{success && <div className="notice-success" role="status">{success}</div>}
+    {error && <div className="notice-error" role="alert">{error}</div>}
     <nav className="notice-view-tabs" role="tablist" aria-label="Notice views">
       {[['inbox', 'Inbox'], ['sent', 'Sent'], ['create', 'Create Notice']].map(([tab, label]) => <button key={tab} type="button" role="tab" aria-selected={activeTab === tab} className={activeTab === tab ? 'active' : ''} onClick={() => setActiveTab(tab)}>{label}</button>)}
     </nav>
