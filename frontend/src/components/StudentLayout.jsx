@@ -10,6 +10,7 @@ const links = [
   { to: '/student/notes', label: 'Notes' },
   { to: '/student/attendance', label: 'Attendance' },
   { to: '/student/notices', label: 'Notices' },
+  { to: '/student/chat', label: 'Chat' },
   { to: '/student/ai', label: 'AI Assistant' },
 ]
 

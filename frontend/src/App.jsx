@@ -39,6 +39,7 @@ import StudentNotices from './pages/StudentNotices'
 import TeacherNotices from './pages/TeacherNotices'
 import AdminNotices from './pages/AdminNotices'
 import AdminCsvManagement from './pages/AdminCsvManagement'
+import ChatWorkspace from './components/ChatWorkspace'
 
 // ---------- Auth Context Helper ----------
 function useAuthCheck() {
@@ -161,6 +162,9 @@ function App() {
         <Route path="/student/notices" element={
           <StudentPage><StudentNotices /></StudentPage>
         } />
+        <Route path="/student/chat" element={
+          <StudentPage><ChatWorkspace role="student" /></StudentPage>
+        } />
 
         {/* Teacher routes */}
         <Route path="/teacher/dashboard" element={
@@ -168,6 +172,9 @@ function App() {
         } />
         <Route path="/teacher/notices" element={
           <TeacherPage><TeacherNotices /></TeacherPage>
+        } />
+        <Route path="/teacher/chat" element={
+          <TeacherPage><ChatWorkspace role="teacher" /></TeacherPage>
         } />
         <Route path="/teacher/notes" element={
           <TeacherPage><TeacherNotes /></TeacherPage>
@@ -236,6 +243,9 @@ function App() {
         } />
         <Route path="/admin/notices" element={
           <AdminPage><AdminNotices /></AdminPage>
+        } />
+        <Route path="/admin/chat" element={
+          <AdminPage><ChatWorkspace role="admin" /></AdminPage>
         } />
         <Route path="/admin/csv" element={
           <AdminPage><AdminCsvManagement /></AdminPage>

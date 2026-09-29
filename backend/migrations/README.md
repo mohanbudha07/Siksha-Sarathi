@@ -266,3 +266,25 @@ Run it after migration 014:
 The table keeps request metadata only. When no production artifact exists, the
 system returns a no-model state and leaves any monitoring or retraining claim
 empty; it does not create synthetic model health data.
+
+## Room chat migration
+
+Migration 018 adds normalized `chat_rooms` and `chat_messages` tables. Rooms
+are created lazily from current class enrollments and teacher assignments;
+membership is never copied into a manually managed member list. Class and
+subject room access is rechecked for every list, history, and send request, so
+transfers and teacher changes revoke access while preserving old messages.
+Admins may inspect all school rooms. The single Staff Room is available only to
+Admins and Teachers. Chat messages are immutable plain text, and the REST API
+returns paginated history. The frontend polls only the active room every four
+seconds. This is conversational Chat, separate from both Notices and the AI
+assistant's `chat_history`.
+
+Back up the database, stop the backend, and then apply migration 018:
+
+    sudo mysqldump siksha_sarathi > ../siksha_sarathi_before_chat_system.sql
+    sudo mysql siksha_sarathi < migrations/018_chat_system.sql
+
+For new databases, `backend/setup_db.sql` includes both Chat tables. The
+migration only creates Chat structures; it does not modify enrollment,
+teacher-assignment, Attendance, Notice, or AI chat-history data.

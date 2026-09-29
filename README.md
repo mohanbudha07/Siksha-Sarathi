@@ -37,6 +37,13 @@ It helps students track their academic performance using Machine Learning, take 
 - Admins have read-only class/month oversight and register inspection.
 - Saved attendance remains available after student transfers; new register rosters use active enrollments only.
 
+### Chat
+- Chat is conversational, room-based communication; it is separate from immutable, one-way Notices and from the AI assistant's private chat history.
+- Class rooms are available to currently enrolled students and the active class teacher. Subject rooms are available to current students of that class and teachers assigned to that exact class and subject.
+- Teachers can access their active class-teacher rooms, exact subject assignments, and the institution-wide Staff Room. Admins can access the Staff Room and all school class/subject rooms for oversight. Students cannot access the Staff Room.
+- Room access is checked against current enrollment and assignments on every request. Transfers and teacher changes revoke prior access without deleting stored messages.
+- Message history is paginated (50 by default, up to 100). The active conversation refreshes over REST every four seconds; no WebSocket service is required.
+
 ### Admin
 - System Overview Dashboard
 - Admin-only CSV management for student accounts, teacher accounts, and teacher subject assignments.
@@ -60,7 +67,7 @@ operational data exports, not database backups, and do not contain credentials
 or historical student enrollments.
 
 ### Notices
-- Notices are immutable, one-way official announcements; Chat is a separate feature.
+- Notices are immutable, one-way official announcements; they do not create conversational rooms or messages.
 - Admins can target the institution, students, teachers, a class, or one person; only Admins can publish public notices.
 - Teachers can publish internal notices only within active class-teacher or assigned subject scopes.
 - Recipients are snapshotted at publication, so class transfers do not erase prior deliveries; inbox read state is per recipient.
