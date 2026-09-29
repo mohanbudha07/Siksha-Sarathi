@@ -59,7 +59,6 @@ main: BEGIN
             UNIQUE (student_id, class_id, subject, as_of_date, model_version);
         END IF;
     END IF;
-    END IF;
 END//
 DELIMITER ;
 
