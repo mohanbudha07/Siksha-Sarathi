@@ -434,6 +434,7 @@ def create_quiz_blueprint(
                     FROM quiz_sessions qs
                     INNER JOIN student_class_enrollments sce
                         ON sce.class_id = qs.class_id AND sce.student_id = %s
+                       AND sce.ended_at IS NULL
                     WHERE qs.id = %s AND qs.quiz_id = %s
                     """,
                     (student_id, lab_session_id, quiz_id)

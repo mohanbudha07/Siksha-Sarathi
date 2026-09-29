@@ -80,7 +80,9 @@ class QuizStatisticsTests(unittest.TestCase):
             CREATE TABLE subjects(id INTEGER PRIMARY KEY, name TEXT UNIQUE,
                 code TEXT UNIQUE, created_at TEXT);
             CREATE TABLE student_class_enrollments(id INTEGER PRIMARY KEY,
-                student_id INTEGER, class_id INTEGER, created_at TEXT);
+                student_id INTEGER, class_id INTEGER, academic_year TEXT,
+                started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TEXT, transfer_note TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE teacher_class_subjects(id INTEGER PRIMARY KEY,
                 teacher_user_id INTEGER, class_id INTEGER, subject_id INTEGER,
                 created_at TEXT);
@@ -155,8 +157,10 @@ class QuizStatisticsTests(unittest.TestCase):
             INSERT INTO classes VALUES(1,'Grade 10','10','Default','2026-01-01');
             INSERT INTO classes VALUES(2,'Grade 9','9','Default','2026-01-01');
             INSERT INTO subjects VALUES(1,'Science','SCI','2026-01-01');
-            INSERT INTO student_class_enrollments VALUES(1,1,1,'2026-01-01');
-            INSERT INTO student_class_enrollments VALUES(2,2,2,'2026-01-01');
+            INSERT INTO student_class_enrollments(id, student_id, class_id, academic_year, started_at, ended_at, transfer_note, created_at)
+                VALUES(1,1,1,NULL,'2026-01-01',NULL,NULL,'2026-01-01');
+            INSERT INTO student_class_enrollments(id, student_id, class_id, academic_year, started_at, ended_at, transfer_note, created_at)
+                VALUES(2,2,2,NULL,'2026-01-01',NULL,NULL,'2026-01-01');
             INSERT INTO teacher_class_subjects VALUES(1,2,1,1,'2026-01-01');
             INSERT INTO class_teacher_assignments
                 (id, teacher_user_id, class_id, academic_year, started_at, created_at)
@@ -916,6 +920,210 @@ class QuizStatisticsTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/student/quizzes').json['quizzes'], [])
         self.assertEqual(self.client.get('/api/student/quiz').status_code, 404)
 
+    def test_active_enrollment_is_explicit_current_membership(self):
+        self.db.execute(
+            "UPDATE student_class_enrollments SET ended_at='2026-02-01', created_at='2026-01-01' WHERE id=1"
+        )
+        self.db.execute(
+            "INSERT INTO student_class_enrollments(id, student_id, class_id, created_at, ended_at) VALUES(3, 1, 2, '2026-03-01', NULL)"
+        )
+        self.db.commit()
+        dashboard = self.client.get('/api/student/dashboard')
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(dashboard.json['current_class']['id'], 2)
+        self.assertEqual(dashboard.json['current_class']['name'], 'Grade 9')
+
+    def test_admin_transfer_preserves_history_and_updates_current_class(self):
+        self.login('admin')
+        new_class = self.client.post('/api/admin/classes', json={
+            'name': 'Grade 10 B', 'grade': '10', 'section': 'B'
+        })
+        self.assertEqual(new_class.status_code, 201)
+        self.db.execute(
+            "UPDATE student_class_enrollments SET ended_at='2026-02-01', created_at='2026-01-01' WHERE id=1"
+        )
+        self.db.commit()
+
+        response = self.client.put('/api/admin/students/1/class', json={
+            'class_id': new_class.json['class_id'],
+            'academic_year': '2083/84',
+            'transfer_note': 'Moved to B section',
+        })
+        self.assertEqual(response.status_code, 200)
+        rows = self.db.execute(
+            "SELECT class_id, ended_at FROM student_class_enrollments WHERE student_id=1 ORDER BY id"
+        ).fetchall()
+        self.assertEqual(len(rows), 2)
+        self.assertIsNotNone(rows[0]['ended_at'])
+        self.assertIsNone(rows[1]['ended_at'])
+        self.assertEqual(rows[1]['class_id'], new_class.json['class_id'])
+        self.assertEqual(self.db.execute(
+            'SELECT grade FROM students WHERE id=1'
+        ).fetchone()['grade'], '10')
+
+    def test_initial_enrollment_creates_one_active_period_and_syncs_grade(self):
+        self.db.execute('DELETE FROM student_class_enrollments WHERE student_id=1')
+        self.db.commit()
+        self.login('admin')
+
+        response = self.client.put('/api/admin/students/1/class', json={
+            'class_id': 2, 'academic_year': '2083/84'
+        })
+
+        self.assertEqual(response.status_code, 200)
+        rows = self.db.execute(
+            'SELECT class_id, started_at, ended_at FROM student_class_enrollments WHERE student_id=1'
+        ).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['class_id'], 2)
+        self.assertIsNotNone(rows[0]['started_at'])
+        self.assertIsNone(rows[0]['ended_at'])
+        self.assertEqual(self.db.execute(
+            'SELECT grade FROM students WHERE id=1'
+        ).fetchone()['grade'], '9')
+
+    def test_same_class_enrollment_is_idempotent(self):
+        self.login('admin')
+        response = self.client.put('/api/admin/students/1/class', json={
+            'class_id': 1
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM student_class_enrollments WHERE student_id=1'
+        ).fetchone()[0], 1)
+
+    def test_enrollment_rejects_missing_student_and_invalid_class(self):
+        self.login('admin')
+        missing_student = self.client.put('/api/admin/students/999/class', json={
+            'class_id': 1
+        })
+        invalid_class = self.client.put('/api/admin/students/1/class', json={
+            'class_id': 999
+        })
+        self.assertEqual(missing_student.status_code, 404)
+        self.assertEqual(invalid_class.status_code, 404)
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM student_class_enrollments WHERE student_id=1'
+        ).fetchone()[0], 1)
+
+    def test_enrollment_transfer_failure_rolls_back_prior_period_close(self):
+        self.db.execute('''CREATE TRIGGER fail_enrollment_insert
+            BEFORE INSERT ON student_class_enrollments
+            BEGIN SELECT RAISE(ABORT, 'test insert failure'); END''')
+        self.db.commit()
+        self.login('admin')
+
+        response = self.client.put('/api/admin/students/1/class', json={
+            'class_id': 2
+        })
+
+        self.assertEqual(response.status_code, 500)
+        row = self.db.execute(
+            'SELECT class_id, ended_at FROM student_class_enrollments WHERE id=1'
+        ).fetchone()
+        self.assertEqual(row['class_id'], 1)
+        self.assertIsNone(row['ended_at'])
+        self.assertEqual(self.db.execute(
+            'SELECT grade FROM students WHERE id=1'
+        ).fetchone()['grade'], '10')
+
+    def test_active_enrollment_constraint_allows_only_one_active_period(self):
+        self.db.execute('''CREATE UNIQUE INDEX uq_student_active_enrollment
+            ON student_class_enrollments
+            (CASE WHEN ended_at IS NULL THEN student_id ELSE NULL END)''')
+        self.db.commit()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.execute('''INSERT INTO student_class_enrollments
+                (id, student_id, class_id, started_at, ended_at)
+                VALUES(3, 1, 2, '2026-02-01', NULL)''')
+        self.db.execute('''INSERT INTO student_class_enrollments
+            (id, student_id, class_id, started_at, ended_at)
+            VALUES(3, 1, 2, '2026-02-01', '2026-03-01')''')
+
+    def test_historical_enrollment_does_not_grant_current_student_access(self):
+        self.db.execute(
+            "UPDATE student_class_enrollments SET ended_at='2026-02-01' WHERE id=1"
+        )
+        self.db.commit()
+        dashboard = self.client.get('/api/student/dashboard')
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertIsNone(dashboard.json['current_class'])
+        self.assertEqual(dashboard.json['subjects'], [])
+
+    def test_admin_enrollment_history_returns_current_and_historical_periods(self):
+        self.db.execute(
+            "UPDATE student_class_enrollments SET ended_at='2026-02-01' WHERE id=1"
+        )
+        self.db.execute('''INSERT INTO student_class_enrollments
+            (id, student_id, class_id, academic_year, started_at, transfer_note)
+            VALUES(3, 1, 2, '2083/84', '2026-02-01', 'Moved class')''')
+        self.db.commit()
+        self.login('admin')
+
+        response = self.client.get('/api/admin/students/1/enrollment-history')
+        missing = self.client.get('/api/admin/students/999/enrollment-history')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(missing.status_code, 404)
+        history = response.json['history']
+        self.assertEqual(len(history), 2)
+        self.assertEqual(sum(item['current'] for item in history), 1)
+        self.assertEqual(
+            set(history[0]),
+            {'id', 'class_id', 'class_name', 'grade', 'section',
+             'academic_year', 'started_at', 'ended_at', 'transfer_note', 'current'}
+        )
+
+    def test_teacher_cannot_access_student_enrollment_history(self):
+        self.login('teacher')
+        response = self.client.get('/api/admin/students/1/enrollment-history')
+        self.assertEqual(response.status_code, 403)
+
+    def test_student_cannot_access_student_enrollment_history(self):
+        self.login('student')
+        response = self.client.get('/api/admin/students/1/enrollment-history')
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_users_lists_one_current_class_and_keeps_unassigned_students(self):
+        self.db.execute(
+            "UPDATE student_class_enrollments SET ended_at='2026-02-01' WHERE id=1"
+        )
+        self.db.execute('''INSERT INTO student_class_enrollments
+            (id, student_id, class_id, started_at)
+            VALUES(3, 1, 2, '2026-02-01')''')
+        self.db.execute("INSERT INTO users VALUES(6,'Unassigned','u@example.test','hash','student',0,'2026-01-01')")
+        self.db.execute("INSERT INTO students VALUES(3,6,'Unassigned Student','8')")
+        self.db.commit()
+        self.login('admin')
+
+        response = self.client.get('/api/admin/users')
+        self.assertEqual(response.status_code, 200)
+        students = response.json['students']
+        first_student = [item for item in students if item['student_id'] == 1]
+        unassigned = [item for item in students if item['student_id'] == 3]
+        self.assertEqual(len(first_student), 1)
+        self.assertEqual(first_student[0]['class_id'], 2)
+        self.assertEqual(first_student[0]['class_name'], 'Grade 9')
+        self.assertEqual(len(unassigned), 1)
+        self.assertIsNone(unassigned[0]['class_id'])
+
+    def test_school_setup_lists_current_students_once_and_unassigned_classes(self):
+        self.db.execute(
+            "UPDATE student_class_enrollments SET ended_at='2026-02-01' WHERE id=1"
+        )
+        self.db.execute('''INSERT INTO student_class_enrollments
+            (id, student_id, class_id, started_at)
+            VALUES(3, 1, 2, '2026-02-01')''')
+        self.db.execute("INSERT INTO classes VALUES(3,'Grade 8 A','8','A','2026-01-01')")
+        self.db.commit()
+        self.login('admin')
+
+        response = self.client.get('/api/admin/school-setup')
+        self.assertEqual(response.status_code, 200)
+        students = response.json['students']
+        self.assertEqual(len([item for item in students if item['student_id'] == 1]), 1)
+        self.assertEqual(next(item for item in students if item['student_id'] == 1)['class_id'], 2)
+        self.assertIn(3, [item['id'] for item in response.json['classes']])
+
     def test_teacher_dashboard_only_shows_assigned_students_and_quiz_evidence(self):
         self.assertEqual(self.submit({'0': 'B', '1': 'C'}).status_code, 200)
         self.db.execute('''INSERT INTO quizzes(id,title,subject,questions,is_published)
@@ -928,7 +1136,7 @@ class QuizStatisticsTests(unittest.TestCase):
                            VALUES(51,0,'Other student','Force','easy',1,0)''')
         self.db.execute("INSERT INTO predictions(student_id,prediction) VALUES(2,'Needs Improvement')")
         self.db.execute("INSERT INTO classes VALUES(3,'Grade 10 B','10','B','2026-01-01')")
-        self.db.execute("INSERT INTO student_class_enrollments VALUES(3,1,3,'2026-01-01')")
+        self.db.execute("INSERT INTO student_class_enrollments(id, student_id, class_id, academic_year, started_at, ended_at, transfer_note, created_at) VALUES(3,1,3,NULL,'2026-01-01',NULL,NULL,'2026-01-01')")
         self.db.execute("INSERT INTO teacher_class_subjects VALUES(2,2,3,1,'2026-01-01')")
 
         self.login('teacher')
@@ -957,7 +1165,7 @@ class QuizStatisticsTests(unittest.TestCase):
                (teacher_user_id, class_id, academic_year, started_at, ended_at)
                VALUES(2,2,'2083/84','2026-01-01',NULL)"""
         )
-        self.db.execute("INSERT INTO student_class_enrollments VALUES(3,2,2,'2026-01-01')")
+        self.db.execute("INSERT INTO student_class_enrollments(id, student_id, class_id, academic_year, started_at, ended_at, transfer_note, created_at) VALUES(3,2,2,NULL,'2026-01-01',NULL,NULL,'2026-01-01')")
 
         self.login('teacher')
         response = self.client.get('/api/teacher/dashboard')
@@ -1330,7 +1538,7 @@ class QuizStatisticsTests(unittest.TestCase):
 
     def test_teacher_recommendations_follow_students_latest_class_enrollment(self):
         self.db.execute(
-            "INSERT INTO student_class_enrollments VALUES(3,1,2,'2026-02-01')"
+            "INSERT INTO student_class_enrollments(id, student_id, class_id, academic_year, started_at, ended_at, transfer_note, created_at) VALUES(3,1,2,NULL,'2026-02-01',NULL,NULL,'2026-02-01')"
         )
         self.db.commit()
         self.login('teacher')

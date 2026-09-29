@@ -9,15 +9,11 @@ def fetch_student_context(cur, user_id):
            FROM students s
            LEFT JOIN student_class_enrollments sce
              ON sce.student_id = s.id
-            AND sce.id = (
-                SELECT latest.id
-                FROM student_class_enrollments latest
-                WHERE latest.student_id = s.id
-                ORDER BY latest.created_at DESC, latest.id DESC
-                LIMIT 1
-            )
+            AND sce.ended_at IS NULL
            LEFT JOIN classes c ON c.id = sce.class_id
-           WHERE s.user_id = %s""",
+           WHERE s.user_id = %s
+           ORDER BY sce.started_at DESC, sce.id DESC
+           LIMIT 1""",
         (user_id,)
     )
     student = cur.fetchone()

@@ -12,3 +12,6 @@ uploads/
 .DS_Store
 structure.txt
 *.zip_old
+
+.venv/
+backups/

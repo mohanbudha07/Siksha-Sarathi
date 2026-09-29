@@ -215,7 +215,9 @@ def create_lab_quiz_blueprint(
                           AND qr.student_id = %s) AS submitted
                 FROM quiz_sessions qs
                 INNER JOIN student_class_enrollments sce
-                    ON sce.class_id = qs.class_id AND sce.student_id = %s
+                    ON sce.class_id = qs.class_id
+                   AND sce.student_id = %s
+                   AND sce.ended_at IS NULL
                 INNER JOIN quizzes q
                     ON q.id = qs.quiz_id AND q.is_published = TRUE
                 INNER JOIN classes c ON c.id = qs.class_id
@@ -265,7 +267,9 @@ def create_lab_quiz_blueprint(
                 INNER JOIN quizzes q
                     ON q.id = qs.quiz_id AND q.is_published = TRUE
                 INNER JOIN student_class_enrollments sce
-                    ON sce.class_id = qs.class_id AND sce.student_id = %s
+                    ON sce.class_id = qs.class_id
+                   AND sce.student_id = %s
+                   AND sce.ended_at IS NULL
                 WHERE qs.id = %s
                 """,
                 (student["id"], lab_session_id)
