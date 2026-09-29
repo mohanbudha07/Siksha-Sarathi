@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from ai.assistant import generate_answer
-from ai.grounded_tutor import MAX_ANSWER_LENGTH
+from ai.grounded_tutor import MAX_ANSWER_LENGTH, get_topic, get_tutoring_intent
 
 
 class FakeModels:
@@ -23,6 +23,100 @@ class FakeModels:
 
 
 class AssistantTests(unittest.TestCase):
+    def test_topic_detection_from_question(self):
+        self.assertEqual(
+            get_topic("Explain photosynthesis"),
+            "Photosynthesis",
+        )
+        self.assertEqual(
+            get_topic("Explain Newton's first law"),
+            "Force",
+        )
+        self.assertEqual(
+            get_topic("Help me with algebra equations"),
+            "Algebra",
+        )
+        self.assertIsNone(
+            get_topic("Tell me something interesting"),
+        )
+
+    def test_topic_detection_prefers_grounded_school_topic(self):
+        grounding = {
+            "subject": "Science",
+            "recommendations": [
+                {
+                    "topic": "Force and Motion",
+                    "title": "Review Force and Motion",
+                }
+            ],
+            "notes": [
+                {
+                    "chapter": "Force and Motion",
+                    "title": "Class notes",
+                    "excerpt": "Lesson content.",
+                }
+            ],
+        }
+
+        self.assertEqual(
+            get_topic(
+                "Can you explain force and motion?",
+                subject="Science",
+                grounding=grounding,
+            ),
+            "Force and Motion",
+        )
+
+    def test_prompt_contains_detected_topic(self):
+        models = FakeModels(types.SimpleNamespace(text="Tutor answer."))
+        client = types.SimpleNamespace(models=models)
+
+        generate_answer(
+            "Explain photosynthesis.",
+            client=client,
+            subject="Science",
+        )
+
+        prompt = models.call["contents"]
+
+        self.assertIn("Topic: Photosynthesis", prompt)
+
+    def test_tutoring_intent_detection(self):
+        self.assertEqual(
+            get_tutoring_intent("Explain Newton's first law"),
+            "explain",
+        )
+        self.assertEqual(
+            get_tutoring_intent("Give me an example of photosynthesis"),
+            "example",
+        )
+        self.assertEqual(
+            get_tutoring_intent("Give me practice questions about force"),
+            "practice",
+        )
+        self.assertEqual(
+            get_tutoring_intent("Help me revise cell division"),
+            "revise",
+        )
+        self.assertEqual(
+            get_tutoring_intent("Tell me about plants"),
+            "general",
+        )
+
+    def test_prompt_contains_tutoring_intent(self):
+        models = FakeModels(types.SimpleNamespace(text="Practice ready."))
+        client = types.SimpleNamespace(models=models)
+
+        generate_answer(
+            "Give me practice questions about force.",
+            client=client,
+            subject="Science",
+        )
+
+        prompt = models.call["contents"]
+        self.assertIn("Tutoring intent: practice", prompt)
+        self.assertIn("Tutoring guidance:", prompt)
+
     def test_no_api_key_uses_offline_helper(self):
         with patch.dict('os.environ', {'GEMINI_API_KEY': ''}):
             subject, answer, mode = generate_answer('Explain photosynthesis')
