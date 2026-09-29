@@ -3,6 +3,7 @@
 import importlib
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 
 try:
@@ -299,6 +300,67 @@ class ChatTests(unittest.TestCase):
         before_id = latest.json["next_before_id"]
         older = self.client.get(f"/api/chat/rooms/{class_room['id']}/messages?limit=2&before_id={before_id}")
         self.assertEqual([row["message"] for row in older.json["messages"]], ["Message 2", "Message 3"])
+
+    def test_message_history_supports_tuple_fetchall(self):
+        self.login("student")
+        class_room = next(room for room in self.rooms() if room["room_type"] == "class")
+        for index in range(1, 6):
+            self.assertEqual(
+                self.send(class_room["id"], {"message": f"Tuple page {index}"}).status_code,
+                201
+            )
+
+        connection = self.backend.mysql.connection
+        original_cursor = connection.cursor
+
+        class TupleFetchallCursor:
+            def __init__(self, cursor):
+                self.cursor = cursor
+
+            def fetchall(self):
+                return tuple(self.cursor.fetchall())
+
+            def __getattr__(self, name):
+                return getattr(self.cursor, name)
+
+        with patch.object(
+            connection,
+            "cursor",
+            side_effect=lambda: TupleFetchallCursor(original_cursor())
+        ):
+            latest = self.client.get(
+                f"/api/chat/rooms/{class_room['id']}/messages?limit=2"
+            )
+            self.assertEqual(latest.status_code, 200)
+            self.assertEqual(
+                [row["message"] for row in latest.json["messages"]],
+                ["Tuple page 4", "Tuple page 5"]
+            )
+            self.assertTrue(latest.json["has_more"])
+            self.assertEqual(latest.json["next_before_id"], latest.json["messages"][0]["id"])
+
+            before_id = latest.json["next_before_id"]
+            older = self.client.get(
+                f"/api/chat/rooms/{class_room['id']}/messages?limit=2&before_id={before_id}"
+            )
+            self.assertEqual(older.status_code, 200)
+            self.assertEqual(
+                [row["message"] for row in older.json["messages"]],
+                ["Tuple page 2", "Tuple page 3"]
+            )
+            self.assertTrue(older.json["has_more"])
+
+            oldest = self.client.get(
+                f"/api/chat/rooms/{class_room['id']}/messages?limit=2&before_id="
+                f"{older.json['next_before_id']}"
+            )
+            self.assertEqual(oldest.status_code, 200)
+            self.assertEqual(
+                [row["message"] for row in oldest.json["messages"]],
+                ["Tuple page 1"]
+            )
+            self.assertFalse(oldest.json["has_more"])
+            self.assertIsNone(oldest.json["next_before_id"])
 
     def test_old_messages_remain_after_membership_changes(self):
         self.login("teacher")

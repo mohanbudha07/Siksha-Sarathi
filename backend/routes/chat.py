@@ -290,10 +290,9 @@ def create_chat_blueprint(mysql, login_required, limiter):
                        ORDER BY cm.id DESC LIMIT %s""",
                     (room_id, before_id, limit + 1)
                 )
-            rows = cur.fetchall()
+            rows = list(cur.fetchall())
             has_more = len(rows) > limit
-            rows = rows[:limit]
-            rows.reverse()
+            rows = list(reversed(rows[:limit]))
             messages = [serialize_message(row) for row in rows]
             return {
                 "messages": messages,
