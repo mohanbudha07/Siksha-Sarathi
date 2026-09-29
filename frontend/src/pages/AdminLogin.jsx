@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import api from '../api'
 import './AdminLogin.css'
+import '../styles/AuthExperience.css'
 
 function AdminLogin() {
   const [email, setEmail] = useState('')
@@ -39,17 +40,25 @@ function AdminLogin() {
 
   return (
     <div className="admin-login-page">
-      <div className="admin-login-container">
-        <div className="admin-login-brand">
-          <div className="admin-brand-icon">🏫</div>
-          <h1>Siksha Sarathi</h1>
-          <p>Administration Portal</p>
-        </div>
+      <div className="admin-login-layout">
+        <aside className="admin-login-intro">
+          <Link className="auth-brand" to="/">
+            <span className="auth-brand-mark">SS</span>
+            <span><strong>Siksha Sarathi</strong><small>Administration</small></span>
+          </Link>
+          <div className="admin-login-intro-copy">
+            <p className="auth-eyebrow">SCHOOL OPERATIONS</p>
+            <h1>Lead with a clear view.</h1>
+            <p>Manage the academic structure and school services from one secure administration workspace.</p>
+          </div>
+          <Link className="auth-home-link" to="/">← Back to the institution site</Link>
+        </aside>
 
         <div className="admin-login-card">
           <div className="admin-login-heading">
-            <h2>Principal Sign In</h2>
-            <p>Access the school administration dashboard.</p>
+            <p className="auth-eyebrow">ADMINISTRATION PORTAL</p>
+            <h2>Sign in</h2>
+            <p>Use your authorized administrator account.</p>
           </div>
 
           <form onSubmit={handleSubmit}>
@@ -58,9 +67,10 @@ function AdminLogin() {
               <input
                 id="admin-email"
                 type="email"
+                autoComplete="username"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="Enter your admin email"
+                placeholder="name@school.edu"
                 required
               />
             </div>
@@ -70,6 +80,7 @@ function AdminLogin() {
               <input
                 id="admin-password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Enter your password"
@@ -77,12 +88,13 @@ function AdminLogin() {
               />
             </div>
 
-            {error && <div className="admin-login-error">⚠️ {error}</div>}
+            {error && <div className="admin-login-error" role="alert">{error}</div>}
 
             <button type="submit" className="admin-login-button" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Signing in...' : 'Sign in'}
             </button>
           </form>
+          <p className="admin-login-security-note">Administrator access is checked against your school account.</p>
         </div>
       </div>
     </div>

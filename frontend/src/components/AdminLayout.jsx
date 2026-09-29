@@ -1,23 +1,32 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import api from '../api'
-import './AdminLayout.css'
+import PortalLayout from './PortalLayout'
 
-const links = [
-  { to: '/admin/dashboard', label: 'Dashboard' },
-  { to: '/admin/users', label: 'User Management' },
-  { to: '/admin/school-setup', label: 'School Setup' },
-  { to: '/admin/attendance', label: 'Attendance' },
-  { to: '/admin/notices', label: 'Notices' },
-  { to: '/admin/chat', label: 'Chat' },
-  { to: '/admin/csv', label: 'CSV Management' },
-  { to: '/admin/ml-readiness', label: 'ML Readiness' },
-  { to: '/admin/ml-monitoring', label: 'ML Monitoring' },
+const groups = [
+  { label: 'Overview', items: [
+    { to: '/admin/dashboard', label: 'Dashboard', icon: 'dashboard' },
+  ] },
+  { label: 'People', items: [
+    { to: '/admin/users', label: 'User Management', icon: 'users' },
+  ] },
+  { label: 'School', items: [
+    { to: '/admin/school-setup', label: 'School Setup', icon: 'school' },
+    { to: '/admin/attendance', label: 'Attendance', icon: 'attendance' },
+    { to: '/admin/notices', label: 'Notices', icon: 'notices' },
+    { to: '/admin/chat', label: 'Chat', icon: 'chat' },
+  ] },
+  { label: 'Data', items: [
+    { to: '/admin/csv', label: 'CSV Management', icon: 'csv' },
+  ] },
+  { label: 'Intelligence', items: [
+    { to: '/admin/ml-readiness', label: 'ML Readiness', icon: 'insights' },
+    { to: '/admin/ml-monitoring', label: 'ML Monitoring', icon: 'insights' },
+  ] },
 ]
 
 function AdminLayout({ children }) {
   const navigate = useNavigate()
-  const [menuOpen, setMenuOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
@@ -39,47 +48,14 @@ function AdminLayout({ children }) {
     }
   }
 
-  return (
-    <div className="admin-shell">
-      <header className="admin-site-header">
-        <NavLink className="admin-brand" to="/admin/dashboard">
-          Siksha Sarathi <span>Admin</span>
-        </NavLink>
-        <button
-          type="button"
-          className="admin-menu-button"
-          aria-label={menuOpen ? 'Close admin menu' : 'Open admin menu'}
-          aria-expanded={menuOpen}
-          aria-controls="admin-site-nav"
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          {menuOpen ? '✕' : '☰'}
-        </button>
-        <nav
-          id="admin-site-nav"
-          className={`admin-site-nav ${menuOpen ? 'is-open' : ''}`}
-          aria-label="Admin navigation"
-        >
-          {links.map((link) => (
-            <NavLink
-              key={link.to}
-              to={link.to}
-              className={({ isActive }) => isActive
-                ? 'admin-nav-link active'
-                : 'admin-nav-link'}
-              onClick={() => setMenuOpen(false)}
-            >
-              {link.label}{link.to === '/admin/notices' && unreadCount > 0 && <span className="nav-unread-badge">{unreadCount}</span>}
-            </NavLink>
-          ))}
-          <button type="button" className="admin-logout" onClick={handleLogout}>
-            Logout
-          </button>
-        </nav>
-      </header>
-      <main>{children}</main>
-    </div>
-  )
+  return <PortalLayout
+    role="admin"
+    portalName="Administration"
+    homePath="/admin/dashboard"
+    groups={groups}
+    unreadCount={unreadCount}
+    onLogout={handleLogout}
+  >{children}</PortalLayout>
 }
 
 export default AdminLayout

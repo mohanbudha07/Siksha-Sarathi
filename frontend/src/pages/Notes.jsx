@@ -20,7 +20,7 @@ function Notes() {
       })
       .catch((error) => {
         console.error(error)
-        setError(`API error: ${error.response?.status || error.message}`)
+        setError('Unable to load your notes. Check your connection and try again.')
       })
       .finally(() => {
         setLoading(false)
@@ -92,8 +92,9 @@ function Notes() {
       )}
 
       {error && (
-        <div className="notes-error">
-          ⚠️ {error}
+        <div className="notes-error" role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={() => window.location.reload()}>Try again</button>
         </div>
       )}
 
@@ -117,7 +118,6 @@ function Notes() {
             <article
               className="note-card"
               key={note.id}
-              onClick={() => setSelectedNote(note)}
             >
 
               <div className="note-card-top">

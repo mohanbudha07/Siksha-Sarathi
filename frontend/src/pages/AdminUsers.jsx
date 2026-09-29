@@ -80,6 +80,8 @@ function AdminUsers() {
   const [busyForm, setBusyForm] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [activeView, setActiveView] = useState('create')
+  const [accountRole, setAccountRole] = useState('student')
   const [adminForm, setAdminForm] = useState(emptyAdminForm)
   const [teacherForm, setTeacherForm] = useState(emptyTeacherForm)
   const [studentForm, setStudentForm] = useState(emptyStudentForm)
@@ -144,92 +146,91 @@ function AdminUsers() {
       {error && <div className="admin-users-message error" role="alert">{error}</div>}
       {success && <div className="admin-users-message success" role="status">{success}</div>}
 
-      <section className="admin-users-form-grid" aria-label="Create accounts">
-        <AccountForm
-          title="Create administrator"
-          fields={adminFields}
-          form={adminForm}
-          setForm={setAdminForm}
-          busy={busyForm === 'admin'}
-          submitLabel="Create Administrator"
-          onSubmit={(event) => {
-            event.preventDefault()
-            submit('admin', () => api.post('/admin/admins', adminForm), () => setAdminForm(emptyAdminForm))
-          }}
-        />
-        <AccountForm
-          title="Create teacher"
-          fields={teacherFields}
-          form={teacherForm}
-          setForm={setTeacherForm}
-          busy={busyForm === 'teacher'}
-          submitLabel="Create Teacher"
-          onSubmit={(event) => {
-            event.preventDefault()
-            submit('teacher', () => api.post('/admin/teachers', teacherForm), () => setTeacherForm(emptyTeacherForm))
-          }}
-        />
-        <AccountForm
-          title="Create student"
-          fields={studentFields}
-          form={studentForm}
-          setForm={setStudentForm}
-          busy={busyForm === 'student'}
-          submitLabel="Create Student"
-          onSubmit={(event) => {
-            event.preventDefault()
-            submit('student', () => api.post('/admin/students', {
-              ...studentForm,
-              class_id: Number(studentForm.class_id),
-            }), () => setStudentForm(emptyStudentForm))
-          }}
-        />
-      </section>
-      {classes.length === 0 && !loading && (
-        <p className="admin-users-class-note">Create a class in School Setup before creating a student.</p>
-      )}
+      <div className="admin-users-tabs" role="group" aria-label="User management view">
+        <button type="button" className={activeView === 'create' ? 'active' : ''} aria-pressed={activeView === 'create'} onClick={() => setActiveView('create')}>Create accounts</button>
+        <button type="button" className={activeView === 'list' ? 'active' : ''} aria-pressed={activeView === 'list'} onClick={() => setActiveView('list')}>Account list</button>
+      </div>
 
-      {!loading && (
-        <div className="admin-users-lists">
-          <section className="admin-users-list">
-            <h2>Administrators</h2>
-            <UserTable
-              rows={users.admins}
-              emptyMessage="No administrators found."
-              columns={[
-                { key: 'username', label: 'Name' },
-                { key: 'email', label: 'Email' },
-                { key: 'created_at', label: 'Created', render: (row) => formatDate(row.created_at) },
-              ]}
-            />
+      {activeView === 'create' ? (
+        <>
+          <div className="admin-users-tabs" role="group" aria-label="Account type">
+            {[
+              ['student', 'Student'], ['teacher', 'Teacher'], ['admin', 'Administrator'],
+            ].map(([value, label]) => (
+              <button type="button" key={value} className={accountRole === value ? 'active' : ''} aria-pressed={accountRole === value} onClick={() => setAccountRole(value)}>{label}</button>
+            ))}
+          </div>
+          <section className="admin-users-form-grid" aria-label="Create account">
+            {accountRole === 'admin' && <AccountForm
+              title="Create administrator"
+              fields={adminFields}
+              form={adminForm}
+              setForm={setAdminForm}
+              busy={busyForm === 'admin'}
+              submitLabel="Create Administrator"
+              onSubmit={(event) => {
+                event.preventDefault()
+                submit('admin', () => api.post('/admin/admins', adminForm), () => setAdminForm(emptyAdminForm))
+              }}
+            />}
+            {accountRole === 'teacher' && <AccountForm
+              title="Create teacher"
+              fields={teacherFields}
+              form={teacherForm}
+              setForm={setTeacherForm}
+              busy={busyForm === 'teacher'}
+              submitLabel="Create Teacher"
+              onSubmit={(event) => {
+                event.preventDefault()
+                submit('teacher', () => api.post('/admin/teachers', teacherForm), () => setTeacherForm(emptyTeacherForm))
+              }}
+            />}
+            {accountRole === 'student' && <AccountForm
+              title="Create student"
+              fields={studentFields}
+              form={studentForm}
+              setForm={setStudentForm}
+              busy={busyForm === 'student'}
+              submitLabel="Create Student"
+              onSubmit={(event) => {
+                event.preventDefault()
+                submit('student', () => api.post('/admin/students', {
+                  ...studentForm,
+                  class_id: Number(studentForm.class_id),
+                }), () => setStudentForm(emptyStudentForm))
+              }}
+            />}
           </section>
-          <section className="admin-users-list">
-            <h2>Teachers</h2>
-            <UserTable
-              rows={users.teachers}
-              emptyMessage="No teachers found."
-              columns={[
-                { key: 'username', label: 'Name' },
-                { key: 'email', label: 'Email' },
-                { key: 'created_at', label: 'Created', render: (row) => formatDate(row.created_at) },
-              ]}
-            />
-          </section>
-          <section className="admin-users-list">
-            <h2>Students</h2>
-            <UserTable
-              rows={users.students}
-              emptyMessage="No students found."
-              columns={[
-                { key: 'full_name', label: 'Full name' },
-                { key: 'email', label: 'Email' },
-                { key: 'grade', label: 'Grade' },
-                { key: 'class_name', label: 'Class' },
-                { key: 'created_at', label: 'Created', render: (row) => formatDate(row.created_at) },
-              ]}
-            />
-          </section>
-        </div>
+          {accountRole === 'student' && classes.length === 0 && !loading && (
+            <p className="admin-users-class-note">Create a class in School Setup before creating a student.</p>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="admin-users-tabs" role="group" aria-label="Account list role">
+            {[
+              ['students', 'Students'], ['teachers', 'Teachers'], ['admins', 'Administrators'],
+            ].map(([value, label]) => (
+              <button type="button" key={value} className={accountRole === value ? 'active' : ''} aria-pressed={accountRole === value} onClick={() => setAccountRole(value)}>{label}</button>
+            ))}
+          </div>
+          {!loading && <section className="admin-users-list">
+            <h2>{accountRole === 'admins' ? 'Administrators' : accountRole === 'teachers' ? 'Teachers' : 'Students'}</h2>
+            {accountRole === 'admins' && <UserTable rows={users.admins} emptyMessage="No administrators found." columns={[
+              { key: 'username', label: 'Name' }, { key: 'email', label: 'Email' },
+              { key: 'created_at', label: 'Created', render: (row) => formatDate(row.created_at) },
+            ]} />}
+            {accountRole === 'teachers' && <UserTable rows={users.teachers} emptyMessage="No teachers found." columns={[
+              { key: 'username', label: 'Name' }, { key: 'email', label: 'Email' },
+              { key: 'created_at', label: 'Created', render: (row) => formatDate(row.created_at) },
+            ]} />}
+            {accountRole === 'students' && <UserTable rows={users.students} emptyMessage="No students found." columns={[
+              { key: 'full_name', label: 'Full name' }, { key: 'email', label: 'Email' },
+              { key: 'grade', label: 'Grade' }, { key: 'class_name', label: 'Class' },
+              { key: 'created_at', label: 'Created', render: (row) => formatDate(row.created_at) },
+            ]} />}
+          </section>}
+        </>
       )}
     </div>
   )

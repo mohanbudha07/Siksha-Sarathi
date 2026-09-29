@@ -1,6 +1,6 @@
 .ai-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc, #eef4ff);
+  background: var(--color-bg);
   padding: 35px 20px;
   box-sizing: border-box;
 }
@@ -13,6 +13,9 @@
 /* Header */
 
 .ai-header {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   gap: 15px;
@@ -24,6 +27,7 @@
 }
 
 .ai-avatar {
+    background: var(--color-primary);
   width: 55px;
   height: 55px;
   border-radius: 16px;
@@ -35,6 +39,7 @@
 }
 
 .ai-header h1 {
+    color: var(--color-primary-dark);
   margin: 0;
   color: #172033;
   font-size: 23px;
@@ -64,7 +69,9 @@
 /* Welcome */
 
 .ai-welcome {
-  background: white;
+  background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
   padding: 45px 30px;
   border-radius: 20px;
   text-align: center;
@@ -130,7 +137,10 @@
 
 .answer-content,
 .thinking-box {
-  background: white;
+  background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-primary);
   border-radius: 15px;
   padding: 18px 20px;
   box-shadow: 0 4px 15px rgba(0,0,0,0.06);
@@ -318,7 +328,7 @@
 
 .input-footer button {
   border: none;
-  background: #2563eb;
+  background: var(--color-primary);
   color: white;
   padding: 11px 18px;
   border-radius: 10px;
@@ -354,6 +364,15 @@
 }
 
 .ai-error {
+
+  .ai-page,
+  .ai-page button,
+  .ai-page input,
+  .ai-page select,
+  .ai-page textarea { font-family: var(--font-sans); }
+  .ai-page .ai-input-area { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+  .ai-page .ai-input-area textarea { border-color: #c9d2e0; border-radius: var(--radius-sm); }
+  .ai-page .input-footer button:hover:not(:disabled) { background: var(--color-blue); }
   background: #fee2e2;
   color: #991b1b;
   padding: 14px;

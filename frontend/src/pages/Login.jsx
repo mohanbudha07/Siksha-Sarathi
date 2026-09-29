@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import api from '../api'
 import './Login.css'
+import '../styles/AuthExperience.css'
 
 function Login() {
   const [email, setEmail] = useState('')
@@ -48,64 +49,65 @@ function Login() {
 
   return (
     <div className="login-page">
-
-      <div className="login-container">
-
-        <div className="login-brand">
-          <div className="brand-icon">🎓</div>
-
-          <h1>Siksha Sarathi</h1>
-
-          <p>
-            Your smart companion for better learning
-          </p>
-        </div>
+      <div className="login-layout">
+        <aside className="login-intro-panel">
+          <Link className="auth-brand" to="/">
+            <span className="auth-brand-mark">SS</span>
+            <span><strong>Siksha Sarathi</strong><small>Academic Platform</small></span>
+          </Link>
+          <div className="login-intro-copy">
+            <p className="auth-eyebrow">LEARNING, CONNECTED</p>
+            <h1>Make every class count.</h1>
+            <p>Coursework, school communication, and learning progress in one secure workspace.</p>
+          </div>
+          <Link className="auth-home-link" to="/">← Back to the institution site</Link>
+        </aside>
 
         <div className="login-card">
-
           <div className="login-heading">
-            <h2>Welcome Back</h2>
-            <p>Sign in to continue your learning journey.</p>
+            <p className="auth-eyebrow">STUDENT &amp; TEACHER PORTAL</p>
+            <h2>Sign in</h2>
+            <p>Use the account issued by your school.</p>
           </div>
 
           <form onSubmit={handleSubmit}>
-
             <div className="input-group">
-              <label htmlFor="email">
-                Email Address
-              </label>
-
+              <label htmlFor="email">Email address</label>
               <input
                 id="email"
                 type="email"
-                placeholder="Enter your email"
+                autoComplete="username"
+                placeholder="name@school.edu"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
               />
             </div>
 
-            <div className="input-group">
-              <label htmlFor="role">Login as</label>
-              <select
-                id="role"
-                value={role}
-                onChange={(event) => setRole(event.target.value)}
-                aria-label="Select login role"
-              >
-                <option value="student">Student</option>
-                <option value="teacher">Teacher</option>
-              </select>
-            </div>
+            <fieldset className="login-role-group">
+              <legend>Continue as</legend>
+              <div className="login-role-options">
+                {[['student', 'Student'], ['teacher', 'Teacher']].map(([value, label]) => (
+                  <label className={role === value ? 'is-selected' : ''} key={value}>
+                    <input
+                      type="radio"
+                      name="role"
+                      value={value}
+                      checked={role === value}
+                      onChange={() => setRole(value)}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
             <div className="input-group">
-              <label htmlFor="password">
-                Password
-              </label>
-
+              <label htmlFor="password">Password</label>
               <input
                 id="password"
                 type="password"
+                autoComplete="current-password"
                 placeholder="Enter your password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -114,9 +116,7 @@ function Login() {
             </div>
 
             {error && (
-              <div className="login-error">
-                ⚠️ {error}
-              </div>
+              <div className="login-error" role="alert">{error}</div>
             )}
             {location.state?.notice && !error && (
               <div className="login-success" role="status">✓ {location.state.notice}</div>
@@ -128,31 +128,15 @@ function Login() {
               disabled={loading}
             >
               {loading ? (
-                <>
-                  <span className="login-spinner" />
-                  Signing in...
-                </>
+                <><span className="login-spinner" />Signing in...</>
               ) : (
-                'Sign In →'
+                'Sign in'
               )}
             </button>
-
           </form>
-          <div className="login-footer">
-            <span>📚</span>
-            <p>
-              Learn smarter. Track progress. Improve continuously.
-            </p>
-          </div>
-
+          <p className="login-security-note">Your role and account access are verified securely.</p>
         </div>
-
-        <p className="login-copyright">
-          © 2026 Siksha Sarathi
-        </p>
-
       </div>
-
     </div>
   )
 }

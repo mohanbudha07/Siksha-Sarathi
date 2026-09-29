@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '../api'
+import '../styles/MLMonitoring.css'
 
 function AdminMLMonitoring() {
   const [report, setReport] = useState(null)
@@ -8,8 +9,7 @@ function AdminMLMonitoring() {
 
   useEffect(() => {
     let active = true
-    api
-      .get('/admin/ml/monitoring-status')
+    api.get('/admin/ml/monitoring-status')
       .then((response) => {
         if (active) setReport(response.data)
       })
@@ -23,11 +23,11 @@ function AdminMLMonitoring() {
   }, [])
 
   if (loading) {
-    return <div style={{ padding: '2rem' }}>Loading monitoring status...</div>
+    return <div className="ml-monitoring-page"><div className="ml-monitoring-state">Loading monitoring status...</div></div>
   }
 
   if (error) {
-    return <div style={{ padding: '2rem', color: '#b91c1c' }}>{error}</div>
+    return <div className="ml-monitoring-page"><div className="ml-monitoring-state is-error" role="alert">{error}</div></div>
   }
 
   const data = report || {}
@@ -36,29 +36,19 @@ function AdminMLMonitoring() {
   const available = Boolean(data.available)
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-      <h1>ML Monitoring</h1>
-      <p style={{ color: '#4b5563' }}>
-        Monitoring reflects the current artifact state only. No synthetic model health is reported.
-      </p>
-
-      <div style={{ display: 'grid', gap: '1rem', marginTop: '1.5rem' }}>
-        <div style={{ background: '#f3f4f6', borderRadius: '12px', padding: '1rem 1.25rem' }}>
-          <strong>Status:</strong> {status}
-        </div>
-        <div style={{ background: '#f3f4f6', borderRadius: '12px', padding: '1rem 1.25rem' }}>
-          <strong>Monitoring state:</strong> {monitoringState}
-        </div>
-        <div style={{ background: '#f3f4f6', borderRadius: '12px', padding: '1rem 1.25rem' }}>
-          <strong>Artifact available:</strong> {available ? 'Yes' : 'No'}
-        </div>
-        <div style={{ background: '#f3f4f6', borderRadius: '12px', padding: '1rem 1.25rem' }}>
-          <strong>Retraining required:</strong> {data.retraining_required ? 'Yes' : 'No'}
-        </div>
-        <div style={{ background: '#f3f4f6', borderRadius: '12px', padding: '1rem 1.25rem' }}>
-          <strong>Reason:</strong> {data.reason || 'No validated production artifact is available.'}
-        </div>
-      </div>
+    <div className="ml-monitoring-page">
+      <header className="ml-monitoring-header">
+        <p>ADMINISTRATION / MACHINE LEARNING</p>
+        <h1>ML Monitoring</h1>
+        <p>Monitoring reflects the current artifact state only. No synthetic model health is reported.</p>
+      </header>
+      <section className="ml-monitoring-grid" aria-label="Monitoring status">
+        <div className="ml-monitoring-card"><strong>Status:</strong> {status}</div>
+        <div className="ml-monitoring-card"><strong>Monitoring state:</strong> {monitoringState}</div>
+        <div className="ml-monitoring-card"><strong>Artifact available:</strong> {available ? 'Yes' : 'No'}</div>
+        <div className="ml-monitoring-card"><strong>Retraining required:</strong> {data.retraining_required ? 'Yes' : 'No'}</div>
+        <div className="ml-monitoring-card"><strong>Reason:</strong> {data.reason || 'No validated production artifact is available.'}</div>
+      </section>
     </div>
   )
 }
