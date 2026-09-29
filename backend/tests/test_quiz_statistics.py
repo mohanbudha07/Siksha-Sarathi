@@ -1986,7 +1986,7 @@ class QuizStatisticsTests(unittest.TestCase):
         payload.update(overrides)
         return payload
 
-    def test_teacher_can_create_record_and_delete_paper_assessment(self):
+    def test_scored_paper_assessment_cannot_be_deleted(self):
         self.login('teacher')
         response = self.client.post(
             '/api/teacher/paper-assessments',
@@ -2027,12 +2027,16 @@ class QuizStatisticsTests(unittest.TestCase):
 
         listing = self.client.get('/api/teacher/paper-assessments')
         self.assertEqual(listing.json['assessments'][0]['recorded_students'], 1)
-        self.assertEqual(
-            self.client.delete(
-                f'/api/teacher/paper-assessments/{assessment_id}'
-            ).status_code,
-            200
-        )
+        assessment_url = f'/api/teacher/paper-assessments/{assessment_id}'
+        self.assertEqual(self.client.delete(assessment_url).status_code, 409)
+        self.assertEqual(self.db.execute(
+            'SELECT marks_obtained FROM paper_assessment_scores WHERE assessment_id=?',
+            (assessment_id,)
+        ).fetchone()[0], 42)
+        self.assertEqual(self.client.put(
+            f'{assessment_url}/scores', json={'scores': []}
+        ).status_code, 200)
+        self.assertEqual(self.client.delete(assessment_url).status_code, 200)
 
     def test_paper_assessment_scores_validate_marks_absence_and_enrollment(self):
         self.login('teacher')

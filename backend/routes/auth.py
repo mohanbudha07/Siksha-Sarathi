@@ -87,6 +87,7 @@ def create_auth_blueprint(mysql, limiter, login_required):
         key_func=_login_rate_limit_key
     )
     def api_login():
+        session.clear()
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return {"error": "Login data is required"}, 400
@@ -112,6 +113,7 @@ def create_auth_blueprint(mysql, limiter, login_required):
         key_func=_login_rate_limit_key
     )
     def api_admin_login():
+        session.clear()
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return {"error": "Login data is required"}, 400
