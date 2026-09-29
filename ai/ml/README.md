@@ -44,28 +44,6 @@ benchmark. They do not modify the production prediction service.
 
 ---
 
-# Siksha Sarathi Machine Learning
-
-Siksha Sarathi separates machine learning into three layers.
-
-## 1. Production school model
-`ai/ml/production/` is the official application prediction pipeline. It predicts
-the next paper-assessment percentage from longitudinal school evidence and uses
-data-readiness gates, temporal validation, baseline comparison, guarded artifact
-packaging, and explicit promotion.
-
-## 2. External xAPI research model
-`ai/ml/xapi/` trains on the public xAPI-Edu-Data LMS dataset and predicts
-Low/Middle/High performance classes. It is for external research and FYP
-demonstration only because its feature schema differs from the production
-Siksha Sarathi feature contract.
-
-## 3. UCI research evaluation
-The UCI Student Performance datasets remain a separate reproducible regression
-benchmark and do not alter the production service.
-
----
-
 
 From the project root, with the usual virtual environment and MySQL running:
 
@@ -79,9 +57,9 @@ The target is a **published Grade 10 terminal paper exam** with recorded marks. 
 
 The report waits for at least 30 distinct students and two exam dates; it also needs 30 training students from earlier exam dates and 10 students on the latest date. The latest exam date is the test set. Thresholds are only a guard against reporting a meaningless score with one student: 30 students do not prove a model is reliable. Students can appear in both earlier and later exams, so this measures later performance for a school cohort, not how the model works at a new school. Before using a prediction for decisions, assess error across more terms, schools, and student groups, compare with teacher judgement and the baseline, and check for missing data and unfair disparities.
 
-The legacy Random Forest was trained on 15 illustrative rows in
-`student_performance.csv` and used manually entered values. It is retained only
-as historical research and is not loaded or served by the application. The
+The earlier illustrative Random Forest prototype and its saved pickle
+artifacts have been removed. The application now keeps external research models
+separate from the production school-data prediction pipeline. The
 separate Gradient Boosting scripts use a different dataset and target. Neither
 validates predictions for this school. Until representative school outcomes are
 collected and evaluated, teacher actions and student practice suggestions rely
