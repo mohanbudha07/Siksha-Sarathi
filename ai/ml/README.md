@@ -1,4 +1,71 @@
-# Evaluating predictions with school records
+# Siksha Sarathi Machine Learning
+
+Siksha Sarathi separates machine learning into three layers.
+
+## 1. Production school model
+
+`ai/ml/production/`
+
+This is the official Siksha Sarathi prediction pipeline. It predicts a student's
+next paper-assessment percentage from genuine longitudinal school evidence such
+as quiz performance, prior paper results, attendance, and evidence recency.
+
+It uses training-readiness checks, temporal validation, model comparison,
+guarded artifact packaging, and explicit promotion. If enough genuine school
+evidence or a validated artifact is unavailable, it refuses to claim a
+production prediction.
+
+## 2. External xAPI research model
+
+`ai/ml/xapi/`
+
+This module uses the real xAPI-Edu-Data LMS dataset with 480 records.
+
+It compares Logistic Regression, Random Forest, Gradient Boosting, and a Dummy
+baseline. On the current experiment, Random Forest was selected.
+
+Current evaluation:
+
+- 5-fold CV Macro F1: 0.7729
+- 5-fold CV Accuracy: 0.7646
+- Holdout Macro F1: 0.7181
+- Holdout Accuracy: 0.7083
+
+The model predicts Low, Middle, or High academic-performance classes.
+
+This external model is for research and FYP demonstration only. It is not used
+as the Siksha Sarathi production predictor because the external xAPI features
+do not match the school's production feature contract.
+
+## 3. UCI research benchmark
+
+The UCI Student Performance datasets remain a separate regression research
+benchmark. They do not modify the production prediction service.
+
+---
+
+# Siksha Sarathi Machine Learning
+
+Siksha Sarathi separates machine learning into three layers.
+
+## 1. Production school model
+`ai/ml/production/` is the official application prediction pipeline. It predicts
+the next paper-assessment percentage from longitudinal school evidence and uses
+data-readiness gates, temporal validation, baseline comparison, guarded artifact
+packaging, and explicit promotion.
+
+## 2. External xAPI research model
+`ai/ml/xapi/` trains on the public xAPI-Edu-Data LMS dataset and predicts
+Low/Middle/High performance classes. It is for external research and FYP
+demonstration only because its feature schema differs from the production
+Siksha Sarathi feature contract.
+
+## 3. UCI research evaluation
+The UCI Student Performance datasets remain a separate reproducible regression
+benchmark and do not alter the production service.
+
+---
+
 
 From the project root, with the usual virtual environment and MySQL running:
 

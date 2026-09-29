@@ -15,3 +15,7 @@ structure.txt
 
 .venv/
 backups/
+
+# External ML research data and generated artifacts
+ai/ml/xapi/data/
+ai/ml/xapi/artifacts/
