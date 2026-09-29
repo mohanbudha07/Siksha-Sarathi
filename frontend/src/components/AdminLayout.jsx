@@ -9,6 +9,7 @@ const links = [
   { to: '/admin/school-setup', label: 'School Setup' },
   { to: '/admin/attendance', label: 'Attendance' },
   { to: '/admin/notices', label: 'Notices' },
+  { to: '/admin/csv', label: 'CSV Management' },
   { to: '/admin/ml-readiness', label: 'ML Readiness' },
   { to: '/admin/ml-monitoring', label: 'ML Monitoring' },
 ]

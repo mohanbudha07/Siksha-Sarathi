@@ -39,6 +39,25 @@ It helps students track their academic performance using Machine Learning, take 
 
 ### Admin
 - System Overview Dashboard
+- Admin-only CSV management for student accounts, teacher accounts, and teacher subject assignments.
+
+#### Admin CSV Management
+
+Use `/admin/csv` to download header-only templates, validate and preview a CSV,
+then explicitly import it, or export current data. CSVs use these columns:
+
+- Students: `full_name`, `email`, `temporary_password`, `grade`, `section`, and optional `academic_year`. The class is resolved from grade and section.
+- Teachers: `full_name`, `email`, `temporary_password`.
+- Teacher assignments: `teacher_email`, `grade`, `section`, `subject_code`. All three references are resolved by the server; internal IDs are not accepted.
+
+Preview does not write data. Import uploads and validates the CSV again, and
+the entire import is transactional: invalid rows or database failures leave no
+partial imports. Existing accounts are never updated; existing exact teacher
+assignments are safely skipped. Temporary passwords are required only for
+account creation, hashed before storage, and never included in previews or
+exports. CSV management is restricted to Admins. These CSV exports are
+operational data exports, not database backups, and do not contain credentials
+or historical student enrollments.
 
 ### Notices
 - Notices are immutable, one-way official announcements; Chat is a separate feature.
