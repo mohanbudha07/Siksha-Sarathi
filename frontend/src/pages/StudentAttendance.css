@@ -1,0 +1,23 @@
+.student-attendance-page { min-height: calc(100vh - 70px); max-width: 1180px; margin: 0 auto; padding: 34px 40px 60px; color: #172033; }
+.student-attendance-heading { display: flex; align-items: end; justify-content: space-between; padding: 25px 0 22px; border-bottom: 2px solid #0f766e; }
+.student-attendance-heading p { margin: 0 0 7px; color: #0f766e; font-size: 12px; font-weight: 800; letter-spacing: 1px; }
+.student-attendance-heading h1 { margin: 0 0 7px; font-size: 30px; }
+.student-attendance-heading span { color: #64748b; }
+.student-attendance-error { margin-top: 18px; padding: 13px 16px; border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
+.student-attendance-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 22px 0 30px; }
+.student-attendance-summary article { display: grid; gap: 7px; padding: 17px 18px; border-left: 3px solid #0f766e; background: #f1f8f6; }
+.student-attendance-summary span { color: #52616b; font-size: 13px; }
+.student-attendance-summary strong { color: #0a574e; font-size: 24px; }
+.student-attendance-history { margin-top: 25px; }
+.student-attendance-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.student-attendance-section-heading h2 { margin: 0; font-size: 21px; }
+.student-attendance-section-heading span { color: #64748b; font-size: 13px; }
+.student-attendance-table-wrap { overflow-x: auto; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; }
+.student-attendance-table-wrap table { width: 100%; min-width: 740px; border-collapse: collapse; }
+.student-attendance-table-wrap th, .student-attendance-table-wrap td { padding: 12px 11px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+.student-attendance-table-wrap th { color: #475569; background: #f8fafc; font-size: 12px; font-weight: 700; }
+.student-attendance-table-wrap td:nth-child(2) { min-width: 180px; }
+.student-attendance-table-wrap td small { display: block; margin-top: 4px; color: #64748b; }
+.student-attendance-empty { display: grid; gap: 8px; place-items: center; min-height: 220px; color: #64748b; text-align: center; }
+.student-attendance-empty strong { color: #1f2937; font-size: 18px; }
+@media (max-width: 700px) { .student-attendance-page { padding: 20px 15px 42px; } .student-attendance-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

@@ -30,6 +30,12 @@ It helps students track their academic performance using Machine Learning, take 
 - Teacher Dashboard
 - Upload & Manage Notes
 - View class-scoped learning analytics and intervention progress
+- Active class teachers record monthly attendance registers
+
+### Attendance
+- Students see their own monthly attendance history, including previous classes.
+- Admins have read-only class/month oversight and register inspection.
+- Saved attendance remains available after student transfers; new register rosters use active enrollments only.
 
 ### Admin
 - System Overview Dashboard

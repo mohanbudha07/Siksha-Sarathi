@@ -7,6 +7,7 @@ const links = [
   { to: '/admin/dashboard', label: 'Dashboard' },
   { to: '/admin/users', label: 'User Management' },
   { to: '/admin/school-setup', label: 'School Setup' },
+  { to: '/admin/attendance', label: 'Attendance' },
   { to: '/admin/ml-readiness', label: 'ML Readiness' },
   { to: '/admin/ml-monitoring', label: 'ML Monitoring' },
 ]

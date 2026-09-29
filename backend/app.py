@@ -247,7 +247,9 @@ app.register_blueprint(create_attendance_blueprint(
     mysql=mysql,
     login_required=login_required,
     role_required=role_required,
-    teacher_role=TEACHER
+    teacher_role=TEACHER,
+    student_role=STUDENT,
+    admin_role=ADMIN
 ))
 
 app.register_blueprint(create_admin_blueprint(

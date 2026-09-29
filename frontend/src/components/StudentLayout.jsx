@@ -8,6 +8,7 @@ const links = [
   { to: '/student/practice-plan', label: 'My Plan' },
   { to: '/student/quiz', label: 'Quizzes' },
   { to: '/student/notes', label: 'Notes' },
+  { to: '/student/attendance', label: 'Attendance' },
   { to: '/student/ai', label: 'AI Assistant' },
 ]
 

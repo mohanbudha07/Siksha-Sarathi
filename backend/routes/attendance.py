@@ -12,6 +12,18 @@ def serialize_api_date(value):
     return str(value)
 
 
+def parse_whole_number(value):
+    if isinstance(value, bool):
+        raise ValueError("A whole number is required")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        return int(value.strip())
+    raise ValueError("A whole number is required")
+
+
 def teacher_has_class_assignment(cur, teacher_id, class_id):
     cur.execute(
         """
@@ -28,7 +40,7 @@ def validate_attendance_summary_payload(data):
     if not isinstance(data, dict):
         raise ValueError("Monthly attendance data is required")
     try:
-        class_id = int(data.get("class_id"))
+        class_id = parse_whole_number(data.get("class_id"))
     except (TypeError, ValueError) as error:
         raise ValueError("Class is required") from error
     try:
@@ -38,7 +50,7 @@ def validate_attendance_summary_payload(data):
     except ValueError as error:
         raise ValueError("Attendance month must use YYYY-MM") from error
     try:
-        total_school_days = int(data.get("total_school_days"))
+        total_school_days = parse_whole_number(data.get("total_school_days"))
     except (TypeError, ValueError) as error:
         raise ValueError("Total school days must be a whole number") from error
     if not 1 <= total_school_days <= 31:
@@ -55,12 +67,27 @@ def fetch_teacher_attendance_summary(cur, summary_id, teacher_id):
         """
         SELECT mas.id, mas.teacher_user_id, mas.class_id,
                mas.attendance_month, mas.total_school_days, mas.created_at,
-               c.name AS class_name, c.grade, c.section
+                             c.name AS class_name, c.grade, c.section,
+                             EXISTS (
+                                     SELECT 1 FROM class_teacher_assignments cta
+                                     WHERE cta.class_id = mas.class_id
+                                         AND cta.teacher_user_id = %s
+                                         AND cta.ended_at IS NULL
+                             ) AS can_manage
         FROM monthly_attendance_summaries mas
         INNER JOIN classes c ON c.id = mas.class_id
-        WHERE mas.id = %s AND mas.teacher_user_id = %s
+                WHERE mas.id = %s
+                    AND (
+                            mas.teacher_user_id = %s
+                            OR EXISTS (
+                                    SELECT 1 FROM class_teacher_assignments cta
+                                    WHERE cta.class_id = mas.class_id
+                                        AND cta.teacher_user_id = %s
+                                        AND cta.ended_at IS NULL
+                            )
+                    )
         """,
-        (summary_id, teacher_id)
+                (teacher_id, summary_id, teacher_id, teacher_id)
     )
     attendance = cur.fetchone()
     if attendance:
@@ -75,7 +102,9 @@ def create_attendance_blueprint(
     mysql,
     login_required,
     role_required,
-    teacher_role
+    teacher_role,
+    student_role,
+    admin_role
 ):
     attendance = Blueprint("attendance", __name__)
 
@@ -106,16 +135,28 @@ def create_attendance_blueprint(
                            COUNT(mar.id) AS recorded_students,
                            COALESCE(SUM(mar.present_days), 0) AS present_days,
                            COALESCE(SUM(mas.total_school_days - mar.present_days), 0)
-                               AS absent_days
+                               AS absent_days,
+                           CASE WHEN EXISTS (
+                               SELECT 1 FROM class_teacher_assignments cta
+                               WHERE cta.class_id = mas.class_id
+                                 AND cta.teacher_user_id = %s
+                                 AND cta.ended_at IS NULL
+                           ) THEN 1 ELSE 0 END AS can_manage
                     FROM monthly_attendance_summaries mas
                     INNER JOIN classes c ON c.id = mas.class_id
                     LEFT JOIN monthly_attendance_records mar ON mar.summary_id = mas.id
                     WHERE mas.teacher_user_id = %s
+                       OR EXISTS (
+                           SELECT 1 FROM class_teacher_assignments cta
+                           WHERE cta.class_id = mas.class_id
+                             AND cta.teacher_user_id = %s
+                             AND cta.ended_at IS NULL
+                       )
                     GROUP BY mas.id, mas.class_id, mas.attendance_month,
                              mas.total_school_days, c.name
                     ORDER BY mas.attendance_month DESC, mas.id DESC
                     """,
-                    (session["user_id"],)
+                    (session["user_id"], session["user_id"], session["user_id"])
                 )
                 summaries = cur.fetchall()
                 for item in summaries:
@@ -124,9 +165,16 @@ def create_attendance_blueprint(
                     )
                     for field in (
                         "total_school_days", "recorded_students", "present_days",
-                        "absent_days"
+                        "absent_days", "can_manage"
                     ):
                         item[field] = int(item[field] or 0)
+                    possible_days = (
+                        item["total_school_days"] * item["recorded_students"]
+                    )
+                    item["attendance_percent"] = (
+                        round(100 * item["present_days"] / possible_days, 2)
+                        if possible_days else None
+                    )
                 return {
                     "assigned_classes": assigned_classes,
                     "summaries": summaries
@@ -188,14 +236,12 @@ def create_attendance_blueprint(
             )
             if not attendance:
                 return {"error": "Monthly attendance summary not found"}, 404
-            if request.method in ("PUT", "DELETE") and not teacher_has_class_assignment(
-                cur, session["user_id"], attendance["class_id"]
-            ):
+            if request.method in ("PUT", "DELETE") and not attendance["can_manage"]:
                 return {"error": "Active class teacher assignment not found"}, 403
             if request.method == "DELETE":
                 cur.execute(
-                    "DELETE FROM monthly_attendance_summaries WHERE id = %s AND teacher_user_id = %s",
-                    (summary_id, session["user_id"])
+                    "DELETE FROM monthly_attendance_summaries WHERE id = %s",
+                    (summary_id,)
                 )
                 mysql.connection.commit()
                 return {"message": "Monthly attendance summary deleted"}, 200
@@ -204,7 +250,9 @@ def create_attendance_blueprint(
                 if not isinstance(data, dict):
                     return {"error": "Monthly attendance data is required"}, 400
                 try:
-                    total_school_days = int(data.get("total_school_days"))
+                    total_school_days = parse_whole_number(
+                        data.get("total_school_days")
+                    )
                 except (TypeError, ValueError):
                     return {"error": "Total school days must be a whole number"}, 400
                 if not 1 <= total_school_days <= 31:
@@ -238,17 +286,31 @@ def create_attendance_blueprint(
             cur.execute(
                 """
                 SELECT s.id AS student_id, s.full_name, s.grade,
-                       mar.present_days, mar.note
-                FROM student_class_enrollments sce
-                INNER JOIN students s ON s.id = sce.student_id
+                       mar.present_days, mar.note,
+                       CASE WHEN EXISTS (
+                           SELECT 1 FROM student_class_enrollments current
+                           WHERE current.student_id = s.id
+                             AND current.class_id = %s
+                             AND current.ended_at IS NULL
+                       ) THEN 1 ELSE 0 END AS currently_enrolled
+                FROM students s
                 LEFT JOIN monthly_attendance_records mar
                     ON mar.student_id = s.id AND mar.summary_id = %s
-                WHERE sce.class_id = %s AND sce.ended_at IS NULL
+                WHERE mar.id IS NOT NULL
+                   OR EXISTS (
+                       SELECT 1 FROM student_class_enrollments current
+                       WHERE current.student_id = s.id
+                         AND current.class_id = %s
+                         AND current.ended_at IS NULL
+                   )
                 ORDER BY s.full_name, s.id
                 """,
-                (summary_id, attendance["class_id"])
+                (attendance["class_id"], summary_id, attendance["class_id"])
             )
-            return {"summary": attendance, "students": cur.fetchall()}, 200
+            return {
+                "summary": attendance,
+                "students": cur.fetchall()
+            }, 200
         except Exception as error:
             mysql.connection.rollback()
             print("Attendance detail error:", error)
@@ -279,8 +341,12 @@ def create_attendance_blueprint(
             ):
                 return {"error": "Active class teacher assignment not found"}, 403
             cur.execute(
-                "SELECT student_id FROM student_class_enrollments WHERE class_id = %s AND ended_at IS NULL",
-                (attendance["class_id"],)
+                """SELECT student_id FROM student_class_enrollments
+                   WHERE class_id = %s AND ended_at IS NULL
+                   UNION
+                   SELECT student_id FROM monthly_attendance_records
+                   WHERE summary_id = %s""",
+                (attendance["class_id"], summary_id)
             )
             enrolled_ids = {int(row["student_id"]) for row in cur.fetchall()}
             normalized = []
@@ -298,7 +364,9 @@ def create_attendance_blueprint(
                     return {"error": "Each student can appear only once"}, 400
                 seen_ids.add(student_id)
                 try:
-                    present_days = int(record.get("present_days"))
+                    present_days = parse_whole_number(
+                        record.get("present_days")
+                    )
                 except (TypeError, ValueError):
                     return {"error": "Present days must be a whole number"}, 400
                 if not 0 <= present_days <= attendance["total_school_days"]:
@@ -337,6 +405,210 @@ def create_attendance_blueprint(
             mysql.connection.rollback()
             print("Attendance records error:", error)
             return {"error": "Failed to save attendance"}, 500
+        finally:
+            cur.close()
+
+    @attendance.get("/api/student/attendance")
+    @login_required
+    @role_required(student_role)
+    def student_attendance_api():
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                "SELECT id FROM students WHERE user_id = %s",
+                (session["user_id"],)
+            )
+            student = cur.fetchone()
+            if not student:
+                return {"error": "Student profile not found"}, 404
+            cur.execute(
+                """SELECT mas.attendance_month, mas.class_id, c.name AS class_name,
+                          c.grade, c.section, mas.total_school_days,
+                          mar.present_days, mar.note
+                   FROM monthly_attendance_records mar
+                   INNER JOIN monthly_attendance_summaries mas
+                     ON mas.id = mar.summary_id
+                   INNER JOIN classes c ON c.id = mas.class_id
+                   WHERE mar.student_id = %s
+                   ORDER BY mas.attendance_month DESC, mas.id DESC""",
+                (student["id"],)
+            )
+            records = []
+            total_school_days = 0
+            total_present_days = 0
+            for row in cur.fetchall():
+                school_days = int(row["total_school_days"] or 0)
+                present_days = int(row["present_days"] or 0)
+                total_school_days += school_days
+                total_present_days += present_days
+                records.append({
+                    "attendance_month": serialize_api_date(
+                        row["attendance_month"]
+                    ),
+                    "class_id": row["class_id"],
+                    "class_name": row["class_name"],
+                    "grade": row["grade"],
+                    "section": row["section"],
+                    "total_school_days": school_days,
+                    "present_days": present_days,
+                    "absent_days": school_days - present_days,
+                    "attendance_percent": round(
+                        100 * present_days / school_days, 2
+                    ) if school_days else None,
+                    "note": row["note"]
+                })
+            absent_days = total_school_days - total_present_days
+            return {
+                "summary": {
+                    "recorded_months": len(records),
+                    "total_school_days": total_school_days,
+                    "present_days": total_present_days,
+                    "absent_days": absent_days,
+                    "attendance_percent": round(
+                        100 * total_present_days / total_school_days, 2
+                    ) if total_school_days else None
+                },
+                "records": records
+            }, 200
+        except Exception as error:
+            print("Student attendance error:", error)
+            return {"error": "Failed to load student attendance"}, 500
+        finally:
+            cur.close()
+
+    @attendance.get("/api/admin/attendance")
+    @login_required
+    @role_required(admin_role)
+    def admin_attendance_api():
+        class_id = request.args.get("class_id", "").strip()
+        month = request.args.get("month", "").strip()
+        conditions = []
+        parameters = []
+        if class_id:
+            try:
+                class_id = int(class_id)
+            except ValueError:
+                return {"error": "Class must be a whole number"}, 400
+            conditions.append("mas.class_id = %s")
+            parameters.append(class_id)
+        if month:
+            try:
+                month = datetime.strptime(month, "%Y-%m").date().replace(day=1)
+            except ValueError:
+                return {"error": "Month must use YYYY-MM"}, 400
+            conditions.append("mas.attendance_month = %s")
+            parameters.append(month.isoformat())
+        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                "SELECT id, name, grade, section FROM classes "
+                "ORDER BY grade, section, name"
+            )
+            classes = cur.fetchall()
+            cur.execute(
+                f"""SELECT mas.id, mas.class_id, c.name AS class_name,
+                           c.grade, c.section, mas.attendance_month,
+                           mas.total_school_days, creator.username AS created_by,
+                           class_teacher.username AS class_teacher,
+                           COUNT(mar.id) AS recorded_students,
+                           COALESCE(SUM(mar.present_days), 0) AS present_days,
+                           COALESCE(SUM(mas.total_school_days - mar.present_days), 0)
+                               AS absent_days
+                    FROM monthly_attendance_summaries mas
+                    INNER JOIN classes c ON c.id = mas.class_id
+                    LEFT JOIN users creator ON creator.id = mas.teacher_user_id
+                    LEFT JOIN class_teacher_assignments cta
+                      ON cta.class_id = c.id AND cta.ended_at IS NULL
+                    LEFT JOIN users class_teacher
+                      ON class_teacher.id = cta.teacher_user_id
+                    LEFT JOIN monthly_attendance_records mar
+                      ON mar.summary_id = mas.id
+                    {where_clause}
+                    GROUP BY mas.id, mas.class_id, c.name, c.grade, c.section,
+                             mas.attendance_month, mas.total_school_days,
+                             creator.username, class_teacher.username
+                    ORDER BY mas.attendance_month DESC, c.grade, c.section, c.name""",
+                tuple(parameters)
+            )
+            summaries = cur.fetchall()
+            for item in summaries:
+                item["attendance_month"] = serialize_api_date(
+                    item["attendance_month"]
+                )
+                for field in (
+                    "total_school_days", "recorded_students", "present_days",
+                    "absent_days"
+                ):
+                    item[field] = int(item[field] or 0)
+                possible_days = (
+                    item["total_school_days"] * item["recorded_students"]
+                )
+                item["attendance_percent"] = round(
+                    100 * item["present_days"] / possible_days, 2
+                ) if possible_days else None
+            return {"classes": classes, "summaries": summaries}, 200
+        except Exception as error:
+            print("Admin attendance overview error:", error)
+            return {"error": "Failed to load attendance overview"}, 500
+        finally:
+            cur.close()
+
+    @attendance.get("/api/admin/attendance/<int:summary_id>")
+    @login_required
+    @role_required(admin_role)
+    def admin_attendance_detail_api(summary_id):
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                """SELECT mas.id, mas.class_id, c.name AS class_name,
+                          c.grade, c.section, mas.attendance_month,
+                          mas.total_school_days, creator.username AS created_by,
+                          class_teacher.username AS class_teacher
+                   FROM monthly_attendance_summaries mas
+                   INNER JOIN classes c ON c.id = mas.class_id
+                   LEFT JOIN users creator ON creator.id = mas.teacher_user_id
+                   LEFT JOIN class_teacher_assignments cta
+                     ON cta.class_id = c.id AND cta.ended_at IS NULL
+                   LEFT JOIN users class_teacher
+                     ON class_teacher.id = cta.teacher_user_id
+                   WHERE mas.id = %s""",
+                (summary_id,)
+            )
+            summary = cur.fetchone()
+            if not summary:
+                return {"error": "Attendance register not found"}, 404
+            summary["attendance_month"] = serialize_api_date(
+                summary["attendance_month"]
+            )
+            summary["total_school_days"] = int(summary["total_school_days"])
+            cur.execute(
+                """SELECT s.id AS student_id, s.full_name,
+                          mar.present_days, mar.note
+                   FROM monthly_attendance_records mar
+                   INNER JOIN students s ON s.id = mar.student_id
+                   WHERE mar.summary_id = %s
+                   ORDER BY s.full_name, s.id""",
+                (summary_id,)
+            )
+            students = []
+            for row in cur.fetchall():
+                present_days = int(row["present_days"] or 0)
+                school_days = summary["total_school_days"]
+                students.append({
+                    "student_id": row["student_id"],
+                    "full_name": row["full_name"],
+                    "present_days": present_days,
+                    "absent_days": school_days - present_days,
+                    "attendance_percent": round(
+                        100 * present_days / school_days, 2
+                    ) if school_days else None,
+                    "note": row["note"]
+                })
+            return {"summary": summary, "students": students}, 200
+        except Exception as error:
+            print("Admin attendance detail error:", error)
+            return {"error": "Failed to load attendance register"}, 500
         finally:
             cur.close()
 
