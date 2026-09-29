@@ -165,8 +165,9 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             )
             student_id = cur.lastrowid
             cur.execute(
-                """INSERT INTO student_class_enrollments (student_id, class_id)
-                   VALUES (%s, %s)""",
+                """INSERT INTO student_class_enrollments
+                   (student_id, class_id, started_at)
+                   VALUES (%s, %s, CURRENT_TIMESTAMP)""",
                 (student_id, class_id)
             )
             mysql.connection.commit()
