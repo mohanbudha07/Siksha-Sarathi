@@ -247,7 +247,7 @@ def create_assessments_blueprint(
                 INNER JOIN students s ON s.id = sce.student_id
                 LEFT JOIN paper_assessment_scores pas
                     ON pas.student_id = s.id AND pas.assessment_id = %s
-                WHERE sce.class_id = %s
+                WHERE sce.class_id = %s AND sce.ended_at IS NULL
                 ORDER BY s.full_name, s.id
                 """,
                 (assessment_id, existing["class_id"])
@@ -294,7 +294,7 @@ def create_assessments_blueprint(
                 """
                 SELECT s.id FROM student_class_enrollments sce
                 INNER JOIN students s ON s.id = sce.student_id
-                WHERE sce.class_id = %s
+                WHERE sce.class_id = %s AND sce.ended_at IS NULL
                 """,
                 (assessment["class_id"],)
             )

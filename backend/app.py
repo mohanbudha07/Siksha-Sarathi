@@ -756,7 +756,8 @@ def teacher_dashboard_api():
             """
             SELECT COUNT(DISTINCT sce.student_id) AS total_students
             FROM student_class_enrollments sce
-            WHERE EXISTS (
+                        WHERE sce.ended_at IS NULL
+                            AND EXISTS (
                 SELECT 1
                 FROM (
                     SELECT class_id FROM teacher_class_subjects WHERE teacher_user_id = %s
@@ -784,7 +785,8 @@ def teacher_dashboard_api():
             FROM teacher_class_subjects tcs
             INNER JOIN classes c ON c.id = tcs.class_id
             INNER JOIN subjects sub ON sub.id = tcs.subject_id
-            LEFT JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+            LEFT JOIN student_class_enrollments sce
+                ON sce.class_id = tcs.class_id AND sce.ended_at IS NULL
             WHERE tcs.teacher_user_id = %s
             GROUP BY
                 tcs.class_id,
@@ -807,7 +809,8 @@ def teacher_dashboard_api():
                       COUNT(DISTINCT sce.student_id) AS student_count
                FROM class_teacher_assignments cta
                INNER JOIN classes c ON c.id = cta.class_id
-               LEFT JOIN student_class_enrollments sce ON sce.class_id = cta.class_id
+                             LEFT JOIN student_class_enrollments sce
+                                 ON sce.class_id = cta.class_id AND sce.ended_at IS NULL
                WHERE cta.teacher_user_id = %s AND cta.ended_at IS NULL
                GROUP BY cta.id, cta.class_id, c.name,
                         cta.academic_year, cta.started_at""",
@@ -861,6 +864,7 @@ def teacher_dashboard_api():
                 FROM teacher_class_subjects tcs
                 INNER JOIN subjects sub ON sub.id = tcs.subject_id
                 INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+                    AND sce.ended_at IS NULL
                 WHERE tcs.teacher_user_id = %s
                   AND sce.student_id = qr.student_id
                   AND LOWER(sub.name) = LOWER(q.subject)
@@ -885,6 +889,7 @@ def teacher_dashboard_api():
                 SELECT 1 FROM teacher_class_subjects tcs
                 INNER JOIN subjects sub ON sub.id = tcs.subject_id
                 INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+                    AND sce.ended_at IS NULL
                 WHERE tcs.teacher_user_id = %s
                   AND sce.student_id = qr.student_id
                   AND LOWER(sub.name) = LOWER(q.subject)
@@ -916,6 +921,7 @@ def teacher_dashboard_api():
                     SELECT DISTINCT sce.student_id
                     FROM student_class_enrollments sce
                     WHERE sce.class_id IN ({class_placeholders})
+                                            AND sce.ended_at IS NULL
                 ) assigned_students ON assigned_students.student_id = s.id
                 LEFT JOIN quiz_results qr ON s.id = qr.student_id
                     AND EXISTS (
@@ -1192,10 +1198,12 @@ def fetch_teacher_topic_priorities(cur, teacher_id):
         INNER JOIN subjects sub ON sub.id = tcs.subject_id
         INNER JOIN student_class_enrollments sce
             ON sce.class_id = tcs.class_id
+           AND sce.ended_at IS NULL
            AND sce.id = (
                SELECT latest.id FROM student_class_enrollments latest
                WHERE latest.student_id = sce.student_id
-               ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+                 AND latest.ended_at IS NULL
+               ORDER BY latest.started_at DESC, latest.id DESC LIMIT 1
            )
         INNER JOIN students s ON s.id = sce.student_id
         INNER JOIN quiz_results qr ON qr.student_id = s.id
@@ -1283,10 +1291,12 @@ def teacher_learning_analytics_api():
             INNER JOIN classes c ON c.id = tcs.class_id
             INNER JOIN subjects sub ON sub.id = tcs.subject_id
             INNER JOIN student_class_enrollments sce ON sce.class_id = c.id
+                AND sce.ended_at IS NULL
                 AND sce.id = (
                     SELECT latest.id FROM student_class_enrollments latest
                     WHERE latest.student_id = sce.student_id
-                    ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+                      AND latest.ended_at IS NULL
+                    ORDER BY latest.started_at DESC, latest.id DESC LIMIT 1
                 )
             INNER JOIN students s ON s.id = sce.student_id
             WHERE tcs.teacher_user_id = %s
@@ -1370,10 +1380,12 @@ def teacher_student_learning_profile_api(student_id):
             INNER JOIN classes c ON c.id = tcs.class_id
             INNER JOIN subjects sub ON sub.id = tcs.subject_id
             INNER JOIN student_class_enrollments sce ON sce.class_id = c.id
+                AND sce.ended_at IS NULL
                 AND sce.id = (
                     SELECT latest.id FROM student_class_enrollments latest
                     WHERE latest.student_id = sce.student_id
-                    ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+                      AND latest.ended_at IS NULL
+                    ORDER BY latest.started_at DESC, latest.id DESC LIMIT 1
                 )
             INNER JOIN students s ON s.id = sce.student_id
             WHERE tcs.teacher_user_id = %s
@@ -1619,10 +1631,12 @@ def fetch_teacher_support_class_id(cur, teacher_id, student_id, subject):
         FROM teacher_class_subjects tcs
         INNER JOIN subjects sub ON sub.id = tcs.subject_id
         INNER JOIN student_class_enrollments sce ON sce.class_id = tcs.class_id
+            AND sce.ended_at IS NULL
             AND sce.id = (
                 SELECT latest.id FROM student_class_enrollments latest
                 WHERE latest.student_id = sce.student_id
-                ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+                  AND latest.ended_at IS NULL
+                ORDER BY latest.started_at DESC, latest.id DESC LIMIT 1
             )
         INNER JOIN students s ON s.id = sce.student_id
         WHERE tcs.teacher_user_id = %s
@@ -2047,7 +2061,7 @@ def admin_dashboard_api():
             """SELECT COUNT(*) AS students_without_class
                  FROM students s
                  LEFT JOIN student_class_enrollments sce
-                     ON sce.student_id = s.id
+                     ON sce.student_id = s.id AND sce.ended_at IS NULL
                  WHERE sce.id IS NULL"""
         )
         students_without_class = cur.fetchone()["students_without_class"]
@@ -2094,7 +2108,7 @@ def admin_dashboard_api():
                 MAX(CASE WHEN cta.id IS NOT NULL THEN u.username END) AS class_teacher_name
             FROM classes c
             LEFT JOIN student_class_enrollments sce
-                ON sce.class_id = c.id
+                ON sce.class_id = c.id AND sce.ended_at IS NULL
             LEFT JOIN teacher_class_subjects tcs
                 ON tcs.class_id = c.id
             LEFT JOIN class_teacher_assignments cta

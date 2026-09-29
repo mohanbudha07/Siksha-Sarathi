@@ -58,12 +58,14 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
                           (SELECT sce.class_id
                            FROM student_class_enrollments sce
                            WHERE sce.student_id = s.id
+                                                         AND sce.ended_at IS NULL
                            ORDER BY sce.created_at DESC, sce.id DESC
                            LIMIT 1) AS class_id,
                           (SELECT c.name
                            FROM student_class_enrollments sce
                            INNER JOIN classes c ON c.id = sce.class_id
                            WHERE sce.student_id = s.id
+                                                         AND sce.ended_at IS NULL
                            ORDER BY sce.created_at DESC, sce.id DESC
                            LIMIT 1) AS class_name
                    FROM students s
@@ -203,13 +205,15 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             teachers = cur.fetchall()
             cur.execute(
                 """SELECT s.id AS student_id, s.full_name, s.grade, u.email,
-                          c.id AS class_id, c.name AS class_name
+                          c.id AS class_id, c.name AS class_name,
+                          c.grade AS class_grade, c.section
                    FROM students s
                    INNER JOIN users u ON u.id = s.user_id
                    LEFT JOIN student_class_enrollments sce
                      ON sce.student_id = s.id
+                    AND sce.ended_at IS NULL
                    LEFT JOIN classes c ON c.id = sce.class_id
-                   ORDER BY s.full_name, c.name"""
+                   ORDER BY s.full_name"""
             )
             students = cur.fetchall()
             cur.execute(
@@ -398,34 +402,94 @@ def create_admin_blueprint(mysql, login_required, role_required, admin_role):
             class_id = 0
         if not class_id:
             return {"error": "Class is required"}, 400
+        academic_year = str((data or {}).get("academic_year") or "").strip() if isinstance(data, dict) else ""
+        transfer_note = str((data or {}).get("transfer_note") or "").strip() if isinstance(data, dict) else ""
         cur = mysql.connection.cursor()
         try:
-            cur.execute("SELECT id FROM students WHERE id = %s", (student_id,))
-            if not cur.fetchone():
+            cur.execute("SELECT id, grade FROM students WHERE id = %s", (student_id,))
+            student = cur.fetchone()
+            if not student:
                 return {"error": "Student not found"}, 404
             cur.execute("SELECT id, grade FROM classes WHERE id = %s", (class_id,))
             selected_class = cur.fetchone()
             if not selected_class:
                 return {"error": "Class not found"}, 404
+
             cur.execute(
-                "DELETE FROM student_class_enrollments WHERE student_id = %s",
+                """SELECT id, class_id, started_at, ended_at
+                   FROM student_class_enrollments
+                   WHERE student_id = %s AND ended_at IS NULL
+                   ORDER BY started_at DESC, id DESC
+                   LIMIT 1""",
                 (student_id,)
             )
+            current_enrollment = cur.fetchone()
+
+            if current_enrollment and current_enrollment["class_id"] == class_id:
+                return {"message": "Student is already enrolled in this class", "student_id": student_id}, 200
+
+            if current_enrollment:
+                cur.execute(
+                    """UPDATE student_class_enrollments
+                       SET ended_at = CURRENT_TIMESTAMP
+                       WHERE id = %s AND ended_at IS NULL""",
+                    (current_enrollment["id"],)
+                )
+
             cur.execute(
-                """INSERT INTO student_class_enrollments (student_id, class_id)
-                   VALUES (%s, %s)""",
-                (student_id, class_id)
+                """INSERT INTO student_class_enrollments
+                   (student_id, class_id, academic_year, started_at, transfer_note)
+                   VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s)""",
+                (student_id, class_id, academic_year or None, transfer_note or None)
             )
             cur.execute(
                 "UPDATE students SET grade = %s WHERE id = %s",
                 (selected_class["grade"], student_id)
             )
             mysql.connection.commit()
-            return {"message": "Student enrolled in class"}, 200
+            return {"message": "Student enrolled in class", "student_id": student_id}, 200
         except Exception as error:
             mysql.connection.rollback()
             print("Admin enrollment error:", error)
             return {"error": "Unable to enroll student"}, 500
+        finally:
+            cur.close()
+
+    @admin.get("/api/admin/students/<int:student_id>/enrollment-history")
+    @login_required
+    @role_required(admin_role)
+    def admin_student_enrollment_history_api(student_id):
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute("SELECT id FROM students WHERE id = %s", (student_id,))
+            if not cur.fetchone():
+                return {"error": "Student not found"}, 404
+            cur.execute(
+                """SELECT sce.id, sce.class_id, c.name AS class_name, c.grade, c.section,
+                          sce.academic_year, sce.started_at, sce.ended_at, sce.transfer_note,
+                          CASE WHEN sce.ended_at IS NULL THEN 1 ELSE 0 END AS current
+                   FROM student_class_enrollments sce
+                   INNER JOIN classes c ON c.id = sce.class_id
+                   WHERE sce.student_id = %s
+                   ORDER BY sce.started_at DESC, sce.id DESC""",
+                (student_id,)
+            )
+            history = cur.fetchall()
+            serialized = []
+            for row in history:
+                serialized.append({
+                    "id": row["id"],
+                    "class_id": row["class_id"],
+                    "class_name": row["class_name"],
+                    "grade": row["grade"],
+                    "section": row["section"],
+                    "academic_year": row["academic_year"],
+                    "started_at": serialize_nepal_datetime(row["started_at"]),
+                    "ended_at": serialize_nepal_datetime(row["ended_at"]),
+                    "transfer_note": row["transfer_note"],
+                    "current": bool(row["current"])
+                })
+            return {"student_id": student_id, "history": serialized}, 200
         finally:
             cur.close()
 

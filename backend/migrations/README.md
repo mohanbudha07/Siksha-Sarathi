@@ -218,6 +218,29 @@ active artifact is replaced. The table intentionally does not store
 answers, or other sensitive values and is not required for model-version
 monitoring.
 
+## Student enrollment history migration
+
+Migration 016 upgrades `student_class_enrollments` from a simple one-row-per-class
+record to a temporal history table. Each enrollment period stores its class,
+academic year, start and end timestamps, transfer note, and an explicit
+`ended_at` flag for the current record. MySQL enforces one active enrollment per
+student with a generated `active_student_id` column and a unique index,
+`uq_student_active_enrollment`, while the legacy `uq_student_class` uniqueness is
+removed because historical repeats of the same class are valid over different
+periods. Existing records are backfilled by preserving all rows, using
+`created_at` for missing `started_at` values, and selecting the latest undated
+enrollment per student by `started_at` then `id`. Older undated rows remain in
+place and receive an `ended_at` value at the next enrollment start. The active
+enrollment unique index is added after this deterministic backfill. All current
+authorization rules treat membership as current only when `ended_at IS NULL`.
+
+Run it after migration 015:
+
+    sudo mysql siksha_sarathi < migrations/016_student_enrollment_history.sql
+
+The migration is safe to rerun after it has succeeded; existing ended periods
+are left unchanged and no enrollment rows are deleted.
+
 Run it after migration 014:
 
     sudo mysql siksha_sarathi < migrations/015_ml_prediction_monitoring.sql

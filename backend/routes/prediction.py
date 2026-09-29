@@ -158,11 +158,13 @@ def create_prediction_blueprint(
                 INNER JOIN student_class_enrollments sce
                     ON sce.class_id = tcs.class_id
                    AND sce.student_id = %s
+                   AND sce.ended_at IS NULL
                    AND sce.id = (
                        SELECT latest.id
                        FROM student_class_enrollments latest
                        WHERE latest.student_id = sce.student_id
-                       ORDER BY latest.created_at DESC, latest.id DESC
+                         AND latest.ended_at IS NULL
+                       ORDER BY latest.started_at DESC, latest.id DESC
                        LIMIT 1
                    )
                 INNER JOIN students s ON s.id = sce.student_id

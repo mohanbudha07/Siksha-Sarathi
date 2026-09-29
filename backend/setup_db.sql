@@ -45,8 +45,16 @@ CREATE TABLE IF NOT EXISTS student_class_enrollments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
     class_id INT NOT NULL,
+    academic_year VARCHAR(20) NULL,
+    started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ended_at DATETIME NULL,
+    transfer_note VARCHAR(255) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_student_class (student_id, class_id),
+    active_student_id INT GENERATED ALWAYS AS
+        (CASE WHEN ended_at IS NULL THEN student_id ELSE NULL END) VIRTUAL,
+    INDEX idx_student_enrollment_status (student_id, ended_at),
+    INDEX idx_enrollment_class_status (class_id, ended_at),
+    UNIQUE KEY uq_student_active_enrollment (active_student_id),
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
     FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
 );

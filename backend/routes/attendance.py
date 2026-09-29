@@ -243,7 +243,7 @@ def create_attendance_blueprint(
                 INNER JOIN students s ON s.id = sce.student_id
                 LEFT JOIN monthly_attendance_records mar
                     ON mar.student_id = s.id AND mar.summary_id = %s
-                WHERE sce.class_id = %s
+                WHERE sce.class_id = %s AND sce.ended_at IS NULL
                 ORDER BY s.full_name, s.id
                 """,
                 (summary_id, attendance["class_id"])
@@ -279,7 +279,7 @@ def create_attendance_blueprint(
             ):
                 return {"error": "Active class teacher assignment not found"}, 403
             cur.execute(
-                "SELECT student_id FROM student_class_enrollments WHERE class_id = %s",
+                "SELECT student_id FROM student_class_enrollments WHERE class_id = %s AND ended_at IS NULL",
                 (attendance["class_id"],)
             )
             enrolled_ids = {int(row["student_id"]) for row in cur.fetchall()}
