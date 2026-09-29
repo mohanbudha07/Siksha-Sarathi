@@ -277,7 +277,7 @@ class IntegrationPermissionTests(unittest.TestCase):
         self.db.commit()
         note_payload = {
             "title": "Scoped note", "subject": "Mathematics",
-            "chapter": "Algebra", "content": "Text",
+            "chapter": "Algebra", "content": "Text", "class_id": 1,
         }
         self.login("teacher")
         unassigned_note = self.client.post("/api/teacher/notes", json=note_payload)

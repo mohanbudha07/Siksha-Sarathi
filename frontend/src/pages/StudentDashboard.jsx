@@ -158,9 +158,9 @@ function StudentDashboard() {
             onClick={() => navigate('/student/notes')}
           >
             <div className="card-icon"><MenuBookOutlinedIcon aria-hidden="true" /></div>
-            <h3>Learning Notes</h3>
-            <p>Read study materials and notes uploaded by your teacher.</p>
-            <span className="dashboard-card-action">Open notes <span aria-hidden="true">→</span></span>
+            <h3>Learning Materials</h3>
+            <p>Read class resources and download materials shared by your teachers.</p>
+            <span className="dashboard-card-action">Open materials <span aria-hidden="true">→</span></span>
           </button>
 
           <button
