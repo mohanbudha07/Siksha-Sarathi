@@ -2242,6 +2242,311 @@ class QuizStatisticsTests(unittest.TestCase):
                     '/api/teacher/monthly-attendance'
                 ).status_code, 403)
 
+    def test_active_class_teacher_can_create_monthly_attendance(self):
+        self.login('teacher')
+        response = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        )
+        self.assertEqual(response.status_code, 201)
+
+    def test_subject_teacher_cannot_create_class_attendance(self):
+        self.db.execute(
+            "INSERT INTO teacher_class_subjects VALUES(2,4,1,1,'2026-01-01')"
+        )
+        self.db.commit()
+        self.login('other_teacher')
+        response = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_teacher_attendance_class_list_requires_active_class_teacher(self):
+        self.db.execute(
+            "INSERT INTO teacher_class_subjects VALUES(2,4,1,1,'2026-01-01')"
+        )
+        self.db.commit()
+        self.login('other_teacher')
+        subject_only = self.client.get('/api/teacher/monthly-attendance')
+        self.assertEqual(subject_only.status_code, 200)
+        self.assertEqual(subject_only.json['assigned_classes'], [])
+
+        self.login('teacher')
+        active = self.client.get('/api/teacher/monthly-attendance')
+        self.assertEqual([item['class_id'] for item in active.json['assigned_classes']], [1])
+        self.db.execute(
+            "UPDATE class_teacher_assignments SET ended_at='2026-09-15' WHERE id=1"
+        )
+        self.db.commit()
+        ended = self.client.get('/api/teacher/monthly-attendance')
+        self.assertEqual(ended.json['assigned_classes'], [])
+
+    def test_teacher_cannot_request_attendance_for_unrelated_class(self):
+        self.login('teacher')
+        response = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload(class_id=2)
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_former_class_teacher_can_read_but_cannot_modify_register(self):
+        self.login('teacher')
+        summary_id = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).json['attendance_summary_id']
+        self.db.execute(
+            "UPDATE class_teacher_assignments SET ended_at='2026-09-15' WHERE id=1"
+        )
+        self.db.commit()
+
+        detail_url = f'/api/teacher/monthly-attendance/{summary_id}'
+        detail = self.client.get(detail_url)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json['summary']['can_manage'], 0)
+        self.assertEqual(self.client.put(
+            detail_url, json={'total_school_days': 21}
+        ).status_code, 403)
+        self.assertEqual(self.client.put(
+            f'{detail_url}/records', json={'records': []}
+        ).status_code, 403)
+        self.assertEqual(self.client.delete(detail_url).status_code, 403)
+
+    def test_replacement_class_teacher_can_manage_existing_class_register(self):
+        self.login('teacher')
+        summary_id = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).json['attendance_summary_id']
+        detail_url = f'/api/teacher/monthly-attendance/{summary_id}'
+        self.assertEqual(self.client.put(
+            f'{detail_url}/records', json={'records': [{
+                'student_id': 1, 'present_days': 18, 'note': 'Saved before change'
+            }]}
+        ).status_code, 200)
+        self.db.execute(
+            "UPDATE class_teacher_assignments SET ended_at='2026-09-15' WHERE id=1"
+        )
+        self.db.execute('''INSERT INTO class_teacher_assignments
+            (id, teacher_user_id, class_id, academic_year, started_at, created_at)
+            VALUES(2,4,1,'2084/85','2026-09-16','2026-09-16')''')
+        self.db.commit()
+
+        self.login('other_teacher')
+        listing = self.client.get('/api/teacher/monthly-attendance')
+        self.assertEqual(listing.status_code, 200)
+        listed = next(item for item in listing.json['summaries'] if item['id'] == summary_id)
+        self.assertEqual(listed['can_manage'], 1)
+        self.assertEqual(self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).status_code, 409)
+        detail = self.client.get(detail_url)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json['students'][0]['present_days'], 18)
+        self.assertEqual(self.client.put(
+            detail_url, json={'total_school_days': 22}
+        ).status_code, 200)
+        self.assertEqual(self.client.put(
+            f'{detail_url}/records', json={'records': [{
+                'student_id': 1, 'present_days': 20, 'note': 'Updated by replacement'
+            }]}
+        ).status_code, 200)
+        self.assertEqual(self.db.execute(
+            'SELECT teacher_user_id FROM monthly_attendance_summaries WHERE id=?',
+            (summary_id,)
+        ).fetchone()[0], 2)
+
+    def test_current_roster_excludes_transferred_student(self):
+        self.db.execute(
+            "UPDATE student_class_enrollments SET ended_at='2026-09-15' WHERE id=1"
+        )
+        self.db.execute('''INSERT INTO student_class_enrollments
+            (id, student_id, class_id, started_at, created_at)
+            VALUES(3,1,2,'2026-09-16','2026-09-16')''')
+        self.db.commit()
+        self.login('teacher')
+        summary_id = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).json['attendance_summary_id']
+        detail = self.client.get(f'/api/teacher/monthly-attendance/{summary_id}')
+        self.assertEqual(detail.status_code, 200)
+        self.assertNotIn(1, [row['student_id'] for row in detail.json['students']])
+
+    def test_saved_attendance_survives_student_transfer_and_future_rosters(self):
+        self.login('teacher')
+        old_summary_id = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).json['attendance_summary_id']
+        self.assertEqual(self.client.put(
+            f'/api/teacher/monthly-attendance/{old_summary_id}/records',
+            json={'records': [{
+                'student_id': 1, 'present_days': 17, 'note': 'Original register'
+            }]}
+        ).status_code, 200)
+        self.db.execute(
+            "UPDATE student_class_enrollments SET ended_at='2026-09-15' WHERE id=1"
+        )
+        self.db.execute('''INSERT INTO student_class_enrollments
+            (id, student_id, class_id, started_at, created_at)
+            VALUES(3,1,2,'2026-09-16','2026-09-16')''')
+        self.db.execute(
+            "UPDATE class_teacher_assignments SET ended_at='2026-09-15' WHERE id=1"
+        )
+        self.db.execute('''INSERT INTO class_teacher_assignments
+            (id, teacher_user_id, class_id, academic_year, started_at, created_at)
+            VALUES(2,4,1,'2084/85','2026-09-16','2026-09-16')''')
+        self.db.execute('''INSERT INTO class_teacher_assignments
+            (id, teacher_user_id, class_id, academic_year, started_at, created_at)
+            VALUES(3,2,2,'2084/85','2026-09-16','2026-09-16')''')
+        self.db.commit()
+
+        self.login('other_teacher')
+        saved = self.client.get(
+            f'/api/teacher/monthly-attendance/{old_summary_id}'
+        )
+        self.assertEqual(saved.status_code, 200)
+        historical = next(row for row in saved.json['students'] if row['student_id'] == 1)
+        self.assertEqual(historical['present_days'], 17)
+        self.assertEqual(historical['currently_enrolled'], 0)
+        future_class_a = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload(attendance_month='2026-10')
+        ).json['attendance_summary_id']
+        self.assertEqual(self.client.get(
+            f'/api/teacher/monthly-attendance/{future_class_a}'
+        ).json['students'], [])
+
+        self.login('teacher')
+        future_class_b = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload(class_id=2, attendance_month='2026-10')
+        ).json['attendance_summary_id']
+        roster_b = self.client.get(
+            f'/api/teacher/monthly-attendance/{future_class_b}'
+        ).json['students']
+        self.assertEqual({row['student_id'] for row in roster_b}, {1, 2})
+        self.assertEqual(self.db.execute(
+            'SELECT COUNT(*) FROM monthly_attendance_records WHERE summary_id=? AND student_id=1',
+            (old_summary_id,)
+        ).fetchone()[0], 1)
+
+    def test_student_attendance_returns_private_weighted_history_across_transfer(self):
+        self.db.execute(
+            "UPDATE student_class_enrollments SET ended_at='2026-08-15' WHERE id=1"
+        )
+        self.db.execute('''INSERT INTO student_class_enrollments
+            (id, student_id, class_id, started_at, created_at)
+            VALUES(3,1,2,'2026-08-16','2026-08-16')''')
+        self.db.executemany('''INSERT INTO monthly_attendance_summaries
+            (id,teacher_user_id,class_id,attendance_month,total_school_days)
+            VALUES(?,2,?,?,?)''', [
+                (1, 1, '2026-08-01', 10), (2, 2, '2026-09-01', 30)
+            ])
+        self.db.executemany('''INSERT INTO monthly_attendance_records
+            (id,summary_id,student_id,present_days,note)
+            VALUES(?,?,?,?,?)''', [
+                (1, 1, 1, 4, 'Prior class'),
+                (2, 2, 1, 21, 'Current class'),
+                (3, 2, 2, 30, 'Other student private note'),
+            ])
+        self.db.commit()
+        self.login('student')
+
+        response = self.client.get('/api/student/attendance?student_id=2')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['summary'], {
+            'recorded_months': 2,
+            'total_school_days': 40,
+            'present_days': 25,
+            'absent_days': 15,
+            'attendance_percent': 62.5,
+        })
+        self.assertEqual([record['class_id'] for record in response.json['records']], [2, 1])
+        self.assertEqual({record['note'] for record in response.json['records']}, {
+            'Prior class', 'Current class'
+        })
+        self.assertNotIn('teacher_user_id', response.json)
+        self.assertNotIn('student_id', response.json)
+
+    def test_student_without_attendance_returns_unavailable_summary(self):
+        self.login('student')
+        response = self.client.get('/api/student/attendance')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['records'], [])
+        self.assertIsNone(response.json['summary']['attendance_percent'])
+        self.assertEqual(response.json['summary']['recorded_months'], 0)
+
+    def test_admin_can_view_attendance_overview_and_register_detail_read_only(self):
+        self.db.execute('''INSERT INTO monthly_attendance_summaries
+            (id,teacher_user_id,class_id,attendance_month,total_school_days)
+            VALUES(1,2,1,'2026-09-01',20)''')
+        self.db.execute('''INSERT INTO monthly_attendance_records
+            (id,summary_id,student_id,present_days,note)
+            VALUES(1,1,1,18,'Two absent days')''')
+        self.db.commit()
+        self.login('admin')
+
+        overview = self.client.get('/api/admin/attendance?class_id=1&month=2026-09')
+        self.assertEqual(overview.status_code, 200)
+        self.assertEqual(len(overview.json['summaries']), 1)
+        self.assertEqual(overview.json['summaries'][0]['attendance_percent'], 90)
+        detail = self.client.get('/api/admin/attendance/1')
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.json['students'][0]['absent_days'], 2)
+        self.assertEqual(detail.json['students'][0]['note'], 'Two absent days')
+        self.assertEqual(self.client.put('/api/admin/attendance/1', json={}).status_code, 405)
+        self.assertEqual(self.client.delete('/api/admin/attendance/1').status_code, 405)
+
+    def test_student_and_teacher_cannot_access_admin_attendance(self):
+        for role in ('student', 'teacher'):
+            with self.subTest(role=role):
+                self.login(role)
+                self.assertEqual(self.client.get('/api/admin/attendance').status_code, 403)
+                self.assertEqual(self.client.get('/api/admin/attendance/1').status_code, 403)
+
+    def test_admin_cannot_use_teacher_attendance_write_endpoint(self):
+        self.login('admin')
+        self.assertEqual(self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).status_code, 403)
+
+    def test_student_cannot_access_teacher_attendance(self):
+        self.login('student')
+        self.assertEqual(self.client.get('/api/teacher/monthly-attendance').status_code, 403)
+        self.assertEqual(self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).status_code, 403)
+
+    def test_invalid_and_duplicate_students_are_rejected_from_register(self):
+        self.login('teacher')
+        summary_id = self.client.post(
+            '/api/teacher/monthly-attendance',
+            json=self.monthly_attendance_payload()
+        ).json['attendance_summary_id']
+        records_url = f'/api/teacher/monthly-attendance/{summary_id}/records'
+        self.assertEqual(self.client.put(records_url, json={'records': [{
+            'student_id': 2, 'present_days': 10
+        }]}).status_code, 400)
+        self.assertEqual(self.client.put(records_url, json={'records': [
+            {'student_id': 1, 'present_days': 10},
+            {'student_id': 1, 'present_days': 11},
+        ]}).status_code, 400)
+        self.assertEqual(self.client.put(records_url, json={'records': [{
+            'student_id': 1, 'present_days': 1.5
+        }]}).status_code, 400)
+
+    def test_admin_attendance_rejects_invalid_month_filter(self):
+        self.login('admin')
+        self.assertEqual(self.client.get(
+            '/api/admin/attendance?month=September'
+        ).status_code, 400)
+
     def intervention_payload(self, **overrides):
         payload = {
             'subject': 'Science',

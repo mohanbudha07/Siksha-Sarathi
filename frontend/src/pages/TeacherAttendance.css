@@ -11,6 +11,7 @@
 .attendance-message { padding: 14px 18px; margin-bottom: 18px; border-radius: 12px; }
 .attendance-message.error { border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; }
 .attendance-message.success { border: 1px solid #a7f3d0; background: #ecfdf5; color: #065f46; }
+.attendance-read-only { border: 1px solid #bfdbfe; background: #eff6ff; color: #1e40af; }
 .attendance-create-card, .attendance-list-card, .attendance-roster-card { padding: 25px; margin-bottom: 22px; border: 1px solid #e2e8f0; border-radius: 17px; background: white; box-shadow: 0 5px 16px rgba(15,23,42,.04); }
 .attendance-create-card { display: grid; grid-template-columns: minmax(220px,1.4fr) minmax(170px,1fr) minmax(170px,1fr) auto; align-items: end; gap: 16px; }
 .attendance-create-card h2, .attendance-section-heading h2 { margin: 0 0 5px; font-size: 21px; }
