@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import api from '../api'
 import './StudentLayout.css'
@@ -9,12 +9,23 @@ const links = [
   { to: '/student/quiz', label: 'Quizzes' },
   { to: '/student/notes', label: 'Notes' },
   { to: '/student/attendance', label: 'Attendance' },
+  { to: '/student/notices', label: 'Notices' },
   { to: '/student/ai', label: 'AI Assistant' },
 ]
 
 function StudentLayout({ children }) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    const loadUnreadCount = () => api.get('/notices/unread-count')
+      .then((response) => setUnreadCount(Number(response.data.unread_count) || 0))
+      .catch(() => setUnreadCount(0))
+    loadUnreadCount()
+    window.addEventListener('notice-read', loadUnreadCount)
+    return () => window.removeEventListener('notice-read', loadUnreadCount)
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -45,7 +56,7 @@ function StudentLayout({ children }) {
             <NavLink key={link.to} to={link.to}
               className={({ isActive }) => isActive ? 'student-nav-link active' : 'student-nav-link'}
               onClick={() => setMenuOpen(false)}>
-              {link.label}
+              {link.label}{link.to === '/student/notices' && unreadCount > 0 && <span className="nav-unread-badge">{unreadCount}</span>}
             </NavLink>
           ))}
           <button type="button" className="student-logout" onClick={handleLogout}>Logout</button>

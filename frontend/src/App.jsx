@@ -35,6 +35,9 @@ import TeacherAssessmentScores from './pages/TeacherAssessmentScores'
 import TeacherAttendance from './pages/TeacherAttendance'
 import TeacherAttendanceRegister from './pages/TeacherAttendanceRegister'
 import StudentAttendance from './pages/StudentAttendance'
+import StudentNotices from './pages/StudentNotices'
+import TeacherNotices from './pages/TeacherNotices'
+import AdminNotices from './pages/AdminNotices'
 
 // ---------- Auth Context Helper ----------
 function useAuthCheck() {
@@ -154,10 +157,16 @@ function App() {
         <Route path="/student/attendance" element={
           <StudentPage><StudentAttendance /></StudentPage>
         } />
+        <Route path="/student/notices" element={
+          <StudentPage><StudentNotices /></StudentPage>
+        } />
 
         {/* Teacher routes */}
         <Route path="/teacher/dashboard" element={
           <TeacherPage><TeacherDashboard /></TeacherPage>
+        } />
+        <Route path="/teacher/notices" element={
+          <TeacherPage><TeacherNotices /></TeacherPage>
         } />
         <Route path="/teacher/notes" element={
           <TeacherPage><TeacherNotes /></TeacherPage>
@@ -223,6 +232,9 @@ function App() {
         } />
         <Route path="/admin/attendance" element={
           <AdminPage><AdminAttendance /></AdminPage>
+        } />
+        <Route path="/admin/notices" element={
+          <AdminPage><AdminNotices /></AdminPage>
         } />
         <Route path="/admin/ml-readiness" element={
           <AdminPage><AdminMLReadiness /></AdminPage>

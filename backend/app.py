@@ -12,6 +12,7 @@ from backend.routes.auth import create_auth_blueprint
 from backend.routes.chatbot import create_chatbot_blueprint
 from backend.routes.lab_quiz import create_lab_quiz_blueprint
 from backend.routes.notes import create_notes_blueprint
+from backend.routes.notices import create_notices_blueprint
 from backend.routes.prediction import create_prediction_blueprint
 from backend.routes.quiz import (
     create_quiz_blueprint,
@@ -249,6 +250,15 @@ app.register_blueprint(create_attendance_blueprint(
     role_required=role_required,
     teacher_role=TEACHER,
     student_role=STUDENT,
+    admin_role=ADMIN
+))
+
+app.register_blueprint(create_notices_blueprint(
+    mysql=mysql,
+    login_required=login_required,
+    role_required=role_required,
+    student_role=STUDENT,
+    teacher_role=TEACHER,
     admin_role=ADMIN
 ))
 

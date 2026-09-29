@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import api from '../api'
 import './AdminLayout.css'
@@ -8,6 +8,7 @@ const links = [
   { to: '/admin/users', label: 'User Management' },
   { to: '/admin/school-setup', label: 'School Setup' },
   { to: '/admin/attendance', label: 'Attendance' },
+  { to: '/admin/notices', label: 'Notices' },
   { to: '/admin/ml-readiness', label: 'ML Readiness' },
   { to: '/admin/ml-monitoring', label: 'ML Monitoring' },
 ]
@@ -15,6 +16,16 @@ const links = [
 function AdminLayout({ children }) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    const loadUnreadCount = () => api.get('/notices/unread-count')
+      .then((response) => setUnreadCount(Number(response.data.unread_count) || 0))
+      .catch(() => setUnreadCount(0))
+    loadUnreadCount()
+    window.addEventListener('notice-read', loadUnreadCount)
+    return () => window.removeEventListener('notice-read', loadUnreadCount)
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -56,7 +67,7 @@ function AdminLayout({ children }) {
                 : 'admin-nav-link'}
               onClick={() => setMenuOpen(false)}
             >
-              {link.label}
+              {link.label}{link.to === '/admin/notices' && unreadCount > 0 && <span className="nav-unread-badge">{unreadCount}</span>}
             </NavLink>
           ))}
           <button type="button" className="admin-logout" onClick={handleLogout}>

@@ -40,6 +40,13 @@ It helps students track their academic performance using Machine Learning, take 
 ### Admin
 - System Overview Dashboard
 
+### Notices
+- Notices are immutable, one-way official announcements; Chat is a separate feature.
+- Admins can target the institution, students, teachers, a class, or one person; only Admins can publish public notices.
+- Teachers can publish internal notices only within active class-teacher or assigned subject scopes.
+- Recipients are snapshotted at publication, so class transfers do not erase prior deliveries; inbox read state is per recipient.
+- The public homepage reads only institution-wide public notices from the public feed.
+
 ---
 
 ## Tech Stack

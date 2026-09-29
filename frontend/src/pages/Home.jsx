@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import api from '../api'
 import './Home.css'
 import { schoolProfile } from '../data/schoolProfile'
 
@@ -13,6 +15,13 @@ const navItems = [
 
 function Home() {
   const navigate = useNavigate()
+  const [publicNotices, setPublicNotices] = useState([])
+
+  useEffect(() => {
+    api.get('/public/notices')
+      .then((response) => setPublicNotices(response.data.notices || []))
+      .catch(() => setPublicNotices([]))
+  }, [])
 
   return (
     <div className="home-page">
@@ -216,14 +225,23 @@ function Home() {
               <h2>Notices &amp; Announcements</h2>
             </div>
 
-            <div className="notice-box">
+            {publicNotices.length ? publicNotices.map((notice) => (
+              <article className="notice-box" key={notice.id}>
+                <div className="notice-icon" aria-hidden="true">📣</div>
+                <div>
+                  <div className="notice-date">{new Date(notice.created_at).toLocaleDateString()}</div>
+                  <h3>{notice.title}</h3>
+                  <p>{notice.body}</p>
+                </div>
+              </article>
+            )) : <div className="notice-box">
               <div className="notice-icon" aria-hidden="true">📣</div>
               <div>
                 <div className="notice-date">Public notice board</div>
-                <h3>{schoolProfile.notices[0].title}</h3>
-                <p>{schoolProfile.notices[0].summary}</p>
+                <h3>No public notices have been published.</h3>
+                <p>Official institution-wide notices will appear here when available.</p>
               </div>
-            </div>
+            </div>}
           </div>
         </section>
 
