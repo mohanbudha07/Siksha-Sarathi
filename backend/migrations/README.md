@@ -333,3 +333,12 @@ migration 020:
 
 Do not apply this migration from the application or unit tests. For new
 databases, `backend/setup_db.sql` includes both Question Bank tables.
+
+## Quiz Result Timestamp Migration
+
+Migration 021 adds `quiz_results.created_at` only when it is missing. Fresh
+databases already contain this field in `backend/setup_db.sql`. It is safe to
+run against older databases because it checks `information_schema` before
+`ALTER TABLE`.
+
+    sudo mysql siksha_sarathi < backend/migrations/021_quiz_result_timestamps.sql
