@@ -342,3 +342,16 @@ run against older databases because it checks `information_schema` before
 `ALTER TABLE`.
 
     sudo mysql siksha_sarathi < backend/migrations/021_quiz_result_timestamps.sql
+
+## User Account Status Migration
+
+Migration 022 adds `users.is_active` with a default of TRUE and nullable
+`users.deactivated_at`. Existing accounts stay active; no user or historical
+school data is deleted or rewritten. The migration checks `INFORMATION_SCHEMA`
+before adding either column or the `(role, is_active)` index, so it is safe to
+rerun after success. New databases include these fields and index in
+`backend/setup_db.sql`.
+
+After backing up the database and stopping the backend, apply manually:
+
+    sudo mysql siksha_sarathi < backend/migrations/022_user_account_status.sql

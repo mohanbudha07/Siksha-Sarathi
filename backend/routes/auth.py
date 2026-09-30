@@ -2,7 +2,7 @@
 
 import os
 
-from flask import Blueprint, request, session
+from flask import Blueprint, g, request, session
 from flask_limiter.util import get_remote_address
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -30,7 +30,7 @@ def create_auth_blueprint(mysql, limiter, login_required):
             "username": user["username"],
             "email": user["email"],
             "role": user["role"],
-            "must_change_password": bool(user["must_change_password"])
+            "must_change_password": bool(user["must_change_password"]),
         }
 
     def _create_session_for_user(user):
@@ -49,7 +49,7 @@ def create_auth_blueprint(mysql, limiter, login_required):
         try:
             cur.execute(
                 """SELECT id, username, email, password, role,
-                          must_change_password
+                          must_change_password, is_active
                    FROM users WHERE email = %s""",
                 (email,)
             )
@@ -78,6 +78,12 @@ def create_auth_blueprint(mysql, limiter, login_required):
         if expected_role is None and user["role"] != "admin":
             session.clear()
             return None, {"error": "Invalid email or password"}, 401
+
+        if not bool(user["is_active"]):
+            session.clear()
+            return None, {
+                "error": "This account has been deactivated. Contact the school administrator."
+            }, 403
 
         return user, None, None
 
@@ -130,7 +136,6 @@ def create_auth_blueprint(mysql, limiter, login_required):
         return _create_session_for_user(user), 200
 
     @auth.post("/api/logout")
-    @login_required
     def api_logout():
         session.clear()
         return {"message": "Logout successful"}, 200
@@ -138,24 +143,15 @@ def create_auth_blueprint(mysql, limiter, login_required):
     @auth.get("/api/auth/me")
     @login_required
     def current_user():
-        cur = None
-        try:
-            cur = mysql.connection.cursor()
-            cur.execute(
-                """SELECT id, username, role, must_change_password
-                   FROM users WHERE id = %s""",
-                (session["user_id"],)
-            )
-            user = cur.fetchone()
-        except Exception as error:
-            print("Current user lookup error:", error)
-            return {"error": "Unable to verify authentication"}, 500
-        finally:
-            if cur is not None:
-                cur.close()
+        user = g.account_state
         if not user:
             session.clear()
             return {"error": "Authentication required"}, 401
+        if not bool(user["is_active"]):
+            session.clear()
+            return {
+                "error": "This account has been deactivated. Contact the school administrator."
+            }, 403
         session["username"] = user["username"]
         session["role"] = user["role"]
         session["must_change_password"] = bool(user["must_change_password"])
@@ -164,7 +160,7 @@ def create_auth_blueprint(mysql, limiter, login_required):
                 "id": user["id"],
                 "username": user["username"],
                 "role": user["role"],
-                "must_change_password": bool(user["must_change_password"])
+                "must_change_password": bool(user["must_change_password"]),
             }
         }, 200
 
@@ -197,7 +193,7 @@ def create_auth_blueprint(mysql, limiter, login_required):
         cur = mysql.connection.cursor()
         try:
             cur.execute(
-                "SELECT id, username, role, password FROM users WHERE id = %s",
+                "SELECT id, username, role, password, is_active FROM users WHERE id = %s",
                 (session["user_id"],)
             )
             user = cur.fetchone()
@@ -205,6 +201,11 @@ def create_auth_blueprint(mysql, limiter, login_required):
                 user["password"], current_password
             ):
                 return {"error": "Current password is incorrect"}, 401
+            if not bool(user["is_active"]):
+                session.clear()
+                return {
+                    "error": "This account has been deactivated. Contact the school administrator."
+                }, 403
             cur.execute(
                 """UPDATE users
                    SET password = %s, must_change_password = FALSE
