@@ -144,19 +144,86 @@ class CSVManagementTests(unittest.TestCase):
         self.assertEqual(malformed.status_code, 400)
         self.assertEqual(self.upload(endpoint, "whatever", "users.xlsx").status_code, 400)
 
-    def test_csv_parser_rejects_more_than_1000_rows_and_files_over_1mb(self):
+    def test_csv_parser_rejects_more_than_5000_rows_and_files_over_5mb(self):
         self.login("admin")
         endpoint = "/api/admin/csv/students/preview"
         many_rows = self.student_csv(*[
             (f"Student {index}", f"student{index}@example.test", "TempPass123", "10", "Default", "")
-            for index in range(1001)
+            for index in range(5001)
         ])
         too_many = self.upload(endpoint, many_rows)
-        too_large = self.upload(endpoint, b"x" * (1_048_577), "big.csv")
+        too_large = self.upload(endpoint, b"x" * (5 * 1024 * 1024 + 1), "big.csv")
         self.assertEqual(too_many.status_code, 400)
-        self.assertIn("1000", too_many.json["error"])
+        self.assertIn("5000", too_many.json["error"])
         self.assertEqual(too_large.status_code, 400)
-        self.assertIn("1 MB", too_large.json["error"])
+        self.assertIn("5 MB", too_large.json["error"])
+
+    def test_csv_parser_accepts_5000_rows_and_bounds_password_safe_preview(self):
+        self.login("admin")
+        content = self.student_csv(*[
+            (f"Student {index}", f"student{index}@example.test", "TempPass123", "10", "Default", "")
+            for index in range(5000)
+        ])
+        response = self.upload("/api/admin/csv/students/preview", content)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["total_rows"], 5000)
+        self.assertEqual(response.json["valid_rows"], 5000)
+        self.assertEqual(len(response.json["rows"]), 50)
+        self.assertNotIn("TempPass123", response.get_data(as_text=True))
+        self.assertNotIn("temporary_password", response.get_data(as_text=True))
+
+    def test_invalid_preview_keeps_full_counts_and_caps_returned_error_details(self):
+        self.login("admin")
+        content = self.student_csv(*[
+            (f"Student {index}", f"student{index}@example.test", "short", "10", "Default", "")
+            for index in range(120)
+        ])
+        response = self.upload("/api/admin/csv/students/preview", content)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["total_rows"], 120)
+        self.assertEqual(response.json["invalid_rows"], 120)
+        self.assertEqual(response.json["error_count"], 120)
+        self.assertTrue(response.json["errors_truncated"])
+        self.assertEqual(len(response.json["rows"]), 100)
+        self.assertEqual(response.json["problem_summary"][0]["type"], "short_password")
+        self.assertEqual(response.json["problem_summary"][0]["count"], 120)
+
+    def test_class_and_subject_reference_downloads_are_admin_only(self):
+        self.login("admin")
+        classes = self.client.get("/api/admin/csv/references/classes")
+        self.assertEqual(classes.status_code, 200)
+        class_rows = list(csv.DictReader(io.StringIO(classes.get_data(as_text=True))))
+        self.assertEqual(class_rows[0], {
+            "class_id": "1", "class_name": "Grade 10", "grade": "10", "section": "Default",
+        })
+        subjects = self.client.get("/api/admin/csv/references/subjects")
+        self.assertEqual(subjects.status_code, 200)
+        subject_rows = list(csv.DictReader(io.StringIO(subjects.get_data(as_text=True))))
+        self.assertEqual(subject_rows[0], {
+            "subject_id": "1", "subject_name": "Science", "subject_code": "SCI",
+        })
+        for role in ("student", "teacher"):
+            self.login(role)
+            self.assertEqual(self.client.get("/api/admin/csv/references/classes").status_code, 403)
+            self.assertEqual(self.client.get("/api/admin/csv/references/subjects").status_code, 403)
+
+    def test_assignment_import_rolls_back_all_new_rows_on_database_failure(self):
+        self.db.execute("INSERT INTO subjects VALUES(2,'Mathematics','MATH','2026-01-01')")
+        self.db.executescript('''CREATE TRIGGER fail_assignment
+            BEFORE INSERT ON teacher_class_subjects WHEN NEW.subject_id = 2
+            BEGIN SELECT RAISE(ABORT, 'insert failed'); END;''')
+        self.db.commit()
+        self.login("admin")
+        before = self.db.execute("SELECT COUNT(*) FROM teacher_class_subjects").fetchone()[0]
+        response = self.upload(
+            "/api/admin/csv/teacher-assignments/import",
+            self.assignment_csv(
+                ("t@example.test", "9", "Default", "SCI"),
+                ("t@example.test", "10", "Default", "MATH"),
+            ),
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(self.db.execute("SELECT COUNT(*) FROM teacher_class_subjects").fetchone()[0], before)
 
     def test_student_bulk_import_creates_hashed_accounts_and_active_enrollments(self):
         self.login("admin")
@@ -246,6 +313,29 @@ class CSVManagementTests(unittest.TestCase):
         self.assertTrue(check_password_hash(teacher["password"], "TeacherTemp789"))
         duplicate = self.upload("/api/admin/csv/teachers/import", content)
         self.assertEqual(duplicate.status_code, 400)
+
+    def test_teacher_preview_rejects_existing_and_duplicate_emails_in_same_csv(self):
+        self.login("admin")
+        response = self.upload(
+            "/api/admin/csv/teachers/preview",
+            self.teacher_csv(
+                ("First Teacher", "repeat@example.test", "TempPass123"),
+                ("Second Teacher", "REPEAT@example.test", "TempPass456"),
+                ("Existing Teacher", "t@example.test", "TempPass789"),
+            ),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json["valid"])
+        self.assertTrue(any(
+            "Duplicate email within this CSV" in error["message"]
+            for error in response.json["rows"][1]["errors"]
+        ))
+        self.assertTrue(any(
+            "Email already exists" in error["message"]
+            for error in response.json["rows"][2]["errors"]
+        ))
+        self.assertNotIn("TempPass123", response.get_data(as_text=True))
+        self.assertNotIn("temporary_password", response.get_data(as_text=True))
 
     def test_teacher_import_rolls_back_all_rows_on_failure(self):
         self.db.executescript('''CREATE TRIGGER fail_teacher
@@ -369,6 +459,8 @@ class CSVManagementTests(unittest.TestCase):
         teacher_data = self.client.get("/api/admin/csv/teachers/export").get_data(as_text=True)
         self.assertNotIn("password", teacher_data.lower())
         self.assertNotIn("must_change_password", teacher_data.lower())
+        teacher_rows = list(csv.DictReader(io.StringIO(teacher_data)))
+        self.assertTrue(next(row for row in teacher_rows if row["email"] == "t@example.test")["created_at"].endswith("NPT"))
         assignments = list(csv.DictReader(io.StringIO(
             self.client.get("/api/admin/csv/teacher-assignments/export").get_data(as_text=True)
         )))
