@@ -171,3 +171,72 @@
   .admin-users-tabs button { flex: 1 1 auto; }
   .admin-users-form { padding: 17px; }
 }
+
+.admin-users-list-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 14px 0; }
+.admin-users-search { display: flex; flex: 1 1 280px; gap: 7px; }
+.admin-users-search input, .admin-users-list-controls select, .admin-users-pagination select { min-height: 39px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); font: inherit; }
+.admin-users-search input { flex: 1; min-width: 0; }
+.admin-users-search button, .admin-users-pagination button { min-height: 39px; padding: 7px 11px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); font-weight: 700; cursor: pointer; }
+.admin-users-search button { border-color: var(--color-primary); background: var(--color-primary); color: white; }
+.admin-users-list-controls > label, .admin-users-pagination > label { display: flex; align-items: center; gap: 8px; color: var(--color-muted); font-size: 13px; font-weight: 700; }
+.admin-users-list { padding: 16px 0; border-top: 1px solid var(--color-border); }
+.admin-users-records { display: grid; }
+.admin-user-record { display: grid; grid-template-columns: minmax(180px, 1fr) auto minmax(280px, 1.5fr); align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid var(--color-border); }
+.admin-user-main { display: grid; gap: 3px; min-width: 0; }
+.admin-user-main strong, .admin-user-main span, .admin-user-main small { overflow-wrap: anywhere; }
+.admin-user-main span, .admin-user-main small { color: var(--color-muted); font-size: 12px; }
+.admin-user-status { display: grid; justify-items: start; gap: 5px; white-space: nowrap; }
+.admin-user-status small { color: var(--color-muted); font-size: 11px; }
+.admin-user-status span { padding: 3px 7px; border-radius: 3px; font-size: 11px; font-weight: 800; }
+.admin-user-status .status-active { background: #e9f5ec; color: #216744; }
+.admin-user-status .status-inactive { background: #fbe9e7; color: #a12622; }
+.admin-user-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 5px; }
+.admin-user-actions button { padding: 6px 8px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-primary); font-size: 11px; font-weight: 700; cursor: pointer; }
+.admin-user-actions button.danger { color: #a12622; }
+.admin-users-pagination { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 15px; }
+.admin-users-pagination > div { display: flex; align-items: center; gap: 10px; }
+.admin-users-pagination span { color: var(--color-muted); font-size: 13px; }
+.admin-users-pagination button:disabled { opacity: .5; cursor: not-allowed; }
+.admin-users-overlay { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgb(20 29 39 / 55%); }
+.admin-users-dialog { width: min(680px, 100%); max-height: 92vh; overflow: auto; padding: 20px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); box-shadow: 0 18px 60px rgb(0 0 0 / 22%); }
+.admin-users-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.admin-users-dialog > header h2 { margin: 0; font-size: 19px; }
+.admin-users-dialog > header button { border: 0; background: none; font-size: 25px; cursor: pointer; }
+.admin-users-dialog > header button:disabled { opacity: .5; }
+.admin-users-dialog-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+.admin-users-dialog-actions button, .admin-users-modal-form footer button, .admin-enrollment-history footer button { min-height: 38px; padding: 7px 11px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); font-weight: 700; cursor: pointer; }
+.admin-users-dialog-actions button.danger { color: #a12622; }
+.admin-account-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.admin-account-details > div { min-width: 0; }
+.admin-account-details dt { color: var(--color-muted); font-size: 11px; font-weight: 700; }
+.admin-account-details dd { margin: 4px 0 0; overflow-wrap: anywhere; font-size: 13px; }
+.admin-account-details .assignment-detail { grid-column: 1 / -1; }
+.assignment-detail dd { display: grid; gap: 4px; }
+.admin-users-modal-form { display: grid; gap: 12px; }
+.admin-users-modal-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 700; }
+.admin-users-modal-form input, .admin-users-modal-form select, .admin-users-modal-form textarea { width: 100%; box-sizing: border-box; min-height: 39px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-surface); color: var(--color-text); font: inherit; }
+.admin-users-modal-form p { margin: 0; color: var(--color-muted); font-size: 12px; line-height: 1.5; }
+.admin-users-modal-form footer, .admin-enrollment-history footer { display: flex; justify-content: end; gap: 7px; margin-top: 5px; }
+.admin-users-modal-form footer button.primary { border-color: var(--color-primary); background: var(--color-primary); color: white; }
+.admin-users-modal-form footer button:disabled { opacity: .5; cursor: not-allowed; }
+.admin-enrollment-history { display: grid; gap: 9px; }
+.admin-enrollment-history article { padding: 11px; border: 1px solid var(--color-border); border-radius: 4px; }
+.admin-enrollment-history article > div { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.admin-enrollment-history article span, .admin-enrollment-history article p { color: var(--color-muted); font-size: 12px; }
+.admin-enrollment-history article b { margin-left: auto; color: var(--color-primary); font-size: 11px; }
+.admin-enrollment-history article p { margin: 6px 0 0; }
+
+@media (max-width: 760px) {
+  .admin-user-record { grid-template-columns: minmax(0, 1fr) auto; gap: 9px; }
+  .admin-user-actions { grid-column: 1 / -1; justify-content: start; }
+  .admin-user-actions button { font-size: 12px; }
+}
+@media (max-width: 520px) {
+  .admin-users-list-controls { align-items: stretch; flex-direction: column; }
+  .admin-users-pagination { align-items: stretch; flex-direction: column; }
+  .admin-users-pagination > div { justify-content: space-between; gap: 5px; }
+  .admin-users-pagination > label { justify-content: space-between; }
+  .admin-account-details { grid-template-columns: 1fr; }
+  .admin-account-details .assignment-detail { grid-column: auto; }
+  .admin-users-dialog { padding: 14px; }
+}

@@ -136,7 +136,7 @@ class QuizHistoryTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/teacher/quizzes/3/attempts").status_code, 404)
 
     def test_teacher_attempt_list_search_pagination_npt_and_counts(self):
-        self.db.execute("INSERT INTO users VALUES(6,'Student Three','three@example.test','hash','student',0,'2026-01-01')")
+        self.db.execute("INSERT INTO users(id,username,email,password,role,must_change_password,created_at) VALUES(6,'Student Three','three@example.test','hash','student',0,'2026-01-01')")
         self.db.execute("INSERT INTO students VALUES(3,6,'Student Three','10')")
         self.db.commit()
         for result_id in range(50, 62):

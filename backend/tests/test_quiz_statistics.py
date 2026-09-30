@@ -72,6 +72,7 @@ class QuizStatisticsTests(unittest.TestCase):
         self.db.executescript('''
             CREATE TABLE users(id INTEGER PRIMARY KEY, username TEXT, email TEXT,
                 password TEXT, role TEXT, must_change_password INTEGER NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 1, deactivated_at TEXT,
                 created_at TEXT);
             CREATE TABLE students(id INTEGER PRIMARY KEY, user_id INTEGER,
                 full_name TEXT, grade TEXT);
@@ -153,11 +154,11 @@ class QuizStatisticsTests(unittest.TestCase):
                 mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(note_id) REFERENCES notes(id) ON DELETE CASCADE);
-            INSERT INTO users VALUES(1,'Student','s@example.test','hash','student',0,'2026-01-01');
-            INSERT INTO users VALUES(2,'Teacher','t@example.test','hash','teacher',0,'2026-01-01');
-            INSERT INTO users VALUES(3,'Admin','a@example.test','hash','admin',0,'2026-01-01');
-            INSERT INTO users VALUES(4,'Other Teacher','other@example.test','hash','teacher',0,'2026-01-01');
-            INSERT INTO users VALUES(5,'Student Two','s2@example.test','hash','student',0,'2026-01-01');
+            INSERT INTO users(id,username,email,password,role,must_change_password,created_at) VALUES(1,'Student','s@example.test','hash','student',0,'2026-01-01');
+            INSERT INTO users(id,username,email,password,role,must_change_password,created_at) VALUES(2,'Teacher','t@example.test','hash','teacher',0,'2026-01-01');
+            INSERT INTO users(id,username,email,password,role,must_change_password,created_at) VALUES(3,'Admin','a@example.test','hash','admin',0,'2026-01-01');
+            INSERT INTO users(id,username,email,password,role,must_change_password,created_at) VALUES(4,'Other Teacher','other@example.test','hash','teacher',0,'2026-01-01');
+            INSERT INTO users(id,username,email,password,role,must_change_password,created_at) VALUES(5,'Student Two','s2@example.test','hash','student',0,'2026-01-01');
             INSERT INTO students VALUES(1,1,'Student One','10');
             INSERT INTO students VALUES(2,5,'Student Two','9');
             INSERT INTO classes VALUES(1,'Grade 10','10','Default','2026-01-01');
@@ -1114,7 +1115,7 @@ class QuizStatisticsTests(unittest.TestCase):
         self.db.execute('''INSERT INTO student_class_enrollments
             (id, student_id, class_id, started_at)
             VALUES(3, 1, 2, '2026-02-01')''')
-        self.db.execute("INSERT INTO users VALUES(6,'Unassigned','u@example.test','hash','student',0,'2026-01-01')")
+        self.db.execute("INSERT INTO users(id,username,email,password,role,must_change_password,created_at) VALUES(6,'Unassigned','u@example.test','hash','student',0,'2026-01-01')")
         self.db.execute("INSERT INTO students VALUES(3,6,'Unassigned Student','8')")
         self.db.commit()
         self.login('admin')

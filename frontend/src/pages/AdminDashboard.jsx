@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../api'
 import './AdminDashboard.css'
 
@@ -52,7 +53,14 @@ function AdminDashboard() {
 
   const stats = data?.statistics || {}
   const setupHealth = data?.setup_health || {}
-  const classOverview = data?.class_overview || []
+  const recentAccounts = (data?.recent_accounts || []).slice(0, 10)
+  const schoolSnapshot = (data?.school_snapshot || []).slice(0, 6)
+  const attentionItems = [
+    ['students_without_class', 'Students without class', '/admin/users'],
+    ['teachers_without_assignments', 'Teachers without assignments', '/admin/school-setup'],
+    ['classes_without_class_teacher', 'Classes without class teacher', '/admin/school-setup'],
+    ['classes_without_subject_assignments', 'Classes without Subject assignments', '/admin/school-setup'],
+  ].filter(([key]) => Number(setupHealth[key] || 0) > 0)
 
   return (
     <div className="admin-dashboard">
@@ -64,154 +72,58 @@ function AdminDashboard() {
       </div>
 
       <div className="admin-stats">
-        <div className="admin-card">
-          <span>Total Students</span>
-          <strong>{stats.total_students ?? 0}</strong>
-        </div>
-
-        <div className="admin-card">
-          <span>Total Teachers</span>
-          <strong>{stats.total_teachers ?? 0}</strong>
-        </div>
-
-        <div className="admin-card">
-          <span>Total Classes</span>
-          <strong>{stats.total_classes ?? 0}</strong>
-        </div>
-
-        <div className="admin-card">
-          <span>Total Subjects</span>
-          <strong>{stats.total_subjects ?? 0}</strong>
-        </div>
-
-        <div className="admin-card">
-          <span>Teacher Assignments</span>
-          <strong>{stats.total_teacher_assignments ?? 0}</strong>
-        </div>
-
-        <div className="admin-card">
-          <span>Total Users</span>
-          <strong>{stats.total_users ?? 0}</strong>
-        </div>
-
-        <div className="admin-card">
-          <span>Notes</span>
-          <strong>{stats.total_notes ?? 0}</strong>
-        </div>
-
-        <div className="admin-card">
-          <span>Quizzes</span>
-          <strong>{stats.total_quizzes ?? 0}</strong>
-        </div>
+        {[
+          ['Students', stats.total_students], ['Teachers', stats.total_teachers],
+          ['Classes', stats.total_classes], ['Subjects', stats.total_subjects],
+        ].map(([label, value]) => <div className="admin-card" key={label}>
+          <span>{label}</span><strong>{value ?? 0}</strong>
+        </div>)}
       </div>
 
       <section className="admin-section">
         <div className="section-header">
-          <h2>Setup health</h2>
+          <h2>Setup Attention</h2>
         </div>
-
-        <div className="admin-mini-grid">
-          <div className={`admin-health-card ${setupHealth.students_without_class ? 'warning' : ''}`}>
-            <span>Students without class</span>
-            <strong>{setupHealth.students_without_class ?? 0}</strong>
-          </div>
-
-          <div className={`admin-health-card ${setupHealth.teachers_without_assignments ? 'warning' : ''}`}>
-            <span>Teachers without assignments</span>
-            <strong>{setupHealth.teachers_without_assignments ?? 0}</strong>
-          </div>
-
-          <div className={`admin-health-card ${setupHealth.classes_without_class_teacher ? 'warning' : ''}`}>
-            <span>Classes without class teacher</span>
-            <strong>{setupHealth.classes_without_class_teacher ?? 0}</strong>
-          </div>
-
-          <div className={`admin-health-card ${setupHealth.classes_without_subject_assignments ? 'warning' : ''}`}>
-            <span>Classes without subject assignments</span>
-            <strong>{setupHealth.classes_without_subject_assignments ?? 0}</strong>
-          </div>
-        </div>
+        {attentionItems.length === 0 ? <p className="admin-setup-good">School setup looks complete.</p> : <div className="admin-attention-list">
+          {attentionItems.map(([key, label, href]) => <Link to={href} className="admin-attention-item" key={key}>
+            <span>{label}</span><strong>{setupHealth[key]}</strong>
+          </Link>)}
+        </div>}
       </section>
 
-      <section className="admin-section">
-        <div className="section-header">
-          <h2>Class overview</h2>
-        </div>
+      <div className="admin-dashboard-panels">
+        <section className="admin-section admin-dashboard-panel">
+          <div className="section-header"><h2>Recent Accounts</h2></div>
+          {recentAccounts.length === 0 ? <p className="empty-state">No accounts found.</p> : <div className="admin-recent-list">
+            {recentAccounts.map((account) => <article key={account.user_id}>
+              <div className="admin-recent-person"><strong>{account.name}</strong><span>{account.email}</span></div>
+              <span className={`role-badge ${account.role}`}>{account.role}</span>
+              <div className="admin-recent-context">
+                {account.role === 'student' && account.class_name
+                  ? `Grade ${account.grade} · Section ${account.section}`
+                  : account.role === 'teacher'
+                    ? `${account.assignment_count || 0} assignment${account.assignment_count === 1 ? '' : 's'}`
+                    : '—'}
+              </div>
+              <span className={`account-status ${account.is_active ? 'active' : 'inactive'}`}>{account.is_active ? 'Active' : 'Inactive'}</span>
+              <time>{account.created_at || '—'}</time>
+            </article>)}
+          </div>}
+          <Link className="admin-dashboard-panel-link" to="/admin/users">View All Users →</Link>
+        </section>
 
-        {classOverview.length ? (
-          <div className="admin-table-wrapper">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Class</th>
-                  <th>Grade</th>
-                  <th>Students</th>
-                  <th>Teachers</th>
-                  <th>Subjects</th>
-                  <th>Class Teacher</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {classOverview.map((classItem) => (
-                  <tr key={classItem.id}>
-                    <td>{classItem.name}</td>
-                    <td>{classItem.grade}</td>
-                    <td>{classItem.student_count ?? 0}</td>
-                    <td>{classItem.assigned_teacher_count ?? 0}</td>
-                    <td>{classItem.subject_count ?? 0}</td>
-                    <td>{classItem.class_teacher_name || 'Unassigned'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="empty-state">No classes registered yet.</p>
-        )}
-      </section>
-
-      <section className="admin-section">
-        <div className="section-header">
-          <h2>Recent Users</h2>
-        </div>
-
-        {data?.recent_users?.length ? (
-          <div className="admin-table-wrapper">
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Username</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {data.recent_users.map((user) => (
-                  <tr key={user.id}>
-                    <td>{user.username}</td>
-                    <td>{user.email}</td>
-                    <td>
-                      <span className={`role-badge ${user.role}`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td>
-                      {user.created_at
-                        ? new Date(user.created_at).toLocaleDateString()
-                        : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="empty-state">No users found.</p>
-        )}
-      </section>
+        <section className="admin-section admin-dashboard-panel">
+          <div className="section-header"><h2>School Snapshot</h2></div>
+          {schoolSnapshot.length === 0 ? <p className="empty-state">No classes registered yet.</p> : <div className="admin-snapshot-list">
+            {schoolSnapshot.map((schoolClass) => <article key={schoolClass.id}>
+              <div className="snapshot-class-heading"><strong>{schoolClass.class_name}</strong><span>Grade {schoolClass.grade} · Section {schoolClass.section}</span></div>
+              <p>{schoolClass.student_count} Students · {schoolClass.subject_count} Subjects</p>
+              <small>Class Teacher: {schoolClass.class_teacher_name || 'Unassigned'}</small>
+            </article>)}
+          </div>}
+          <Link className="admin-dashboard-panel-link" to="/admin/school-setup">View School Setup →</Link>
+        </section>
+      </div>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-from flask import Flask, request, session
+from flask import Flask, g, request, session
 from flask_mysqldb import MySQL
 from werkzeug.security import generate_password_hash
 from functools import wraps
@@ -132,6 +132,34 @@ ADMIN = "admin"
 # AUTHENTICATION DECORATORS
 # ============================================================
 
+def _authenticated_account_state():
+    if "account_state" in g:
+        return g.account_state, None
+    cur = None
+    try:
+        cur = mysql.connection.cursor()
+        cur.execute(
+                """SELECT id, username, email, role, must_change_password, is_active
+               FROM users WHERE id = %s""",
+            (session["user_id"],),
+        )
+        account = cur.fetchone()
+    except Exception as error:
+        print("Account state lookup error:", type(error).__name__)
+        return None, ({"error": "Unable to verify account state"}, 500)
+    finally:
+        if cur is not None:
+            cur.close()
+    if not account:
+        session.clear()
+        return None, ({"error": "Authentication required"}, 401)
+    if not bool(account["is_active"]):
+        session.clear()
+        return None, ({"error": "This account has been deactivated. Contact the school administrator."}, 403)
+    g.account_state = account
+    return account, None
+
+
 def login_required(f):
 
     @wraps(f)
@@ -142,6 +170,9 @@ def login_required(f):
                 "error": "Authentication required"
             }, 401
 
+        _account, error_response = _authenticated_account_state()
+        if error_response:
+            return error_response
         return f(*args, **kwargs)
 
     return decorated
@@ -159,25 +190,9 @@ def role_required(role):
                     "error": "Authentication required"
                 }, 401
 
-            cur = None
-            try:
-                cur = mysql.connection.cursor()
-                cur.execute(
-                    """SELECT role, must_change_password
-                       FROM users WHERE id = %s""",
-                    (session["user_id"],)
-                )
-                user = cur.fetchone()
-            except Exception as error:
-                print("Account state lookup error:", error)
-                return {"error": "Unable to verify account state"}, 500
-            finally:
-                if cur is not None:
-                    cur.close()
-
-            if not user:
-                session.clear()
-                return {"error": "Authentication required"}, 401
+            user, error_response = _authenticated_account_state()
+            if error_response:
+                return error_response
 
             session["role"] = user["role"]
             if user["role"] != role:
@@ -2078,10 +2093,8 @@ def admin_dashboard_api():
         cur.execute(
             """
             SELECT
-                COUNT(*) AS total_users,
-                COALESCE(SUM(role = 'student'), 0) AS total_students,
-                COALESCE(SUM(role = 'teacher'), 0) AS total_teachers,
-                COALESCE(SUM(role = 'admin'), 0) AS total_admins
+                COALESCE(SUM(role = 'student' AND is_active = TRUE), 0) AS total_students,
+                COALESCE(SUM(role = 'teacher' AND is_active = TRUE), 0) AS total_teachers
             FROM users
             """
         )
@@ -2094,22 +2107,9 @@ def admin_dashboard_api():
         total_subjects = cur.fetchone()["total_subjects"]
 
         cur.execute(
-            "SELECT COUNT(*) AS total_teacher_assignments FROM teacher_class_subjects"
-        )
-        total_teacher_assignments = cur.fetchone()["total_teacher_assignments"]
-
-        cur.execute("SELECT COUNT(*) AS total_notes FROM notes")
-        total_notes = cur.fetchone()["total_notes"]
-
-        cur.execute("SELECT COUNT(*) AS total_quizzes FROM quizzes")
-        total_quizzes = cur.fetchone()["total_quizzes"]
-
-        cur.execute("SELECT COUNT(*) AS total_quiz_attempts FROM quiz_results")
-        total_quiz_attempts = cur.fetchone()["total_quiz_attempts"]
-
-        cur.execute(
             """SELECT COUNT(*) AS students_without_class
                  FROM students s
+                  INNER JOIN users u ON u.id = s.user_id AND u.is_active = TRUE
                  LEFT JOIN student_class_enrollments sce
                      ON sce.student_id = s.id AND sce.ended_at IS NULL
                  WHERE sce.id IS NULL"""
@@ -2121,7 +2121,7 @@ def admin_dashboard_api():
                  FROM users u
                  LEFT JOIN teacher_class_subjects tcs
                      ON tcs.teacher_user_id = u.id
-                 WHERE u.role = 'teacher' AND tcs.id IS NULL"""
+                 WHERE u.role = 'teacher' AND u.is_active = TRUE AND tcs.id IS NULL"""
         )
         teachers_without_assignments = cur.fetchone()["teachers_without_assignments"]
 
@@ -2146,60 +2146,53 @@ def admin_dashboard_api():
         ]
 
         cur.execute(
-            """
-            SELECT
-                c.id,
-                c.name,
-                c.grade,
-                c.section,
-                COUNT(DISTINCT sce.student_id) AS student_count,
-                COUNT(DISTINCT tcs.teacher_user_id) AS assigned_teacher_count,
-                COUNT(DISTINCT tcs.subject_id) AS subject_count,
-                MAX(CASE WHEN cta.id IS NOT NULL THEN u.username END) AS class_teacher_name
-            FROM classes c
-            LEFT JOIN student_class_enrollments sce
-                ON sce.class_id = c.id AND sce.ended_at IS NULL
-            LEFT JOIN teacher_class_subjects tcs
-                ON tcs.class_id = c.id
-            LEFT JOIN class_teacher_assignments cta
-                ON cta.class_id = c.id
-                AND cta.teacher_user_id = tcs.teacher_user_id
-                AND cta.ended_at IS NULL
-            LEFT JOIN users u
-                ON u.id = cta.teacher_user_id
-            GROUP BY c.id, c.name, c.grade, c.section
-            ORDER BY c.grade, c.section, c.name
-            """
+            """SELECT u.id AS user_id,
+                      COALESCE(s.full_name, u.username) AS name,
+                      u.email, u.role, u.is_active, u.created_at,
+                      c.name AS class_name, c.grade, c.section,
+                      CASE WHEN u.role = 'teacher' THEN
+                        (SELECT COUNT(*) FROM teacher_class_subjects tcs
+                         WHERE tcs.teacher_user_id = u.id)
+                      ELSE NULL END AS assignment_count
+               FROM users u
+               LEFT JOIN students s ON s.user_id = u.id
+               LEFT JOIN student_class_enrollments sce
+                 ON sce.student_id = s.id AND sce.ended_at IS NULL
+               LEFT JOIN classes c ON c.id = sce.class_id
+               ORDER BY u.created_at DESC, u.id DESC
+               LIMIT 10"""
         )
-        class_overview = cur.fetchall()
+        recent_accounts = cur.fetchall()
+        for account in recent_accounts:
+            account["is_active"] = bool(account["is_active"])
+            account["created_at"] = serialize_nepal_datetime(account["created_at"])
 
         cur.execute(
-            """
-            SELECT
-                id,
-                username,
-                email,
-                role,
-                created_at
-            FROM users
-            ORDER BY created_at DESC
-            LIMIT 10
-            """
+            """SELECT c.id, c.name AS class_name, c.grade, c.section,
+                      COUNT(DISTINCT sce.student_id) AS student_count,
+                      COUNT(DISTINCT tcs.teacher_user_id) AS assigned_teacher_count,
+                      COUNT(DISTINCT tcs.subject_id) AS subject_count,
+                      MAX(CASE WHEN cta.id IS NOT NULL THEN class_teacher.username END)
+                          AS class_teacher_name
+               FROM classes c
+               LEFT JOIN student_class_enrollments sce
+                 ON sce.class_id = c.id AND sce.ended_at IS NULL
+               LEFT JOIN teacher_class_subjects tcs ON tcs.class_id = c.id
+               LEFT JOIN class_teacher_assignments cta
+                 ON cta.class_id = c.id AND cta.ended_at IS NULL
+               LEFT JOIN users class_teacher ON class_teacher.id = cta.teacher_user_id
+               GROUP BY c.id, c.name, c.grade, c.section
+               ORDER BY c.grade, c.section, c.name, c.id
+               LIMIT 6"""
         )
-        recent_users = cur.fetchall()
+        school_snapshot = cur.fetchall()
 
         return {
             "statistics": {
-                "total_users": int(user_stats["total_users"] or 0),
                 "total_students": int(user_stats["total_students"] or 0),
                 "total_teachers": int(user_stats["total_teachers"] or 0),
-                "total_admins": int(user_stats["total_admins"] or 0),
                 "total_classes": int(total_classes or 0),
                 "total_subjects": int(total_subjects or 0),
-                "total_teacher_assignments": int(total_teacher_assignments or 0),
-                "total_notes": int(total_notes or 0),
-                "total_quizzes": int(total_quizzes or 0),
-                "total_quiz_attempts": int(total_quiz_attempts or 0),
             },
             "setup_health": {
                 "students_without_class": int(students_without_class or 0),
@@ -2209,8 +2202,8 @@ def admin_dashboard_api():
                     classes_without_subject_assignments or 0
                 ),
             },
-            "class_overview": class_overview,
-            "recent_users": recent_users,
+            "recent_accounts": recent_accounts,
+            "school_snapshot": school_snapshot,
         }, 200
 
     finally:
