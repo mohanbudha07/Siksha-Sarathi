@@ -6,10 +6,11 @@ import re
 
 from flask import Blueprint, Response, request
 from werkzeug.security import generate_password_hash
+from backend.time_utils import serialize_nepal_datetime
 
 
-MAX_FILE_BYTES = 1_048_576
-MAX_DATA_ROWS = 1000
+MAX_FILE_BYTES = 5 * 1024 * 1024
+MAX_DATA_ROWS = 5000
 EMAIL_PATTERN = re.compile(r"^[^@\s,;]+@[^@\s,;]+\.[^@\s,;]+$")
 
 STUDENT_HEADERS = (
@@ -52,7 +53,7 @@ def read_csv_upload(upload, required_headers, allowed_headers):
         raise CSVInputError("Only .csv files are accepted")
     raw = upload.stream.read(MAX_FILE_BYTES + 1)
     if len(raw) > MAX_FILE_BYTES:
-        raise CSVInputError("CSV file must be 1 MB or smaller")
+        raise CSVInputError("CSV file must be 5 MB or smaller")
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as error:
@@ -87,7 +88,7 @@ def read_csv_upload(upload, required_headers, allowed_headers):
             if not any(value.strip() for value in values):
                 continue
             if len(rows) >= MAX_DATA_ROWS:
-                raise CSVInputError("CSV file cannot contain more than 1000 data rows")
+                raise CSVInputError("CSV file cannot contain more than 5000 data rows")
             errors = []
             if len(values) != len(headers):
                 errors.append({
@@ -294,18 +295,63 @@ def validate_assignments(cur, rows):
 
 
 def preview_payload(rows):
+    valid_rows = [row for row in rows if row["valid"]]
+    invalid_entries = [row for row in rows if not row["valid"]]
+    error_count = sum(len(row["errors"]) for row in invalid_entries)
+    error_messages = {}
+    for row in invalid_entries:
+        for error in row["errors"]:
+            message = error["message"]
+            field = error["field"]
+            if "Duplicate email within this CSV" in message:
+                kind, label = "duplicate_email", "duplicate email appears in this CSV"
+            elif "Email already exists" in message:
+                kind, label = "existing_email", "email addresses already exist"
+            elif "does not exist" in message and field in {"section", "grade"}:
+                kind, label = "invalid_class", "rows use an unknown class"
+            elif "Teacher account not found" in message:
+                kind, label = "missing_teacher", "Teacher accounts were not found"
+            elif "Subject code not found" in message:
+                kind, label = "missing_subject", "Subject codes were not found"
+            elif "Duplicate assignment within this CSV" in message:
+                kind, label = "duplicate_assignment", "duplicate assignments appear in this CSV"
+            elif "Password must contain" in message:
+                kind, label = "short_password", "temporary passwords are too short"
+            else:
+                kind, label = field, f"rows have a problem with {field.replace('_', ' ')}"
+            summary = error_messages.setdefault(kind, {"type": kind, "count": 0, "message": label})
+            summary["count"] += 1
+
     safe_rows = []
-    for row in rows:
-        safe_rows.append({
-            key: value for key, value in row.items()
-            if not key.startswith("_") and key != "data"
-        })
-    invalid_rows = sum(not row["valid"] for row in rows)
+    safe_rows.extend(valid_rows[:50])
+    detail_errors_remaining = 100
+    for row in invalid_entries:
+        if detail_errors_remaining <= 0:
+            break
+        safe_row = dict(row)
+        safe_row["errors"] = row["errors"][:detail_errors_remaining]
+        detail_errors_remaining -= len(safe_row["errors"])
+        safe_rows.append(safe_row)
+    safe_rows.sort(key=lambda row: row["row_number"])
+    safe_rows = [
+        {key: value for key, value in row.items()
+         if not key.startswith("_") and key not in {"data", "temporary_password"}}
+        for row in safe_rows
+    ]
+    invalid_rows = len(invalid_entries)
+    already_exists = sum(row.get("status") == "Already exists" for row in rows)
+    new_rows = sum(row["valid"] and row.get("status") != "Already exists" for row in rows)
+    returned_error_count = sum(len(row["errors"]) for row in safe_rows)
     return {
         "valid": invalid_rows == 0,
         "total_rows": len(rows),
         "valid_rows": len(rows) - invalid_rows,
         "invalid_rows": invalid_rows,
+        "new_rows": new_rows,
+        "skipped_existing": already_exists,
+        "problem_summary": list(error_messages.values()),
+        "error_count": error_count,
+        "errors_truncated": returned_error_count < error_count,
         "rows": safe_rows,
     }
 
@@ -386,6 +432,44 @@ def create_csv_management_blueprint(mysql, login_required, role_required, admin_
     @role_required(admin_role)
     def assignment_template_api():
         return csv_response(ASSIGNMENT_HEADERS, [], "teacher_assignment_template.csv")
+
+    @csv_management.get("/api/admin/csv/references/classes")
+    @login_required
+    @role_required(admin_role)
+    def class_reference_api():
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                """SELECT id AS class_id, name AS class_name, grade, section
+                   FROM classes ORDER BY grade, section, id"""
+            )
+            headers = ("class_id", "class_name", "grade", "section")
+            return csv_response(
+                headers,
+                [[row.get(key) or "" for key in headers] for row in cur.fetchall()],
+                "class_reference.csv",
+            )
+        finally:
+            cur.close()
+
+    @csv_management.get("/api/admin/csv/references/subjects")
+    @login_required
+    @role_required(admin_role)
+    def subject_reference_api():
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                """SELECT id AS subject_id, name AS subject_name, code AS subject_code
+                   FROM subjects ORDER BY name, id"""
+            )
+            headers = ("subject_id", "subject_name", "subject_code")
+            return csv_response(
+                headers,
+                [[row.get(key) or "" for key in headers] for row in cur.fetchall()],
+                "subject_reference.csv",
+            )
+        finally:
+            cur.close()
 
     @csv_management.post("/api/admin/csv/students/preview")
     @login_required
@@ -500,7 +584,9 @@ def create_csv_management_blueprint(mysql, login_required, role_required, admin_
             headers = ("full_name", "email", "created_at")
             return csv_response(
                 headers,
-                [[row.get(key) or "" for key in headers] for row in cur.fetchall()],
+                                [[row.get("full_name") or "", row.get("email") or "",
+                                    serialize_nepal_datetime(row.get("created_at")) or ""]
+                                 for row in cur.fetchall()],
                 "teachers.csv"
             )
         finally:
