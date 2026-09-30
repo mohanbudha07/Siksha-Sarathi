@@ -2,6 +2,7 @@
 
 from datetime import date
 import importlib
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -449,16 +450,21 @@ class PredictionApiTests(unittest.TestCase):
         for forbidden in ("raw_features", "evidence_json", "checksum_sha256", "model_file", "artifact_path"):
             self.assertNotIn(forbidden, payload)
 
-    def test_current_real_loader_result_is_reported_as_model_unavailable(self):
+    def test_missing_artifact_is_reported_as_model_unavailable(self):
         self.login("teacher")
-        self.backend.app.extensions["prediction_service"] = PredictionService(
-            ProductionArtifactLoader()
-        )
-        response = self.request_prediction()
+        with TemporaryDirectory() as artifact_dir:
+            self.backend.app.extensions["prediction_service"] = PredictionService(
+                ProductionArtifactLoader(artifact_dir=artifact_dir)
+            )
+            response = self.request_prediction()
+
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["prediction"]["status"], "model_unavailable")
         self.assertIsNone(response.json["prediction"]["prediction_percent"])
-        self.assertEqual(response.json["prediction"]["fallback"], "observed_analytics")
+        self.assertEqual(
+            response.json["prediction"]["fallback"],
+            "observed_analytics",
+        )
 
     def test_api_requests_do_not_write_prediction_rows(self):
         self.login("teacher")

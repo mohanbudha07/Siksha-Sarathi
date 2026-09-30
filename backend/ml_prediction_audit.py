@@ -141,9 +141,24 @@ def record_prediction_audit(
     cursor = None
     try:
         cursor = connection.cursor()
+        select_sql = (
+            "SELECT 1 FROM ml_prediction_audits "
+            "WHERE student_id = ? AND class_id = ? AND subject = ? "
+            "AND as_of_date = ? AND model_version = ? LIMIT 1"
+            if sqlite_mode else
+            "SELECT 1 FROM ml_prediction_audits "
+            "WHERE student_id = %s AND class_id = %s AND subject = %s "
+            "AND as_of_date = %s AND model_version = %s LIMIT 1"
+        )
         cursor.execute(
-            "SELECT 1 FROM ml_prediction_audits WHERE student_id = ? AND class_id = ? AND subject = ? AND as_of_date = ? AND model_version = ? LIMIT 1",
-            (row["student_id"], row["class_id"], row["subject"], row["as_of_date"], row["model_version"]),
+            select_sql,
+            (
+                row["student_id"],
+                row["class_id"],
+                row["subject"],
+                row["as_of_date"],
+                row["model_version"],
+            ),
         )
         if _fetch_scalar(cursor) is not None:
             return {"recorded": False, "reason": "already_recorded"}
