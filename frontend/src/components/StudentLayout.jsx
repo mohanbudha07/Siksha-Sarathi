@@ -10,6 +10,7 @@ const groups = [
   { label: 'Learning', items: [
     { to: '/student/practice-plan', label: 'My Plan', icon: 'plan' },
     { to: '/student/quiz', label: 'Quizzes', icon: 'quizzes' },
+    { to: '/student/quiz-history', label: 'Quiz History', icon: 'quizzes' },
     { to: '/student/notes', label: 'Learning Materials', icon: 'notes' },
     { to: '/student/ai', label: 'AI Assistant', icon: 'ai' },
   ] },
