@@ -16,6 +16,7 @@ from backend.routes.chat import create_chat_blueprint
 from backend.routes.csv_management import create_csv_management_blueprint
 from backend.routes.lab_quiz import create_lab_quiz_blueprint
 from backend.routes.notes import create_notes_blueprint
+from backend.routes.question_bank import create_question_bank_blueprint
 from backend.learning_materials import (
     MAX_MATERIAL_REQUEST_BYTES,
     configure_learning_material_upload_root,
@@ -257,6 +258,13 @@ app.register_blueprint(create_quiz_blueprint(
     login_required=login_required,
     role_required=role_required,
     student_role=STUDENT,
+    teacher_role=TEACHER
+))
+
+app.register_blueprint(create_question_bank_blueprint(
+    mysql=mysql,
+    login_required=login_required,
+    role_required=role_required,
     teacher_role=TEACHER
 ))
 

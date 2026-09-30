@@ -9,6 +9,7 @@ const groups = [
   ] },
   { label: 'Teaching', items: [
     { to: '/teacher/notes', label: 'Learning Materials', icon: 'notes' },
+    { to: '/teacher/question-bank', label: 'Question Bank', icon: 'quizzes' },
     { to: '/teacher/quizzes', label: 'Quizzes', icon: 'quizzes' },
     { to: '/teacher/lab-quizzes', label: 'Lab Sessions', icon: 'lab' },
     { to: '/teacher/assessments', label: 'Paper Marks', icon: 'marks' },

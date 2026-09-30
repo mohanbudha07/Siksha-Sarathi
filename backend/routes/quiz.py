@@ -5,6 +5,39 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, request, session
 from backend.student_access import fetch_student_context
+from backend.time_utils import serialize_nepal_datetime
+
+
+HISTORY_PAGE_SIZES = frozenset({10, 25, 50})
+
+
+def _attempt_pagination(args):
+    try:
+        page = int(args.get("page", 1))
+        page_size = int(args.get("page_size", 10))
+    except (TypeError, ValueError):
+        raise ValueError("Page and page size must be valid integers.") from None
+    if page < 1:
+        raise ValueError("Page must be at least 1.")
+    if page_size not in HISTORY_PAGE_SIZES:
+        raise ValueError("Page size must be 10, 25, or 50.")
+    return page, page_size
+
+
+def _attempt_counts(score, total_questions, answer_rows=None, skipped_count=None):
+    total = max(0, int(total_questions or 0))
+    points = max(0, int(score or 0))
+    if answer_rows is not None:
+        correct = sum(bool(row["is_correct"]) and not bool(row["is_skipped"]) for row in answer_rows)
+        skipped = sum(bool(row["is_skipped"]) for row in answer_rows)
+        if not answer_rows:
+            correct = points
+    else:
+        correct = points
+        skipped = max(0, int(skipped_count or 0))
+    wrong = max(0, total - correct - skipped)
+    percentage = round(points / total * 100, 1) if total else 0
+    return correct, wrong, skipped, percentage
 
 
 def parse_quiz_questions(raw_questions, fallback_topic="General"):
@@ -520,6 +553,276 @@ def create_quiz_blueprint(
             mysql.connection.rollback()
             print("Quiz submission error:", error)
             return {"error": "Quiz submission failed"}, 500
+        finally:
+            cur.close()
+
+    @quiz.get("/api/student/quiz-history")
+    @login_required
+    @role_required(student_role)
+    def student_quiz_history_api():
+        cur = mysql.connection.cursor()
+        try:
+            try:
+                page, page_size = _attempt_pagination(request.args)
+            except ValueError as error:
+                return {"error": str(error)}, 400
+            cur.execute("SELECT id FROM students WHERE user_id = %s", (session["user_id"],))
+            student = cur.fetchone()
+            if not student:
+                return {"error": "Student profile not found."}, 404
+            student_id = student["id"]
+            cur.execute("SELECT COUNT(*) AS total FROM quiz_results WHERE student_id = %s", (student_id,))
+            total = int(cur.fetchone()["total"] or 0)
+            cur.execute(
+                """SELECT qr.id AS result_id, qr.quiz_id, q.title AS quiz_title,
+                          q.subject, qr.score, qr.total_questions,
+                          qr.quiz_session_id, qr.created_at AS submitted_at,
+                          COALESCE(ar.skipped_count, 0) AS skipped_count
+                   FROM quiz_results qr
+                   LEFT JOIN quizzes q ON q.id = qr.quiz_id
+                   LEFT JOIN (
+                       SELECT quiz_result_id,
+                              SUM(CASE WHEN is_skipped = TRUE THEN 1 ELSE 0 END) AS skipped_count
+                       FROM quiz_answer_results GROUP BY quiz_result_id
+                   ) ar ON ar.quiz_result_id = qr.id
+                   WHERE qr.student_id = %s
+                   ORDER BY qr.created_at DESC, qr.id DESC
+                   LIMIT %s OFFSET %s""",
+                (student_id, page_size, (page - 1) * page_size),
+            )
+            attempts = []
+            for row in cur.fetchall():
+                correct, wrong, skipped, percentage = _attempt_counts(
+                    row["score"], row["total_questions"], skipped_count=row["skipped_count"]
+                )
+                attempts.append({
+                    "result_id": row["result_id"],
+                    "quiz_id": row["quiz_id"],
+                    "quiz_title": row["quiz_title"] or "Quiz",
+                    "subject": row["subject"] or "",
+                    "score": int(row["score"] or 0),
+                    "total_questions": int(row["total_questions"] or 0),
+                    "correct_count": correct,
+                    "wrong_count": wrong,
+                    "skipped_count": skipped,
+                    "percentage": percentage,
+                    "quiz_session_id": row["quiz_session_id"],
+                    "attempt_type": "Lab Quiz" if row["quiz_session_id"] is not None else "Practice Quiz",
+                    "submitted_at": serialize_nepal_datetime(row["submitted_at"]),
+                })
+            return {
+                "attempts": attempts,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total": total,
+                    "total_pages": (total + page_size - 1) // page_size,
+                },
+            }, 200
+        finally:
+            cur.close()
+
+    @quiz.get("/api/student/quiz-history/<int:result_id>")
+    @login_required
+    @role_required(student_role)
+    def student_quiz_history_detail_api(result_id):
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute("SELECT id FROM students WHERE user_id = %s", (session["user_id"],))
+            student = cur.fetchone()
+            if not student:
+                return {"error": "Quiz attempt not found."}, 404
+            cur.execute(
+                """SELECT qr.id AS result_id, qr.quiz_id, q.title AS quiz_title,
+                          q.subject, qr.score, qr.total_questions,
+                          qr.quiz_session_id, qr.created_at AS submitted_at
+                   FROM quiz_results qr LEFT JOIN quizzes q ON q.id = qr.quiz_id
+                   WHERE qr.id = %s AND qr.student_id = %s""",
+                (result_id, student["id"]),
+            )
+            attempt = cur.fetchone()
+            if not attempt:
+                return {"error": "Quiz attempt not found."}, 404
+            cur.execute(
+                """SELECT question_index, question_text, topic, difficulty,
+                          curriculum_code, cognitive_level, selected_answer,
+                          is_correct, is_skipped
+                   FROM quiz_answer_results
+                   WHERE quiz_result_id = %s ORDER BY question_index""",
+                (result_id,),
+            )
+            answers = cur.fetchall()
+            correct, wrong, skipped, percentage = _attempt_counts(
+                attempt["score"], attempt["total_questions"], answer_rows=answers
+            )
+            return {
+                "attempt": {
+                    "result_id": attempt["result_id"],
+                    "quiz_id": attempt["quiz_id"],
+                    "quiz_title": attempt["quiz_title"] or "Quiz",
+                    "subject": attempt["subject"] or "",
+                    "score": int(attempt["score"] or 0),
+                    "total_questions": int(attempt["total_questions"] or 0),
+                    "correct_count": correct,
+                    "wrong_count": wrong,
+                    "skipped_count": skipped,
+                    "percentage": percentage,
+                    "quiz_session_id": attempt["quiz_session_id"],
+                    "attempt_type": "Lab Quiz" if attempt["quiz_session_id"] is not None else "Practice Quiz",
+                    "submitted_at": serialize_nepal_datetime(attempt["submitted_at"]),
+                },
+                "answers": answers,
+            }, 200
+        finally:
+            cur.close()
+
+    @quiz.get("/api/teacher/quizzes/<int:quiz_id>/attempts")
+    @login_required
+    @role_required(teacher_role)
+    def teacher_quiz_attempts_api(quiz_id):
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                "SELECT id, title, subject FROM quizzes WHERE id = %s AND created_by = %s",
+                (quiz_id, session["user_id"]),
+            )
+            quiz_data = cur.fetchone()
+            if not quiz_data or not teacher_has_subject_assignment(
+                cur, session["user_id"], quiz_data["subject"]
+            ):
+                return {"error": "Quiz not found."}, 404
+            try:
+                page, page_size = _attempt_pagination(request.args)
+            except ValueError as error:
+                return {"error": str(error)}, 400
+            search = request.args.get("search", "").strip()
+            where = "qr.quiz_id = %s"
+            args = [quiz_id]
+            if search:
+                where += " AND (s.full_name LIKE %s OR u.email LIKE %s)"
+                args.extend([f"%{search}%", f"%{search}%"])
+            cur.execute(
+                f"""SELECT COUNT(*) AS total FROM quiz_results qr
+                    INNER JOIN students s ON s.id = qr.student_id
+                    INNER JOIN users u ON u.id = s.user_id
+                    WHERE {where}""",
+                tuple(args),
+            )
+            total = int(cur.fetchone()["total"] or 0)
+            cur.execute(
+                f"""SELECT qr.id AS attempt_id, s.id AS student_id,
+                          s.full_name AS student_name, u.email AS student_email,
+                          qr.score, qr.total_questions, qr.quiz_session_id,
+                          qr.created_at AS submitted_at,
+                          COALESCE(ar.skipped_count, 0) AS skipped_count
+                   FROM quiz_results qr
+                   INNER JOIN students s ON s.id = qr.student_id
+                   INNER JOIN users u ON u.id = s.user_id
+                   LEFT JOIN (
+                       SELECT quiz_result_id,
+                              SUM(CASE WHEN is_skipped = TRUE THEN 1 ELSE 0 END) AS skipped_count
+                       FROM quiz_answer_results GROUP BY quiz_result_id
+                   ) ar ON ar.quiz_result_id = qr.id
+                   WHERE {where}
+                   ORDER BY qr.created_at DESC, qr.id DESC
+                   LIMIT %s OFFSET %s""",
+                (*args, page_size, (page - 1) * page_size),
+            )
+            attempts = []
+            for row in cur.fetchall():
+                correct, wrong, skipped, percentage = _attempt_counts(
+                    row["score"], row["total_questions"], skipped_count=row["skipped_count"]
+                )
+                attempts.append({
+                    "attempt_id": row["attempt_id"],
+                    "student_id": row["student_id"],
+                    "student_name": row["student_name"],
+                    "student_email": row["student_email"],
+                    "score": int(row["score"] or 0),
+                    "total_questions": int(row["total_questions"] or 0),
+                    "correct_count": correct,
+                    "wrong_count": wrong,
+                    "skipped_count": skipped,
+                    "percentage": percentage,
+                    "quiz_session_id": row["quiz_session_id"],
+                    "attempt_type": "Lab Quiz" if row["quiz_session_id"] is not None else "Practice Quiz",
+                    "submitted_at": serialize_nepal_datetime(row["submitted_at"]),
+                })
+            return {
+                "quiz": {"id": quiz_id, "title": quiz_data.get("title"), "subject": quiz_data["subject"]},
+                "attempts": attempts,
+                "pagination": {
+                    "page": page,
+                    "page_size": page_size,
+                    "total": total,
+                    "total_pages": (total + page_size - 1) // page_size,
+                },
+            }, 200
+        finally:
+            cur.close()
+
+    @quiz.get("/api/teacher/quizzes/<int:quiz_id>/attempts/<int:result_id>")
+    @login_required
+    @role_required(teacher_role)
+    def teacher_quiz_attempt_detail_api(quiz_id, result_id):
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute(
+                """SELECT id, title, subject FROM quizzes
+                   WHERE id = %s AND created_by = %s""",
+                (quiz_id, session["user_id"]),
+            )
+            quiz_data = cur.fetchone()
+            if not quiz_data or not teacher_has_subject_assignment(
+                cur, session["user_id"], quiz_data["subject"]
+            ):
+                return {"error": "Quiz not found."}, 404
+            cur.execute(
+                """SELECT qr.id, qr.student_id, s.full_name AS student_name,
+                          u.email AS student_email, qr.score, qr.total_questions,
+                          qr.quiz_session_id, qr.created_at AS submitted_at
+                   FROM quiz_results qr
+                   INNER JOIN students s ON s.id = qr.student_id
+                   INNER JOIN users u ON u.id = s.user_id
+                   WHERE qr.id = %s AND qr.quiz_id = %s""",
+                (result_id, quiz_id),
+            )
+            attempt = cur.fetchone()
+            if not attempt:
+                return {"error": "Quiz attempt not found."}, 404
+            cur.execute(
+                """SELECT question_index, question_text, topic, difficulty,
+                          curriculum_code, cognitive_level, selected_answer,
+                          correct_answer, is_correct, is_skipped
+                   FROM quiz_answer_results
+                   WHERE quiz_result_id = %s ORDER BY question_index""",
+                (result_id,),
+            )
+            answers = cur.fetchall()
+            correct, wrong, skipped, percentage = _attempt_counts(
+                attempt["score"], attempt["total_questions"], answer_rows=answers
+            )
+            return {
+                "attempt": {
+                    "attempt_id": attempt["id"],
+                    "student_id": attempt["student_id"],
+                    "student_name": attempt["student_name"],
+                    "student_email": attempt["student_email"],
+                    "quiz_id": quiz_id,
+                    "quiz_title": quiz_data["title"],
+                    "subject": quiz_data["subject"],
+                    "score": int(attempt["score"] or 0),
+                    "total_questions": int(attempt["total_questions"] or 0),
+                    "correct_count": correct,
+                    "wrong_count": wrong,
+                    "skipped_count": skipped,
+                    "percentage": percentage,
+                    "quiz_session_id": attempt["quiz_session_id"],
+                    "attempt_type": "Lab Quiz" if attempt["quiz_session_id"] is not None else "Practice Quiz",
+                    "submitted_at": serialize_nepal_datetime(attempt["submitted_at"]),
+                },
+                "answers": answers,
+            }, 200
         finally:
             cur.close()
 

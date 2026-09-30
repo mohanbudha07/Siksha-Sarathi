@@ -314,3 +314,22 @@ migration 019 manually from the repository root:
 Do not run the migration automatically from the application or unit tests. For
 new databases, `backend/setup_db.sql` includes the target columns and attachment
 table.
+
+## Teacher Question Bank migration
+
+Migration 020 creates normalized `question_bank_questions` and
+`question_bank_options` tables for reusable Teacher-owned questions. It adds no
+foreign key from Quizzes to the bank: adding a bank question to a Quiz copies a
+snapshot into the existing Quiz JSON, so later bank edits or deletion do not
+change saved Quizzes or attempt history. Teacher access is limited to currently
+assigned Subjects. The unique Teacher/Subject/question-hash key prevents
+normalized duplicate questions.
+
+After reviewing and backing up the database, stop the backend before applying
+migration 020:
+
+    sudo mysqldump siksha_sarathi > backups/siksha_sarathi_before_020_$(date +%Y%m%d_%H%M%S).sql
+    sudo mysql siksha_sarathi < backend/migrations/020_question_bank.sql
+
+Do not apply this migration from the application or unit tests. For new
+databases, `backend/setup_db.sql` includes both Question Bank tables.

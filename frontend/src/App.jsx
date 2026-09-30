@@ -13,6 +13,7 @@ import TeacherLayout from './components/TeacherLayout'
 import AdminLayout from './components/AdminLayout'
 import StudentDashboard from './pages/StudentDashboard'
 import StudentPracticePlan from './pages/StudentPracticePlan'
+import StudentQuizHistory from './pages/StudentQuizHistory'
 import Quiz from './pages/Quiz'
 import Notes from './pages/Notes'
 import AIAssistant from './pages/AIAssistant'
@@ -28,6 +29,8 @@ import TeacherUploadNote from './pages/TeacherUploadNote'
 import TeacherEditNote from './pages/TeacherEditNote'
 import TeacherQuizzes from './pages/TeacherQuizzes'
 import TeacherQuizEditor from './pages/TeacherQuizEditor'
+import TeacherQuizAttempts from './pages/TeacherQuizAttempts'
+import TeacherQuestionBank from './pages/TeacherQuestionBank'
 import TeacherLearningAnalytics from './pages/TeacherLearningAnalytics'
 import TeacherStudentProfile from './pages/TeacherStudentProfile'
 import TeacherLabQuizzes from './pages/TeacherLabQuizzes'
@@ -155,6 +158,9 @@ function App() {
         <Route path="/student/quiz" element={
           <StudentPage><Quiz /></StudentPage>
         } />
+        <Route path="/student/quiz-history" element={
+          <StudentPage><StudentQuizHistory /></StudentPage>
+        } />
         <Route path="/student/notes" element={
           <StudentPage><Notes /></StudentPage>
         } />
@@ -197,12 +203,23 @@ function App() {
           <TeacherPage><TeacherQuizzes /></TeacherPage>
         } />
 
+        <Route path="/teacher/question-bank" element={
+          <TeacherPage><TeacherQuestionBank /></TeacherPage>
+        } />
+
         <Route path="/teacher/quizzes/new" element={
           <TeacherPage><TeacherQuizEditor /></TeacherPage>
         } />
 
         <Route path="/teacher/quizzes/:quizId/edit" element={
           <TeacherPage><TeacherQuizEditor /></TeacherPage>
+        } />
+
+        <Route path="/teacher/quizzes/:quizId/attempts" element={
+          <TeacherPage><TeacherQuizAttempts /></TeacherPage>
+        } />
+        <Route path="/teacher/quizzes/:quizId/attempts/:resultId" element={
+          <TeacherPage><TeacherQuizAttempts /></TeacherPage>
         } />
 
         <Route path="/teacher/lab-quizzes" element={

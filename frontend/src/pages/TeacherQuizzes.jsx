@@ -118,6 +118,12 @@ function TeacherQuizzes() {
                   Edit
                 </button>
                 <button
+                  className="quiz-edit-button"
+                  onClick={() => navigate(`/teacher/quizzes/${quiz.id}/attempts`)}
+                >
+                  View Attempts
+                </button>
+                <button
                   className="quiz-delete-button"
                   onClick={() => handleDelete(quiz)}
                   disabled={deletingId === quiz.id}
